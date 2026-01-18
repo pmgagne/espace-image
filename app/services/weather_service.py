@@ -62,3 +62,30 @@ class WeatherService:
                 "condition": "Erreur",
                 "location": "Service indisponible",
             }
+
+    @staticmethod
+    async def geocode_location(query: str) -> Dict | None:
+        """
+        Searches for a location name using Open-Meteo Geocoding API.
+        Returns: {'lat': float, 'lon': float, 'name': str} or None
+        """
+        try:
+            url = "https://geocoding-api.open-meteo.com/v1/search"
+            params = {"name": query, "count": 1, "language": "fr", "format": "json"}
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params, timeout=5.0)
+                response.raise_for_status()
+                data = response.json()
+
+                if not data.get("results"):
+                    return None
+
+                result = data["results"][0]
+                return {
+                    "lat": result["latitude"],
+                    "lon": result["longitude"],
+                    "name": f"{result['name']}, {result.get('country', '')}",
+                }
+        except Exception as e:
+            print(f"Geocoding Error: {e}")
+            return None

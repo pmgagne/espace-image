@@ -13,13 +13,9 @@
         .full-screen { width: 100vw; height: 100vh; }
     </style>
 
-    {% if mode == 'legacy' %}
-    <!-- Legacy Mode: Polyfills (Locally Hosted for iOS 9/TLS compatibility) -->
-    <script src="/static/polyfills/promise.min.js"></script>
-    <script src="/static/polyfills/fetch.umd.js"></script>
-    {% endif %}
-    
+    {% if mode != 'legacy' %}
     <script src="/static/js/htmx.min.js"></script>
+    {% endif %}
     
     {% block head %}{% endblock %}
 </head>

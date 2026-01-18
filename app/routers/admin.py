@@ -5,6 +5,7 @@ from sqlmodel import Session, select
 from app.db.session import get_session
 from app.db.models import Preset, Photo, AppSettings, CalendarSource
 from app.services.image_service import GalleryManager
+from app.services.weather_service import WeatherService
 from typing import List, Optional
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -51,6 +52,39 @@ async def get_settings_partial(
                     location_name = f"{city}, {state}" if state else city
         except Exception as e:
             print(f"Geocoding error: {e}")
+
+    return templates.TemplateResponse(
+        request,
+        "partials/settings.html",
+        {"settings": settings, "presets": presets, "location_name": location_name},
+    )
+
+
+@router.post("/settings/search", response_class=HTMLResponse)
+async def search_location(
+    request: Request,
+    location_query: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    """
+    Geocodes the location query and returns the settings form
+    pre-filled with the new coordinates (not saved yet).
+    """
+    settings = session.exec(select(AppSettings)).first()
+    if not settings:
+        settings = AppSettings()  # default
+
+    presets = session.exec(select(Preset)).all()
+
+    # Perform Geocoding
+    result = await WeatherService.geocode_location(location_query)
+    location_name = "Location not found"
+
+    if result:
+        # Update the settings object in memory only (no commit)
+        settings.weather_latitude = result["lat"]
+        settings.weather_longitude = result["lon"]
+        location_name = result["name"]
 
     return templates.TemplateResponse(
         request,
