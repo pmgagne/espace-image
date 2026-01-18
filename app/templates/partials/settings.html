@@ -76,15 +76,15 @@
             return;
         }
         
-        const btn = document.querySelector('button[onclick="findLocation()"]');
-        const originalText = btn.innerText;
+        var btn = document.querySelector('button[onclick="findLocation()"]');
+        var originalText = btn.innerText;
         btn.innerText = "Locating...";
         
-        navigator.geolocation.getCurrentPosition((position) => {
+        navigator.geolocation.getCurrentPosition(function(position) {
             document.getElementById('lat').value = position.coords.latitude.toFixed(4);
             document.getElementById('lon').value = position.coords.longitude.toFixed(4);
             btn.innerText = originalText;
-        }, (error) => {
+        }, function(error) {
             alert("Unable to retrieve your location: " + error.message);
             btn.innerText = originalText;
         });
