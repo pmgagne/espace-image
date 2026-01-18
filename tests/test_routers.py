@@ -12,7 +12,7 @@ def test_dashboard_legacy_redirect(client):
     # iPad 2 iOS 9.3.5 User Agent
     ua = "Mozilla/5.0 (iPad; CPU OS 9_3_5 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13G36 Safari/601.1"
     response = client.get("/", headers={"User-Agent": ua}, follow_redirects=False)
-    assert response.status_code == 307
+    assert response.status_code == 302
     assert response.headers["location"] == "/legacy"
 
 
