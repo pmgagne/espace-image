@@ -1,11 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini Dashboard Admin</title>
-    
-    <!-- On-Screen Debugger for iPad 2 -->
     <script>
         window.onerror = function(msg, url, line, col, error) {
             var log = document.getElementById('debug-log');
@@ -31,6 +25,11 @@
                 log.appendChild(item);
             }
         };
+
+        // Redirect HTMX logs
+        function htmxLogger(elt, event, data) {
+            if(console.log) console.log("HTMX: " + event);
+        }
     </script>
     
     <!-- Polyfills for Legacy Browsers (iPad 2 / iOS 9) -->
@@ -210,6 +209,21 @@
     </div>
 
     <script>
+        // Check environment
+        if (window.htmx) {
+            console.log("HTMX Loaded: " + window.htmx.version);
+            htmx.logger = htmxLogger;
+        } else {
+            console.log("ERR: window.htmx is undefined!");
+        }
+
+        try {
+            var ev = new CustomEvent("test");
+            console.log("CustomEvent OK");
+        } catch(e) {
+            console.log("ERR: CustomEvent failed: " + e.message);
+        }
+
         // Simple script to toggle active class on sidebar (ES5)
         document.body.addEventListener('htmx:afterOnLoad', function(evt) {
             var path = evt.detail.requestConfig.path;
@@ -228,7 +242,7 @@
             console.log("Triggering initial load...");
             var el = document.getElementById('link-settings');
             if (el) el.click();
-        }, 500);
+        }, 1000);
     </script>
 </body>
 </html>
