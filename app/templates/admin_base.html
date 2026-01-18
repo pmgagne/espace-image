@@ -1,64 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
-    <script>
-        window.onerror = function(msg, url, line, col, error) {
-            var log = document.getElementById('debug-log');
-            if (log) {
-                var item = document.createElement('div');
-                item.style.borderBottom = "1px solid #444";
-                item.style.padding = "4px";
-                item.innerText = "ERR: " + msg + "\n" + url + ":" + line;
-                log.appendChild(item);
-            }
-            return false;
-        };
-        
-        // Capture console.log too
-        var oldLog = console.log;
-        console.log = function(msg) {
-            oldLog.apply(console, arguments);
-            var log = document.getElementById('debug-log');
-            if (log) {
-                var item = document.createElement('div');
-                item.innerText = "LOG: " + msg;
-                item.style.color = "#aaa";
-                log.appendChild(item);
-            }
-        };
-
-        // Redirect HTMX logs
-        function htmxLogger(elt, event, data) {
-            if(console.log) console.log("HTMX: " + event);
-        }
-    </script>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Dashboard Admin</title>
     
     <!-- Polyfills for Legacy Browsers (iPad 2 / iOS 9) -->
     <script src="/static/polyfills/promise.min.js"></script>
     <script src="/static/polyfills/fetch.umd.js"></script>
     
-    <!-- HTMX -->
+    <!-- HTMX (Pure ES5 Version 1.0.0 for iPad 2) -->
     <script src="/static/js/htmx.min.js"></script>
     
     <style>
         body { margin: 0; padding: 0; font-family: sans-serif; background: #1a1a1a; color: #fff; height: 100vh; overflow: hidden; display: flex; }
         
-        /* Debug Log */
-        #debug-log {
-            position: fixed;
-            bottom: 0; left: 0; right: 0;
-            height: 150px;
-            background: rgba(0,0,0,0.9);
-            color: #ff5555;
-            font-family: monospace;
-            font-size: 10px;
-            overflow-y: scroll;
-            z-index: 9999;
-            border-top: 2px solid #555;
-            padding: 5px;
-            pointer-events: none; /* Let clicks pass through if needed, but scrolling needs events... actually let's keep it interactive */
-            pointer-events: auto;
-        }
-
         /* Sidebar */
         .sidebar {
             width: 250px;
@@ -67,7 +23,6 @@
             display: flex;
             flex-direction: column;
             padding: 20px;
-            padding-bottom: 160px; /* Space for debug log */
         }
         
         .sidebar h1 { margin-top: 0; font-size: 1.2rem; color: #ddd; text-transform: uppercase; letter-spacing: 1px; }
@@ -97,7 +52,6 @@
         .content {
             flex: 1;
             padding: 40px;
-            padding-bottom: 160px; /* Space for debug log */
             overflow-y: auto;
         }
         
@@ -203,27 +157,7 @@
         <div class="htmx-indicator">Loading...</div>
     </main>
 
-    <!-- Debug Log -->
-    <div id="debug-log">
-        <div>Console Ready...</div>
-    </div>
-
     <script>
-        // Check environment
-        if (window.htmx) {
-            console.log("HTMX Loaded: " + window.htmx.version);
-            htmx.logger = htmxLogger;
-        } else {
-            console.log("ERR: window.htmx is undefined!");
-        }
-
-        try {
-            var ev = new CustomEvent("test");
-            console.log("CustomEvent OK");
-        } catch(e) {
-            console.log("ERR: CustomEvent failed: " + e.message);
-        }
-
         // Simple script to toggle active class on sidebar (ES5)
         document.body.addEventListener('htmx:afterOnLoad', function(evt) {
             var path = evt.detail.requestConfig.path;
@@ -237,12 +171,11 @@
             }
         });
 
-        // Auto-load first tab safely
+        // Auto-load first tab safely (iPad 2 needs a delay)
         setTimeout(function() {
-            console.log("Triggering initial load...");
             var el = document.getElementById('link-settings');
             if (el) el.click();
-        }, 1000);
+        }, 800);
     </script>
 </body>
 </html>
