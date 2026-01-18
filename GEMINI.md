@@ -40,12 +40,20 @@
 
 ## 8. Project-Specific Constraints
 - **Legacy Hardware**: This project supports an iPad 2 (iOS 9.3.5).
-    - **Frontend**: DO NOT use CSS Grid in `/legacy`. Use Floats or simple Flexbox with `-webkit-` prefixes.
-    - **JavaScript**: Use HTMX 1.x. Ensure polyfills are available. Avoid modern ES6+ syntax (like `const`, arrow functions) in client-side scripts unless transpiled or strictly for modern views.
+    - **Network**: Legacy devices cannot connect to modern CDNs (SSL/TLS handshake failures). All JS libraries (HTMX, Polyfills) MUST be hosted locally in `app/static/`.
+    - **Dashboard Frontend**:
+        -   **Tech**: Pure Vanilla ES5 JavaScript (`XMLHttpRequest`, `setInterval`, `var`).
+        -   **Reason**: HTMX, even older versions, had initialization issues on the main dashboard loop. Custom light-weight polling is preferred.
+    - **Admin Frontend**:
+        -   **Tech**: HTMX 1.0.0 (Legacy) + `promise-polyfill` + `whatwg-fetch`.
+        -   **Reason**: Allows SPA-like feel. HTMX 1.0.0 is the last version fully compatible with ES5 (no `const`/`arrow functions`).
+    - **CSS**: 
+        -   **DO NOT** use CSS Grid. Use **Flexbox** (`display: -webkit-flex`) or Floats.
+        -   Avoid `backdrop-filter` on legacy views (use solid semi-transparent backgrounds).
     - **Assets**: Images meant for the legacy client must be resized (max 1024x768) to conserve RAM.
 - **Architecture**:
     - **Backend**: FastAPI + Jinja2 + SQLite + SQLModel.
-    - **External APIs**: Open-Meteo (Weather), WebCal/ICS (Calendar).
+    - **External APIs**: Open-Meteo (Weather & Geocoding), WebCal/ICS (Calendar).
     - **Deployment**: Docker containerization is required for the final artifact.
 - **Libraries**:
     - Use `icalendar` (not `ics`) for robust parsing of Apple/Google calendar feeds.

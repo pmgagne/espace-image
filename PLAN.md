@@ -58,6 +58,20 @@ The objective is to transform the Admin interface into a user-friendly, SPA-like
     *   [x] Created `tests/test_calendar_integration.py` to verify fetching logic (mocked).
     *   [x] Confirmed timezone-aware handling for ICS comparisons.
 
+### Phase 5: Legacy Optimization & Polish [DONE]
+*   [x] **Legacy Dashboard (`/legacy`)**:
+    *   [x] Replaced HTMX with Vanilla ES5 (`XMLHttpRequest`, `setInterval`) to solve loading issues on iPad 2.
+    *   [x] Localized Date/Time to French.
+*   [x] **Legacy Admin Support**:
+    *   [x] Downgraded HTMX to 1.0.0 (Pure ES5).
+    *   [x] Added `promise-polyfill` and `whatwg-fetch` locally.
+    *   [x] Replaced CSS Grid with Flexbox/Floats in Admin templates.
+    *   [x] Replaced all ES6 syntax (`const`, arrow functions) with ES5.
+*   [x] **UX Enhancements**:
+    *   [x] **Auto-Redirect**: Server detects iPad 2 (iOS 9) and redirects to `/legacy`.
+    *   [x] **Location Search**: Added Open-Meteo Geocoding to Settings (enter city name -> get coords).
+    *   [x] **Manual Fallback**: Added "Legacy Mode" link to modern dashboard.
+
 ## 4. Verification Strategy
 *   **Database**: Check `sqlite3 data/db.sqlite ".schema"` to confirm new tables.
 *   **UI Navigation**: Click sidebar links; ensure only the content area updates.
