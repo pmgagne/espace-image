@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import httpx
 import asyncio
-import pytz
+
 
 class CalendarService:
     @staticmethod
@@ -16,7 +16,12 @@ class CalendarService:
             return None
 
     @staticmethod
-    def get_upcoming_alarms(calendar: Calendar, check_time: datetime, lookahead_minutes: int = 15, lookback_minutes: int = 60 * 12) -> List[dict]:
+    def get_upcoming_alarms(
+        calendar: Calendar,
+        check_time: datetime,
+        lookahead_minutes: int = 15,
+        lookback_minutes: int = 60 * 12,
+    ) -> List[dict]:
         """
         Returns a list of events starting within the next `lookahead_minutes`
         OR that started in the last `lookback_minutes` (e.g. today).
@@ -43,22 +48,26 @@ class CalendarService:
 
                 # Normalize event_start to datetime (handle date objects)
                 if not isinstance(event_start, datetime):
-                    event_start = datetime.combine(event_start, datetime.min.time(), tzinfo=timezone.utc)
+                    event_start = datetime.combine(
+                        event_start, datetime.min.time(), tzinfo=timezone.utc
+                    )
                 elif event_start.tzinfo is None:
                     event_start = event_start.replace(tzinfo=timezone.utc)
-                
+
                 # Logic: Is event inside the window [now - lookback, now + lookahead]?
                 lower_bound = check_time - timedelta(minutes=lookback_minutes)
                 upper_bound = check_time + timedelta(minutes=lookahead_minutes)
-                
+
                 if lower_bound <= event_start <= upper_bound:
-                    alarms.append({
-                        "uid": str(uid),
-                        "name": str(summary),
-                        "begin": event_start,
-                        "description": str(description) if description else ""
-                    })
-                    
+                    alarms.append(
+                        {
+                            "uid": str(uid),
+                            "name": str(summary),
+                            "begin": event_start,
+                            "description": str(description) if description else "",
+                        }
+                    )
+
         return alarms
 
     @staticmethod
@@ -66,7 +75,7 @@ class CalendarService:
         """Fetches ICS content from a URL."""
         if url.startswith("webcal://"):
             url = url.replace("webcal://", "https://", 1)
-            
+
         try:
             async with httpx.AsyncClient(follow_redirects=True) as client:
                 response = await client.get(url)
@@ -77,7 +86,9 @@ class CalendarService:
             return None
 
     @staticmethod
-    async def get_all_alarms(urls: List[str], check_time: datetime = None) -> List[dict]:
+    async def get_all_alarms(
+        urls: List[str], check_time: datetime = None
+    ) -> List[dict]:
         """Aggregates alarms from multiple URLs."""
         if check_time is None:
             # Always use UTC aware datetime for comparison with ics/arrow
@@ -85,7 +96,7 @@ class CalendarService:
 
         tasks = [CalendarService.fetch_ics(url) for url in urls]
         results = await asyncio.gather(*tasks)
-        
+
         all_alarms = []
         for content in results:
             if content:
@@ -93,5 +104,5 @@ class CalendarService:
                 # Use default lookback (12h) and lookahead (15m)
                 alarms = CalendarService.get_upcoming_alarms(cal, check_time)
                 all_alarms.extend(alarms)
-                
+
         return all_alarms

@@ -2,6 +2,7 @@ import pytest
 from app.services.calendar_service import CalendarService
 from unittest.mock import AsyncMock, patch
 
+
 @pytest.mark.anyio
 async def test_get_all_alarms():
     # Mock httpx response
@@ -22,9 +23,9 @@ END:VCALENDAR"""
         mock_get.return_value.status_code = 200
         mock_get.return_value.text = ics_content
         mock_get.return_value.raise_for_status = lambda: None
-        
+
         urls = ["http://example.com/cal1.ics", "webcal://example.com/cal2.ics"]
-        alarms = await CalendarService.get_all_alarms(urls)
-        
+        await CalendarService.get_all_alarms(urls)
+
         # We expect fetch_ics to be called twice
         assert mock_get.call_count == 2

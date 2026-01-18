@@ -11,40 +11,53 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
 gallery_manager = GalleryManager()
 
+
 # --- Main Shell ---
 @router.get("/")
 async def admin_shell(request: Request):
     """Admin Shell with Sidebar"""
     return templates.TemplateResponse(request, "admin_base.html", {})
 
+
 # --- Partials: Settings ---
 @router.get("/partials/settings", response_class=HTMLResponse)
-async def get_settings_partial(request: Request, session: Session = Depends(get_session)):
+async def get_settings_partial(
+    request: Request, session: Session = Depends(get_session)
+):
     settings = session.exec(select(AppSettings)).first()
     presets = session.exec(select(Preset)).all()
-    
+
     location_name = ""
     if settings and settings.weather_latitude and settings.weather_longitude:
         try:
             # Simple reverse geocode for Admin UI context
             import httpx
+
             url = f"https://nominatim.openstreetmap.org/reverse?lat={settings.weather_latitude}&lon={settings.weather_longitude}&format=json"
             async with httpx.AsyncClient() as client:
-                resp = await client.get(url, headers={"User-Agent": "GeminiDashboard/1.0"})
+                resp = await client.get(
+                    url, headers={"User-Agent": "GeminiDashboard/1.0"}
+                )
                 if resp.status_code == 200:
                     data = resp.json()
                     address = data.get("address", {})
-                    city = address.get("city") or address.get("town") or address.get("village") or "Unknown"
+                    city = (
+                        address.get("city")
+                        or address.get("town")
+                        or address.get("village")
+                        or "Unknown"
+                    )
                     state = address.get("state") or address.get("region") or ""
                     location_name = f"{city}, {state}" if state else city
         except Exception as e:
             print(f"Geocoding error: {e}")
 
-    return templates.TemplateResponse(request, "partials/settings.html", {
-        "settings": settings,
-        "presets": presets,
-        "location_name": location_name
-    })
+    return templates.TemplateResponse(
+        request,
+        "partials/settings.html",
+        {"settings": settings, "presets": presets, "location_name": location_name},
+    )
+
 
 @router.post("/settings", response_class=HTMLResponse)
 async def update_settings(
@@ -53,27 +66,33 @@ async def update_settings(
     latitude: float = Form(...),
     longitude: float = Form(...),
     duration: int = Form(30),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     settings = session.exec(select(AppSettings)).first()
     if not settings:
         settings = AppSettings()
-    
+
     settings.active_preset_id = active_preset_id
     settings.weather_latitude = latitude
     settings.weather_longitude = longitude
     settings.slideshow_duration = duration
     session.add(settings)
     session.commit()
-    
+
     # Return updated partial
     return await get_settings_partial(request, session)
 
+
 # --- Partials: Calendars ---
 @router.get("/partials/calendars", response_class=HTMLResponse)
-async def get_calendars_partial(request: Request, session: Session = Depends(get_session)):
+async def get_calendars_partial(
+    request: Request, session: Session = Depends(get_session)
+):
     sources = session.exec(select(CalendarSource)).all()
-    return templates.TemplateResponse(request, "partials/calendars.html", {"sources": sources})
+    return templates.TemplateResponse(
+        request, "partials/calendars.html", {"sources": sources}
+    )
+
 
 @router.post("/calendars", response_class=HTMLResponse)
 async def add_calendar(
@@ -81,18 +100,17 @@ async def add_calendar(
     label: str = Form(...),
     url: str = Form(...),
     color: str = Form("#3182ce"),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     source = CalendarSource(label=label, url=url, color=color)
     session.add(source)
     session.commit()
     return await get_calendars_partial(request, session)
 
+
 @router.delete("/calendars/{source_id}", response_class=HTMLResponse)
 async def delete_calendar(
-    request: Request,
-    source_id: int,
-    session: Session = Depends(get_session)
+    request: Request, source_id: int, session: Session = Depends(get_session)
 ):
     source = session.get(CalendarSource, source_id)
     if source:
@@ -100,17 +118,18 @@ async def delete_calendar(
         session.commit()
     return await get_calendars_partial(request, session)
 
+
 # --- Partials: Gallery ---
 @router.get("/partials/gallery", response_class=HTMLResponse)
 async def get_gallery_partial(
-    request: Request, 
-    preset_id: Optional[int] = None, 
-    session: Session = Depends(get_session)
+    request: Request,
+    preset_id: Optional[int] = None,
+    session: Session = Depends(get_session),
 ):
     presets = session.exec(select(Preset)).all()
     selected_preset = None
     photos = []
-    
+
     if preset_id:
         selected_preset = session.get(Preset, preset_id)
         if selected_preset:
@@ -119,18 +138,17 @@ async def get_gallery_partial(
         # Default to first preset if available
         selected_preset = presets[0]
         photos = selected_preset.photos
-        
-    return templates.TemplateResponse(request, "partials/gallery.html", {
-        "presets": presets,
-        "selected_preset": selected_preset,
-        "photos": photos
-    })
+
+    return templates.TemplateResponse(
+        request,
+        "partials/gallery.html",
+        {"presets": presets, "selected_preset": selected_preset, "photos": photos},
+    )
+
 
 @router.post("/presets", response_class=HTMLResponse)
 async def create_preset(
-    request: Request,
-    name: str = Form(...),
-    session: Session = Depends(get_session)
+    request: Request, name: str = Form(...), session: Session = Depends(get_session)
 ):
     preset = Preset(name=name)
     session.add(preset)
@@ -138,17 +156,18 @@ async def create_preset(
     # Refresh gallery showing new preset
     return await get_gallery_partial(request, preset.id, session)
 
+
 @router.post("/upload", response_class=HTMLResponse)
 async def upload_photos(
     request: Request,
     preset_id: int = Form(...),
     files: List[UploadFile] = File(...),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     preset = session.get(Preset, preset_id)
     if not preset:
         raise HTTPException(status_code=404, detail="Preset not found")
-        
+
     for file in files:
         if not file.filename:
             continue
@@ -156,25 +175,24 @@ async def upload_photos(
         gallery_manager.save_upload(content, file.filename, preset.name)
         photo = Photo(filename=file.filename, preset_id=preset.id)
         session.add(photo)
-        
+
     session.commit()
     return await get_gallery_partial(request, preset_id, session)
 
+
 @router.delete("/photos/{photo_id}", response_class=HTMLResponse)
 async def delete_photo(
-    request: Request,
-    photo_id: int,
-    session: Session = Depends(get_session)
+    request: Request, photo_id: int, session: Session = Depends(get_session)
 ):
     photo = session.get(Photo, photo_id)
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
-    
+
     # We should delete from disk too (TODO: Add method to gallery_manager)
     # gallery_manager.delete_photo(photo.filename, photo.preset.name)
-    
+
     preset_id = photo.preset_id
     session.delete(photo)
     session.commit()
-    
+
     return await get_gallery_partial(request, preset_id, session)
