@@ -63,6 +63,85 @@
         min-width: 300px;
     }
 
+    /* --- Layer 3: Persistent Alarm Box (Bottom Center) --- */
+    .alarm-box-container {
+        position: fixed;
+        bottom: 5vh;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20; /* Above info box if overlap, but mainly above slides */
+        
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        
+        background: rgba(0, 0, 0, 0.45); 
+        backdrop-filter: blur(15px);
+        -webkit-backdrop-filter: blur(15px);
+        
+        padding: 1.5rem;
+        border-radius: 20px;
+        border: 1px solid rgba(255, 50, 50, 0.3); /* Red tint border */
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.7);
+        
+        color: #fff;
+        min-width: 350px;
+        max-width: 80vw;
+        max-height: 40vh;
+        overflow-y: auto;
+        
+        animation: slideUp 0.5s ease-out;
+    }
+
+    .alarm-item {
+        width: 100%;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+    }
+    
+    .alarm-item:last-child {
+        border-bottom: none;
+    }
+
+    .alarm-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #ff5555;
+        font-weight: 600;
+        font-size: 1.5rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .alarm-body {
+        font-size: 1.2rem;
+        opacity: 0.9;
+        margin-bottom: 10px;
+    }
+    
+    .dismiss-btn-small {
+        background: transparent;
+        color: #aaa;
+        border: 1px solid #555;
+        padding: 5px 15px;
+        font-size: 0.9rem;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .dismiss-btn-small:hover {
+        background: #fff;
+        color: #000;
+        border-color: #fff;
+    }
+
     #clock {
         font-size: 8rem;
         font-weight: 200; /* Thin font */
@@ -97,56 +176,9 @@
     .weather-info .temp { font-weight: 500; }
     .weather-info .condition { opacity: 0.8; font-size: 1.2rem; }
 
-    /* --- Layer 3: Alarm Modal --- */
-    .alarm-modal {
-        position: fixed;
-        top: 0; left: 0;
-        width: 100vw; height: 100vh;
-        z-index: 100;
-        
-        background: rgba(0, 0, 0, 0.85);
-        backdrop-filter: blur(5px);
-        
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        animation: pulseAlert 2s infinite;
-    }
-    
-    .alarm-content {
-        background: #fff;
-        color: #000;
-        padding: 4rem;
-        border-radius: 20px;
-        text-align: center;
-        max-width: 600px;
-        box-shadow: 0 0 50px rgba(255, 0, 0, 0.5);
-    }
-    
-    .alarm-content h1 {
-        font-size: 4rem;
-        margin: 0 0 1rem 0;
-        color: #d32f2f;
-    }
-    
-    .dismiss-btn {
-        background: #000;
-        color: #fff;
-        border: none;
-        padding: 1rem 3rem;
-        font-size: 1.5rem;
-        border-radius: 50px;
-        cursor: pointer;
-        margin-top: 2rem;
-    }
-
     /* Animations */
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes pulseAlert { 
-        0% { background: rgba(50, 0, 0, 0.85); }
-        50% { background: rgba(80, 0, 0, 0.85); }
-        100% { background: rgba(50, 0, 0, 0.85); }
-    }
+    @keyframes slideUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
     
     /* HTMX Transition Support */
     .htmx-swapping > .slide-container {
@@ -215,10 +247,27 @@
 <div id="alarm-poller"
      hx-get="/components/alarm"
      hx-trigger="every 10s"
-     hx-swap="innerHTML">
+     hx-swap="none">
 </div>
 
 <script>
+    // Manual "Smart Swap" for Alarms to prevent re-animation
+    var lastAlarmContent = "";
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+        if (evt.detail.target.id === 'alarm-poller') {
+            var newHtml = evt.detail.xhr.responseText;
+            var normalize = function(html) {
+                return html.replace(/\s/g, '').toLowerCase();
+            };
+            
+            var normalizedNew = normalize(newHtml);
+            if (normalizedNew !== lastAlarmContent) {
+                lastAlarmContent = normalizedNew;
+                evt.detail.target.innerHTML = newHtml;
+            }
+        }
+    });
+
     function updateTime() {
         const now = new Date();
         
