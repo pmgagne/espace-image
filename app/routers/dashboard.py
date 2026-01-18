@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 from app.db.session import get_session
@@ -16,6 +16,12 @@ templates = Jinja2Templates(directory="app/templates")
 @router.get("/")
 async def read_root(request: Request, session: Session = Depends(get_session)):
     """Modern Dashboard View"""
+    user_agent = request.headers.get("user-agent", "")
+
+    # Auto-redirect for iPad 2 (iOS 9)
+    if "iPad" in user_agent and "OS 9_" in user_agent:
+        return RedirectResponse(url="/legacy")
+
     settings = session.exec(select(AppSettings)).first()
     return templates.TemplateResponse(
         request, "index.html", {"mode": "modern", "settings": settings}
