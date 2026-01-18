@@ -7,75 +7,59 @@ A unique requirement is strict backward compatibility with an **iPad 2 (iOS 9.3.
 
 ### Core Goals
 - **Passive Display:** A digital photo frame experience with full-screen photos and a subtle information overlay.
-- **Admin Interface:** Manage photos, organize them into "Presets", and configure application settings.
-- **Calendar Integration:** Fetch events from iCloud (ICS/CalDAV) and display intrusive "Alarm" popups for upcoming events.
-- **Legacy Support:** Ensure full functionality on an iPad 2 (512MB RAM, old WebKit) via a dedicated low-resource mode.
+- **Admin Interface:** User-friendly management of photos, presets, calendars, and weather settings via a Sidebar UI.
+- **Calendar Integration:** Fetch events from multiple iCloud (WebCal) feeds and display intrusive "Alarm" popups for today's events.
+- **Legacy Support:** Ensure full functionality on an iPad 2 (512MB RAM, old WebKit).
 
 ## 2. Technical Architecture
 
 ### 2.1 Tech Stack
 - **Language:** Python 3.12+
-- **Package Manager:** `uv`
-- **Web Framework:** FastAPI (Async support, strict typing).
-- **Templating:** Jinja2 (Server-side rendering).
-- **Frontend Interactivity:** HTMX (v1.x for compatibility) + Vanilla JS (with Polyfills for legacy).
-- **Database:** SQLite (Embedded, zero-conf).
-- **ORM:** SQLModel (Pydantic + SQLAlchemy).
-- **Image Processing:** Pillow (PIL) for resizing and optimization.
-- **Containerization:** Docker (Multi-stage build).
+- **Web Framework:** FastAPI.
+- **Frontend:** HTMX + Vanilla JS (ES5 for Legacy).
+- **Database:** SQLite (SQLModel/SQLAlchemy).
+- **Weather API:** Open-Meteo (No API Key).
+- **Calendar Parser:** `icalendar` library (Robust support for Apple/Google feeds).
+- **Containerization:** Docker.
 
 ### 2.2 System Components
-1.  **Web Server (FastAPI):** Serves HTML templates, static assets, and HTMX API endpoints.
-2.  **Gallery Manager:** Handles file system operations, image upload, deletion, and "Preset" logic.
-3.  **Image Optimizer:** Service that resizes images for the Legacy Client (Target: 1024x768).
-4.  **Info Service:** Fetches Weather data and provides Time synchronization.
-5.  **Calendar Watcher:** Background task that polls the iCloud calendar feed for "Alarms".
+1.  **Web Server:** FastAPI serving Templates and JSON/HTML fragments.
+2.  **Gallery Manager:** Manages file uploads, deletions, and thumbnail generation.
+3.  **Calendar Service:** Aggregates events from multiple `CalendarSource` URLs (ICS/WebCal) using parallel async fetching.
+4.  **Weather Service:** Fetches data from Open-Meteo using Lat/Long coordinates with WMO code mapping.
 
-## 3. Functional Requirements (Frontpage UI)
+## 3. Functional Requirements
 
-### 3.1 Layout & Aesthetic
-The frontpage is a **Passive Display** (Digital Photo Frame) designed to be attractive and readable from a distance.
+### 3.1 Admin Interface
+- **Layout:** Persistent **Sidebar Navigation** with content loaded via HTMX.
+- **Sections:**
+    1.  **General Settings:**
+        -   **Weather:** Latitude/Longitude inputs + "Find My Location".
+        -   **Slideshow:** Active Preset + **Duration** (seconds).
+    2.  **Calendar Sources:**
+        -   List view of configured calendars (Label + URL + Color).
+        -   Form to add new WebCal URLs.
+    3.  **Gallery Management:**
+        -   **Preset Manager:** Create new folders.
+        -   **Photo Viewer:** Visual grid of thumbnails.
+        -   **Upload:** Multi-file upload support.
 
-- **Background:** Full-screen slideshow using high-quality images from the active preset.
-- **Floating Info Box:** 
-    - **Position:** Fixed at the **top-center** of the screen.
-    - **Adaptability:** Responsive design supporting both **Portrait** and **Landscape** orientations while remaining top-center.
-    - **Content:**
-        - **Clock:** Large, clear time display.
-        - **Date:** Including the month in full text (e.g., "January 18, 2026").
-        - **Weather:** Current temperature and condition icon.
-    - **Style (Modern):** Semi-transparent dark background (`rgba(0,0,0,0.6)`) with a blur effect (`backdrop-filter: blur(10px)`), white text, and clean typography.
-    - **Style (Legacy):** Fallback to solid semi-transparent background (no blur) with `-webkit-` prefixes for positioning.
+### 3.2 Dashboard UI
+- **Modern (`/`):** Full-screen, blurred overlay, CSS Grid.
+- **Legacy (`/legacy`):** Absolute positioning, solid backgrounds, optimized for iOS 9.
+- **Features:**
+    -   **Clock/Date:** Large typography.
+    -   **Weather:** Localized condition + Temp (Open-Meteo).
+    -   **Alarms:** Aggregated from all sources. Shows events from the last 12 hours (Today) that haven't been dismissed.
+    -   **Access:** Subtle "Admin" link on the bottom right.
 
-### 3.2 Feature Details
-- **Photo Carousel:**
-    - Rotates images automatically (default 30s).
-    - Uses CSS transitions for smooth fading between slides.
-- **Calendar Alarms (Popup):**
-    - When an event is active/upcoming, a **Popup Overlay** appears on top of the slideshow and info box.
-    - The popup must be intrusive enough to be noticed but maintain the app's aesthetic.
-    - Includes a "Dismiss" button to close the alert.
+## 4. Data Models (SQLModel)
 
-## 4. Dashboard Modes
-
-### 4.1 Modern Mode (`/`)
-- Uses CSS Grid/Flexbox and `backdrop-filter`.
-- Full-resolution images.
-- Smooth HTMX-driven transitions (`transition: true`).
-
-### 4.2 Legacy Mode (`/legacy`)
-- **Optimized Images:** Strictly served at 1024x768 max resolution.
-- **CSS Safety:** No CSS Grid; uses Floats and simple Flexbox with vendor prefixes.
-- **JS Compatibility:** Polyfills for `Promise`, `fetch`, etc.
-- **Performance:** Minimized DOM elements and simplified animations.
-
-## 5. Data Models (SQLModel)
-
-### 5.1 Entities
+### 4.1 Entities
 
 **`Preset`**
 - `id`: int (PK)
-- `name`: str
+- `name`: str (Unique)
 - `created_at`: datetime
 
 **`Photo`**
@@ -84,28 +68,42 @@ The frontpage is a **Passive Display** (Digital Photo Frame) designed to be attr
 - `preset_id`: int (FK)
 - `uploaded_at`: datetime
 
+**`CalendarSource`**
+- `id`: int (PK)
+- `label`: str
+- `url`: str (WebCal/ICS)
+- `color`: str
+
 **`AppSettings`** (Singleton)
 - `id`: int (PK)
 - `active_preset_id`: int (FK, nullable)
-- `weather_api_key`: str (nullable)
-- `calendar_url`: str (nullable)
-- `weather_location`: str (nullable)
+- `weather_latitude`: float (nullable)
+- `weather_longitude`: float (nullable)
+- `weather_timezone`: str (default="auto")
+- `slideshow_duration`: int (default=30)
 
-**`AlarmEvent`**
+**`AlarmEvent`** (Track Dismissals)
 - `id`: int (PK)
 - `uid`: str (Unique Event ID)
 - `trigger_time`: datetime
-- `dismissed_at`: datetime (nullable)
+- `dismissed_at`: datetime
 
-## 6. API Design (HTMX Oriented)
+## 5. API Design
 
-- `GET /components/weather` -> HTML fragment for weather.
-- `GET /components/slide` -> HTML fragment for the next slide.
-- `GET /components/alarm` -> HTML fragment for alarm popup (or 204 No Content).
-- `POST /api/alarms/{uid}/dismiss` -> Mark alarm as dismissed.
-- `GET /images/{photo_id}?mode=legacy` -> Returns resized image.
+### 5.1 Admin Endpoints (Partials)
+- `GET /admin/partials/settings`: Settings form.
+- `GET /admin/partials/calendars`: Calendar list.
+- `GET /admin/partials/gallery`: Photo grid.
+- `POST /admin/settings`: Update config (Lat/Long, Duration).
+- `POST /admin/upload`: Handle file uploads.
 
-## 7. Testing Strategy
-- **Unit Tests (`pytest`):** Image resizing logic, ICS parsing, and DB CRUD.
-- **Integration Tests:** Verify HTMX endpoints return valid HTML fragments.
-- **Cross-Platform Validation:** Manual check on Modern browsers and Legacy WebKit (iOS 9).
+### 5.2 Dashboard Endpoints
+- `GET /components/weather`: HTML fragment for weather.
+- `GET /components/slide`: HTML fragment for next slide.
+- `GET /components/alarm`: HTML fragment for alarm popup (checks dismissal).
+- `POST /api/alarms/{uid}/dismiss`: Mark alarm as dismissed.
+
+## 6. Testing Strategy
+- **Unit Tests:** Verify `CalendarService` parsing and merging logic using `icalendar`.
+- **Integration:** Test Admin HTMX flows and Dashboard component rendering.
+- **Legacy:** Manual verification on iPad 2 (or simulation) for CSS/JS compatibility.

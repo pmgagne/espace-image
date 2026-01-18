@@ -153,14 +153,36 @@
         opacity: 0;
         transition: opacity 1s ease-out;
     }
+
+    .admin-link {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 50;
+        color: rgba(255, 255, 255, 0.5); /* Higher visibility */
+        background: rgba(0, 0, 0, 0.3); /* Subtle background for contrast */
+        padding: 5px 15px;
+        border-radius: 20px;
+        text-decoration: none;
+        font-size: 0.9rem;
+        transition: all 0.3s;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .admin-link:hover { 
+        color: rgba(255, 255, 255, 1); 
+        background: rgba(0, 0, 0, 0.6);
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+<!-- Admin Access -->
+<a href="/admin" class="admin-link">Admin</a>
+
 <!-- Slideshow Background -->
 <div class="slideshow-container"
      hx-get="/components/slide?mode=modern"
-     hx-trigger="load, every 30s"
+     hx-trigger="load, every {{ settings.slideshow_duration or 30 }}s"
      hx-swap="innerHTML transition:true">
      <!-- Placeholder -->
      <div style="width:100%; height:100%; background: #111;"></div>

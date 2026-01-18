@@ -1,0 +1,74 @@
+<div>
+    <h2>General Settings</h2>
+    
+    <form hx-post="/admin/settings" hx-target="#admin-content">
+        <h3>Weather Configuration</h3>
+        <p style="color: #888; font-size: 0.9em; margin-bottom: 15px;">
+            Powered by Open-Meteo. Requires Latitude and Longitude.
+            {% if location_name %}
+            <br><span style="color: #4caf50;">Detected: {{ location_name }}</span>
+            {% endif %}
+        </p>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div>
+                <label>Latitude</label>
+                <input type="number" step="any" name="latitude" id="lat" value="{{ settings.weather_latitude or '' }}" required>
+            </div>
+            <div>
+                <label>Longitude</label>
+                <input type="number" step="any" name="longitude" id="lon" value="{{ settings.weather_longitude or '' }}" required>
+            </div>
+        </div>
+        
+        <button type="button" onclick="findLocation()" style="background: #444; margin-bottom: 20px;">
+            📍 Find My Location
+        </button>
+        
+        <h3>Slideshow Configuration</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div>
+                <label>Active Preset</label>
+                <select name="active_preset_id">
+                    <option value="">-- No Preset Selected --</option>
+                    {% for preset in presets %}
+                    <option value="{{ preset.id }}" {% if settings.active_preset_id == preset.id %}selected{% endif %}>
+                        {{ preset.name }} ({{ preset.photos|length }} photos)
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>Duration (seconds)</label>
+                <input type="number" name="duration" value="{{ settings.slideshow_duration or 30 }}" min="5" required>
+            </div>
+        </div>
+        
+        <div style="margin-top: 20px; border-top: 1px solid #333; padding-top: 20px;">
+            <button type="submit">Save Changes</button>
+            <span class="htmx-indicator" style="margin-left: 10px; color: #888;">Saving...</span>
+        </div>
+    </form>
+</div>
+
+<script>
+    function findLocation() {
+        if (!navigator.geolocation) {
+            alert("Geolocation is not supported by your browser");
+            return;
+        }
+        
+        const btn = document.querySelector('button[onclick="findLocation()"]');
+        const originalText = btn.innerText;
+        btn.innerText = "Locating...";
+        
+        navigator.geolocation.getCurrentPosition((position) => {
+            document.getElementById('lat').value = position.coords.latitude.toFixed(4);
+            document.getElementById('lon').value = position.coords.longitude.toFixed(4);
+            btn.innerText = originalText;
+        }, (error) => {
+            alert("Unable to retrieve your location: " + error.message);
+            btn.innerText = originalText;
+        });
+    }
+</script>
