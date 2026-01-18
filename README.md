@@ -2,6 +2,8 @@
 
 A Python-based dashboard designed to run in a Docker container, serving a modern UI for current devices and a **Legacy UI** optimized for the iPad 2 (iOS 9.3.5).
 
+For detailed architecture and functional requirements, please refer to [SPEC.md](SPEC.md).
+
 ## Features
 - **Photo Slideshow:** Rotates through user-uploaded images.
 - **Legacy Mode:** Specialized frontend for iPad 2 (1024x768, no CSS Grid, resized images).
@@ -47,12 +49,9 @@ uv run python -m pytest tests/test_app.py tests/test_routers.py tests/test_servi
 
 ## Docker
 
-1. **Build:**
+1. **Build & Run:**
    ```bash
-   docker build -t slideshow-app .
+   docker-compose up --build
    ```
 
-2. **Run:**
-   ```bash
-   docker run -p 8000:8000 -v $(pwd)/data:/app/data --env-file .env slideshow-app
-   ```
+This will start the application at `http://localhost:8000`, mounting the `./data` directory for persistence and loading configuration from `.env`.

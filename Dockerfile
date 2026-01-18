@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.13-slim-bookworm AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
@@ -13,19 +13,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpng-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a virtual environment
-RUN uv venv /app/.venv
-
-# Install dependencies from requirements.txt
-COPY requirements.txt ./
-RUN uv pip install -r requirements.txt --python /app/.venv
+# Install dependencies using uv sync
+# This uses uv.lock for deterministic builds and avoids manual export to requirements.txt
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Stage 2: Runtime
-FROM python:3.12-slim-bookworm
+FROM python:3.13-slim-bookworm
 
 WORKDIR /app
 
 # Copy the environment from the builder
+# uv creates the venv at .venv by default
 COPY --from=builder /app/.venv /app/.venv
 
 # Install runtime dependencies

@@ -1,16 +1,21 @@
-# Python virtual environment
-.venv/
+# Git
+.git/
 
-# Python cache
+# Environments and dependencies
+.venv/
+uv.lock
+
+# Python cache and tools
 __pycache__/
 .ruff_cache/
 .pytest_cache/
 
-# Project specific
+# Project specific (Large assets and databases)
 data/
+tests/images/
 *.sqlite
+*.sqlite-journal
 *.db
-uv.lock
 
 # System and Build
 .DS_Store
@@ -18,5 +23,6 @@ uv.lock
 dist/
 build/
 
-# Chat history
-chat_history.txt
+# IDEs
+.vscode/
+.idea/
