@@ -1,5 +1,6 @@
 import httpx
-from typing import Optional, Dict
+from typing import Dict
+
 
 class WeatherService:
     # WMO Weather interpretation codes (WW)
@@ -28,7 +29,7 @@ class WeatherService:
         86: "Averses de neige fortes",
         95: "Orage",
         96: "Orage avec grêle légère",
-        99: "Orage avec grêle forte"
+        99: "Orage avec grêle forte",
     }
 
     @staticmethod
@@ -42,22 +43,22 @@ class WeatherService:
                 response = await client.get(url, timeout=5.0)
                 response.raise_for_status()
                 data = response.json()
-                
+
                 current = data.get("current_weather", {})
                 temp = current.get("temperature")
                 code = current.get("weathercode")
-                
+
                 condition = WeatherService.WMO_CODES.get(code, "Inconnu")
-                
+
                 return {
                     "temp": round(temp),
                     "condition": condition,
-                    "location": f"{lat:.2f}, {lon:.2f}"  # Placeholder until reverse geocoding
+                    "location": f"{lat:.2f}, {lon:.2f}",  # Placeholder until reverse geocoding
                 }
         except Exception as e:
             print(f"Weather API Error: {e}")
             return {
                 "temp": "--",
                 "condition": "Erreur",
-                "location": "Service indisponible"
+                "location": "Service indisponible",
             }

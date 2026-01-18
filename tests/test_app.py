@@ -5,6 +5,7 @@ def test_read_root(client):
     # Check for expected content from templates/index.html
     assert "Gemini" in response.text
 
+
 def test_health_check(client):
     """Test the health check endpoint."""
     response = client.get("/health")
