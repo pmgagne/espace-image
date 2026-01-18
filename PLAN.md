@@ -1,86 +1,65 @@
-# Strategic Plan: Admin Interface Overhaul
+# Strategic Plan: Persistent Bottom-Center Alarm Box
 
 ## 1. Understanding the Goal
-The objective is to transform the Admin interface into a user-friendly, SPA-like experience using HTMX.
-**Key Deliverables:**
--   **Sidebar Navigation:** Persistent navigation for distinct sections.
--   **Visual Gallery Management:** Thumbnail grid with delete functionality.
--   **Multi-Calendar Support:** Manage multiple WebCal URLs with labels.
--   **Open-Meteo Integration:** Configuration via Latitude/Longitude with a "Find My Location" helper.
+The objective is to redesign the Calendar Event (Alarm) popup to:
+*   **Visual Style:** Match the existing "Clock Box" (semi-transparent black, rounded corners).
+*   **Position:** Bottom-Center of the screen.
+*   **Behavior:** Non-blocking (no full-screen overlay), allowing the slideshow to be visible.
+*   **Multi-Event:** Display *all* active events simultaneously in the same box.
+*   **Compatibility:** Must work on both Modern (Blur, Flexbox/Grid) and Legacy (iPad 2, Absolute positioning, No Blur) dashboards.
 
 ## 2. Investigation & Analysis
-**Files Analyzed:**
--   `app/db/models.py`: Needs significant schema updates (`CalendarSource`, `AppSettings`).
--   `app/routers/admin.py`: Currently monolithic; needs endpoints for HTMX partials.
--   `app/templates/admin.html`: Will be refactored into a layout shell + partials.
+**Current State:**
+*   **Backend (`dashboard.py`):** `check_alarm` fetches alarms but stops at the first undismissed one. It returns a full-screen modal HTML string.
+*   **Modern UI:** Uses `.alarm-modal` with `position: fixed; top: 0; left: 0; width: 100vw; height: 100vh` and a pulsing red background.
+*   **Legacy UI:** Uses similar full-screen blocking styles.
+*   **Dismissal:** Uses HTMX (`hx-post`) to swap the overlay content.
 
-**Critical Decisions:**
--   **Database Migration:** Since we are in early dev, we will update `init_db.py` to handle the new schema. Existing data might be lost unless manually migrated, which is acceptable for this prototype phase.
--   **HTMX Strategy:** We will use `hx-get` to swap the main content area (`#admin-content`) when clicking sidebar links. Forms will use `hx-post` to update specific sections without full reloads.
+**Required Changes:**
+1.  **Backend:** Modify `check_alarm` to iterate through *all* active alarms and return them as a list.
+2.  **HTML Structure:** The returned HTML must be a container (styled like the clock) with a list of event items.
+3.  **CSS:**
+    *   Remove full-screen overlay styles.
+    *   Apply `.info-box-container` styles to the alarm container.
+    *   Position at `bottom: 3vh` (Modern) / `bottom: 20px` (Legacy).
+4.  **Interaction:** Dismiss buttons need to trigger a refresh of the alarm container to remove the dismissed item (or remove the specific item from the DOM).
 
 ## 3. Proposed Strategic Approach
 
-### Phase 1: Database Schema Update [DONE]
-*   [x] **Modify `models.py`**:
-    *   [x] Added `CalendarSource` model.
-    *   [x] Updated `AppSettings` (replaced API key/Location string with Lat/Long).
-*   [x] **Update `init_db.py`**: Updated to seed the new settings structure.
-*   [x] **Action**: Re-initialized the database successfully.
-*   [x] **Refactoring**: Updated `WeatherService` and `dashboard.py` to use new Lat/Long fields.
+### Phase 1: Backend Logic (Multi-Alarm Support) [DONE]
+*   [x] **Modify `app/routers/dashboard.py`**:
+    *   [x] Update `check_alarm` to collect a list of *all* undismissed `active_alarms`.
+    *   [x] Update the returned HTML template to iterate over this list.
+    *   [x] If the list is empty, return an empty string.
+    *   [x] Structure the HTML to be a `div` with class `alarm-container` containing multiple `alarm-item` divs.
 
-### Phase 2: Backend Routes (Admin API) [DONE]
-*   [x] **Refactor `app/routers/admin.py`**:
-    *   [x] Created endpoints that return **HTML Fragments** (`/partials/settings`, `/partials/calendars`, `/partials/gallery`).
-    *   [x] Implemented logic for fetching partials.
-*   [x] **Implement CRUD Logic**:
-    *   [x] Add/Delete Calendar Sources (Backend logic ready, awaiting frontend form).
-    *   [x] Delete Photos.
-    *   [x] Update Lat/Long.
-*   **Verification**:
-    *   [x] Updated tests to expect partial responses.
-    *   [x] Created placeholder templates to pass router logic tests.
+### Phase 2: Modern Styling (`app/templates/index.html`) [DONE]
+*   [x] **Update CSS**:
+    *   [x] Define `.alarm-box-container` class that mirrors `.info-box-container`.
+    *   [x] Position it at `bottom: 5vh; left: 50%; transform: translateX(-50%)`.
+    *   [x] Style `.alarm-item` to look clean (e.g., small header, description, dismiss button).
+    *   [x] Remove the old `.alarm-modal` styles.
 
-### Phase 3: Frontend Templates & Interactivity [DONE]
-*   [x] **Create `admin_base.html`**: Implemented shell with Sidebar and `hx-get` navigation.
-*   [x] **Implement Partials**:
-    *   [x] `partials/settings.html`: Settings form with JS Geolocation.
-    *   [x] `partials/calendars.html`: List + Add form for multi-calendar support.
-    *   [x] `partials/gallery.html`: Preset selector, Upload, and Photo Grid.
-*   [x] **Styling**: Applied dark mode CSS with Flexbox layout.
+### Phase 3: Legacy Styling (`app/templates/legacy/index.html`)
+*   **Update CSS**:
+    *   Define `.alarm-box-container` mirroring the legacy `.info-box-container`.
+    *   Position at `bottom: 60px` (above the admin link).
+    *   Ensure no Flexbox/Grid is used for the container itself if absolute positioning works better for the "stack".
 
-### Phase 4: Integration & Testing [DONE]
-*   [x] **Weather Service**: Updated to use `latitude`/`longitude` from DB.
-*   [x] **Calendar Service**: 
-    *   [x] Implemented `get_all_alarms` to fetch from multiple URLs in parallel.
-    *   [x] Added protocol replacement (`webcal://` -> `https://`).
-    *   [x] Connected `dashboard.py` to fetch active sources from DB.
-*   [x] **Verification**:
-    *   [x] Created `tests/test_calendar_integration.py` to verify fetching logic (mocked).
-    *   [x] Confirmed timezone-aware handling for ICS comparisons.
-
-### Phase 5: Legacy Optimization & Polish [DONE]
-*   [x] **Legacy Dashboard (`/legacy`)**:
-    *   [x] Replaced HTMX with Vanilla ES5 (`XMLHttpRequest`, `setInterval`) to solve loading issues on iPad 2.
-    *   [x] Localized Date/Time to French.
-*   [x] **Legacy Admin Support**:
-    *   [x] Downgraded HTMX to 1.0.0 (Pure ES5).
-    *   [x] Added `promise-polyfill` and `whatwg-fetch` locally.
-    *   [x] Replaced CSS Grid with Flexbox/Floats in Admin templates.
-    *   [x] Replaced all ES6 syntax (`const`, arrow functions) with ES5.
-*   [x] **UX Enhancements**:
-    *   [x] **Auto-Redirect**: Server detects iPad 2 (iOS 9) and redirects to `/legacy`.
-    *   [x] **Location Search**: Added Open-Meteo Geocoding to Settings (enter city name -> get coords).
-    *   [x] **Manual Fallback**: Added "Legacy Mode" link to modern dashboard.
+### Phase 4: Interaction Refinement [DONE]
+*   [x] **Dismissal**:
+    *   [x] The `dismiss_alarm` endpoint now returns the updated alarm list instead of an empty string.
+    *   [x] The frontend targets the `#alarm-poller` (Modern) or `#alarm-wrapper` (Legacy) to refresh the whole list immediately.
+    *   [x] **Implementation Note**: Added "Smart Swap" logic to both dashboards (Modern via `htmx:afterRequest`, Legacy via `lastAlarmHtml` tracker) to prevent repetitive `slideUp` animations when content hasn't changed.
+    *   [x] **Implementation Note**: Synchronized background transparency and blur with the clock/weather info box.
 
 ## 4. Verification Strategy
-*   **Database**: Check `sqlite3 data/db.sqlite ".schema"` to confirm new tables.
-*   **UI Navigation**: Click sidebar links; ensure only the content area updates.
-*   **Functionality**:
-    *   Upload a photo -> Verify it appears in the grid.
-    *   Add a Calendar -> Verify it shows in the list.
-    *   Click "Find My Location" -> Verify Lat/Long inputs are populated.
+*   **Mock Data**: Use the `?mock=true` endpoint to simulate multiple alarms.
+*   **Visual Check (Modern)**: Verify the box appears at the bottom, matches the clock style, and the slideshow plays behind it.
+*   **Visual Check (Legacy)**: Verify on iPad 2 (or simulation) that the box is centered, legible, and doesn't crash the browser.
+*   **Functional Check**: Dismiss one event -> Box updates (removes item). Dismiss last event -> Box disappears.
 
-## 5. Anticipated Challenges
-*   **Browser Geolocation**: Requires HTTPS in some contexts (though usually works on localhost).
-*   **HTMX History**: Managing browser back button with partial swaps (we might ignore this for a simple admin panel or use `hx-push-url`).
-*   **Data Migration**: Breaking changes to the DB schema will require a fresh start.
+## 5. Anticipated Challenges & Considerations
+*   **Vertical Space**: If there are many events, the box might grow too large. We should implement a `max-height` with `overflow-y: auto` (hidden scrollbar) or just limit to showing the top 3.
+*   **Legacy CSS**: Vertical centering of text vs content in absolute positioning can be tricky on iOS 9. Sticking to simple block stacking is safest.
+*   **Z-Index**: Ensure the alarm box is above the slideshow (`z=0`) but below any actual system overlays. `z=20` should suffice (Clock is `z=10`).

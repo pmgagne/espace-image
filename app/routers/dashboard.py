@@ -86,69 +86,76 @@ async def get_next_slide(mode: str = "modern", session: Session = Depends(get_se
 
 @router.get("/components/alarm", response_class=HTMLResponse)
 async def check_alarm(mock: bool = False, session: Session = Depends(get_session)):
-    """Checks for active alarms and returns modal HTML if one exists."""
+    """Checks for active alarms and returns a list of them if any exist."""
+    
+    active_alarms = []
+
     if mock:
-        return """
-        <div id="alarm-overlay" class="alarm-modal">
-            <div class="alarm-content">
-                <h1>⏰ ALARM</h1>
-                <p>Mock Event: Time to wake up!</p>
-                <button hx-post="/api/alarms/mock-1/dismiss" 
-                        hx-target="#alarm-overlay" 
-                        hx-swap="outerHTML"
-                        class="dismiss-btn">Dismiss</button>
+        active_alarms = [
+            {"uid": "mock-1", "name": "Meeting with Client", "description": "Discuss project roadmap", "time": "14:00"},
+            {"uid": "mock-2", "name": "Dentist Appointment", "description": "Dr. Smith", "time": "16:30"}
+        ]
+    else:
+        # Real logic
+        sources = session.exec(select(CalendarSource)).all()
+        if sources:
+            urls = [s.url for s in sources]
+            alarms = await CalendarService.get_all_alarms(urls)
+
+            if alarms:
+                # Filter out dismissed alarms
+                for alarm in alarms:
+                    dismissed = session.exec(
+                        select(AlarmEvent).where(AlarmEvent.uid == alarm["uid"])
+                    ).first()
+                    if not dismissed:
+                        active_alarms.append(alarm)
+
+    if not active_alarms:
+        return ""
+
+    # Sort alarms by UID to ensure consistent HTML output for change detection
+    active_alarms.sort(key=lambda x: x["uid"])
+
+    # Generate HTML for all active alarms
+    alarms_html = ""
+    for alarm in active_alarms:
+        alarms_html += f"""
+        <div class="alarm-item">
+            <div class="alarm-header">
+                <span class="alarm-icon">📅</span>
+                <span class="alarm-title">{alarm["name"]}</span>
             </div>
+            <div class="alarm-body">
+                {alarm.get("description") or "Event Started"}
+            </div>
+            <button hx-post="/api/alarms/{alarm["uid"]}/dismiss?mock={'true' if mock else 'false'}" 
+                    hx-target="#alarm-poller" 
+                    hx-swap="innerHTML"
+                    class="dismiss-btn-small">Dismiss</button>
         </div>
         """
 
-    # Real logic
-    sources = session.exec(select(CalendarSource)).all()
-    if not sources:
-        return ""
-
-    urls = [s.url for s in sources]
-    alarms = await CalendarService.get_all_alarms(urls)
-
-    if not alarms:
-        return ""
-
-    # Get the first alarm that isn't dismissed
-    active_alarm = None
-    for alarm in alarms:
-        dismissed = session.exec(
-            select(AlarmEvent).where(AlarmEvent.uid == alarm["uid"])
-        ).first()
-        if not dismissed:
-            active_alarm = alarm
-            break
-
-    if not active_alarm:
-        return ""
-
     return f"""
-    <div id="alarm-overlay" class="alarm-modal">
-        <div class="alarm-content">
-            <h1>⏰ {active_alarm["name"]}</h1>
-            <p>{active_alarm["description"] or "Event Started"}</p>
-            <button hx-post="/api/alarms/{active_alarm["uid"]}/dismiss" 
-                    hx-target="#alarm-overlay" 
-                    hx-swap="outerHTML"
-                    class="dismiss-btn">Dismiss</button>
-        </div>
+    <div id="alarm-box" class="alarm-box-container">
+        {alarms_html}
     </div>
     """
 
 
 @router.post("/api/alarms/{uid}/dismiss", response_class=HTMLResponse)
-async def dismiss_alarm(uid: str, session: Session = Depends(get_session)):
-    """Dismisses an alarm."""
-    # Check if already dismissed
-    existing = session.exec(select(AlarmEvent).where(AlarmEvent.uid == uid)).first()
-    if not existing:
-        alarm_event = AlarmEvent(
-            uid=uid, trigger_time=datetime.now(), dismissed_at=datetime.now()
-        )
-        session.add(alarm_event)
-        session.commit()
+async def dismiss_alarm(uid: str, mock: bool = False, session: Session = Depends(get_session)):
+    """Dismisses an alarm and returns the updated alarm list."""
+    
+    if not mock:
+        # Check if already dismissed
+        existing = session.exec(select(AlarmEvent).where(AlarmEvent.uid == uid)).first()
+        if not existing:
+            alarm_event = AlarmEvent(
+                uid=uid, trigger_time=datetime.now(), dismissed_at=datetime.now()
+            )
+            session.add(alarm_event)
+            session.commit()
 
-    return ""
+    # Return the updated list immediately
+    return await check_alarm(mock=mock, session=session)
