@@ -2,86 +2,195 @@
 
 {% block head %}
 <style>
-    /* Legacy Float-based Layout (No Grid) */
-    .container {
-        width: 100%;
-        height: 100%;
+    /* 
+     * Legacy "Passive Display" Layout (iPad 2 / iOS 9)
+     * No Flexbox centering in full-screen if problematic, no Backdrop Filter.
+     */
+    
+    body {
+        margin: 0; padding: 0;
+        background: #000;
+        font-family: Helvetica, Arial, sans-serif;
         overflow: hidden;
     }
+
+    /* --- Layer 1: Slideshow --- */
+    .slideshow-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+        background: #000;
+    }
+
+    .slide-container {
+        width: 100%;
+        height: 100%;
+    }
+
+    .full-slide {
+        width: 100%;
+        height: 100%;
+        /* object-fit: cover is supported in iOS 9.3+ but fallbacks are safer if needed */
+        object-fit: cover;
+        display: block;
+    }
+
+    /* --- Layer 2: Info Box --- */
+    /* Center-Top Floating Box */
+    .info-box-container {
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        /* Translate trick works on iOS 9 */
+        -webkit-transform: translateX(-50%);
+        transform: translateX(-50%);
+        z-index: 10;
+        
+        width: 450px;
+        text-align: center;
+        
+        /* Fallback: Solid semi-transparent background (No blur) */
+        background: rgba(0, 0, 0, 0.7);
+        padding: 30px;
+        border-radius: 20px;
+        
+        color: #fff;
+    }
+
+    #clock {
+        font-size: 100px;
+        font-weight: 100;
+        margin-bottom: 10px;
+        line-height: 1;
+    }
+
+    #date-display {
+        font-size: 24px;
+        margin-bottom: 20px;
+        text-transform: uppercase;
+        color: #ddd;
+    }
+
+    /* Weather Component */
+    .weather-info {
+        border-top: 1px solid #555;
+        padding-top: 12px;
+        font-size: 24px;
+        /* Using floats or inline-block for side-by-side if flex acts up, 
+           but iOS 9 supports display:flex enough for simple rows */
+        display: -webkit-flex;
+        display: flex;
+        -webkit-justify-content: center;
+        justify-content: center;
+    }
     
-    .slideshow-area {
-        float: left;
-        width: 70%; /* 70% width for slides */
-        height: 100vh;
-        background: #111;
-        position: relative;
+    .weather-info .temp { margin-right: 15px; font-weight: bold; }
+    .weather-info .condition { opacity: 0.8; }
+
+    /* --- Layer 3: Alarm Modal --- */
+    .alarm-modal {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        z-index: 100;
+        background: rgba(0, 0, 0, 0.9);
+        display: table; /* Old school vertical centering */
+    }
+    
+    .alarm-content-wrapper {
+        display: table-cell;
+        vertical-align: middle;
         text-align: center;
     }
     
-    /* Centering in legacy is harder, using line-height hack or absolute centering */
-    .slideshow-area img {
-        max-width: 100%;
-        max-height: 100%;
-        position: absolute;
-        top: 0; bottom: 0; left: 0; right: 0;
-        margin: auto;
+    .alarm-content {
+        display: inline-block;
+        background: #fff;
+        color: #000;
+        padding: 40px;
+        border-radius: 10px;
+        max-width: 500px;
     }
     
-    .sidebar {
-        float: right;
-        width: 30%;
-        height: 100vh;
-        background: #222;
-        padding: 10px;
-        box-sizing: border-box; /* Crucial for padding math */
+    .alarm-content h1 { font-size: 40px; color: #cc0000; margin: 0 0 20px 0; }
+    
+    .dismiss-btn {
+        font-size: 24px;
+        padding: 15px 40px;
+        background: #000;
+        color: #fff;
+        border: none;
+        border-radius: 5px;
+        margin-top: 20px;
+        -webkit-appearance: none; /* iOS fix */
+    }
+
+    /* Simple Fade */
+    .slide-container {
+        -webkit-transition: opacity 1s;
+        transition: opacity 1s;
     }
     
-    .clearfix::after {
-        content: "";
-        clear: both;
-        display: table;
-    }
-    
-    .weather-widget {
-        border: 1px solid #444;
-        padding: 10px;
-        margin-bottom: 20px;
+    .htmx-swapping > .slide-container {
+        opacity: 0;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container clearfix">
-    <!-- Slideshow Area -->
-    <div class="slideshow-area"
-         hx-get="/components/slide?mode=legacy"
-         hx-trigger="load, every 30s"
-         hx-swap="innerHTML">
-         <p style="padding-top: 50%;">Loading...</p>
-    </div>
+<!-- Slideshow -->
+<div class="slideshow-container"
+     hx-get="/components/slide?mode=legacy"
+     hx-trigger="load, every 30s"
+     hx-swap="innerHTML">
+     <div style="background: #222; width: 100%; height: 100%;"></div>
+</div>
 
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <h3>Legacy Mode</h3>
-        
-        <!-- Weather Widget -->
-        <div hx-get="/components/weather" 
-             hx-trigger="load, every 10m"
-             hx-swap="innerHTML">
-             Loading Weather...
-        </div>
-        
-        <!-- Clock -->
-        <div id="clock" style="font-size: 2em; margin-top: 20px;">00:00</div>
+<!-- Info Box -->
+<div class="info-box-container">
+    <div id="clock">00:00</div>
+    <div id="date-display">...</div>
+    
+    <div hx-get="/components/weather" 
+         hx-trigger="load, every 600s"
+         hx-swap="outerHTML">
+         Loading...
     </div>
 </div>
 
+<!-- Alarm Poller -->
+<div id="alarm-poller"
+     hx-get="/components/alarm"
+     hx-trigger="every 10s"
+     hx-swap="innerHTML">
+</div>
+
 <script>
-    // Legacy compatible JS (var instead of const/let if strictly needed, but iOS 9 supports let)
-    setInterval(function() {
+    // iOS 9 Compatible JS (ES5 preferred just in case)
+    function updateTime() {
         var now = new Date();
-        var time = now.getHours() + ':' + (now.getMinutes()<10?'0':'') + now.getMinutes();
-        document.getElementById('clock').innerText = time;
-    }, 1000);
+        
+        // Manual formatting for safety on very old browsers if Locale APIs vary
+        var hours = now.getHours();
+        var minutes = now.getMinutes();
+        if (minutes < 10) minutes = '0' + minutes;
+        // 24h format preference
+        var timeStr = hours + ':' + minutes;
+        
+        document.getElementById('clock').innerText = timeStr;
+        
+        // Simple Date
+        var months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        var days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        var dateStr = days[now.getDay()] + ", " + months[now.getMonth()] + " " + now.getDate();
+        
+        document.getElementById('date-display').innerText = dateStr;
+    }
+    
+    updateTime();
+    setInterval(updateTime, 1000);
 </script>
 {% endblock %}

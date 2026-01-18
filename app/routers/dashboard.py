@@ -26,17 +26,16 @@ async def read_legacy(request: Request):
 async def get_weather(session: Session = Depends(get_session)):
     """Returns HTML fragment for weather widget."""
     settings = session.exec(select(AppSettings)).first()
-    if not settings:
-        return "<div>No Settings</div>"
+    # Provide defaults if settings are missing to avoid empty displays
+    location = settings.weather_location if settings else "Unknown"
+    api_key = settings.weather_api_key if settings else None
     
-    weather = await WeatherService.get_current_weather(settings.weather_location, settings.weather_api_key)
+    weather = await WeatherService.get_current_weather(location, api_key)
     
-    # We return a simple HTML string for HTMX to swap in
     return f"""
-    <div class="weather-widget">
-        <div class="temp">{weather['temp']}°C</div>
-        <div class="condition">{weather['condition']}</div>
-        <div class="location">{weather['location']}</div>
+    <div id="weather-display" class="weather-info">
+        <span class="temp">{weather['temp']}°C</span>
+        <span class="condition">{weather['condition']}</span>
     </div>
     """
 
@@ -45,50 +44,45 @@ async def get_next_slide(mode: str = "modern", session: Session = Depends(get_se
     """Returns HTML fragment for the next slide."""
     settings = session.exec(select(AppSettings)).first()
     if not settings or not settings.active_preset_id:
-        return "<div class='error'>No Preset Active</div>"
+        return "<div class='error-msg'>No Preset Active. Please configure in Admin.</div>"
     
-    # Get photos from active preset
     photos = session.exec(select(Photo).where(Photo.preset_id == settings.active_preset_id)).all()
     
     if not photos:
-        return "<div class='error'>No Photos</div>"
+        return "<div class='error-msg'>No Photos found in the active preset.</div>"
     
-    # Pick a random photo
     photo = random.choice(photos)
-    
-    # Determine image URL based on mode
-    # For now, we assume we serve images directly from static or a specific endpoint
-    # We need an endpoint to serve the actual image file.
-    # Let's assume /images/{id}
     img_url = f"/images/{photo.id}?mode={mode}"
     
     return f"""
-    <div class="slide fade-in">
-        <img src="{img_url}" alt="Slide">
+    <div class="slide-container fade-in">
+        <img src="{img_url}" class="full-slide" alt="Slide">
     </div>
     """
 
 @router.get("/components/alarm", response_class=HTMLResponse)
-async def check_alarm(session: Session = Depends(get_session)):
+async def check_alarm(mock: bool = False, session: Session = Depends(get_session)):
     """Checks for active alarms and returns modal HTML if one exists."""
-    settings = session.exec(select(AppSettings)).first()
-    if not settings or not settings.calendar_url:
-        return ""
+    if mock:
+        return """
+        <div id="alarm-overlay" class="alarm-modal">
+            <div class="alarm-content">
+                <h1>⏰ ALARM</h1>
+                <p>Mock Event: Time to wake up!</p>
+                <button hx-post="/api/alarms/mock-1/dismiss" 
+                        hx-target="#alarm-overlay" 
+                        hx-swap="outerHTML"
+                        class="dismiss-btn">Dismiss</button>
+            </div>
+        </div>
+        """
     
-    # Fetch and parse calendar (In production, this should be a background task that updates the DB)
-    # For this prototype, we'll do it on-demand but cached is better.
-    # To keep it simple for now:
-    # 1. Fetch ICS
-    # 2. Check alarms
-    
-    # Check DB for active alarms first (optimization needed later)
-    
-    # TODO: Real implementation with background task
-    # For now, return empty unless simulated
+    # Real logic placeholder
     return ""
 
-@router.post("/api/alarms/{uid}/dismiss")
+@router.post("/api/alarms/{uid}/dismiss", response_class=HTMLResponse)
 async def dismiss_alarm(uid: str, session: Session = Depends(get_session)):
     """Dismisses an alarm."""
-    # Logic to mark alarm as dismissed in DB
-    return {"status": "dismissed"}
+    # Logic to mark alarm as dismissed in DB would go here.
+    # For now, we return an empty string to remove the modal from the DOM via hx-swap.
+    return ""

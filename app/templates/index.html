@@ -2,81 +2,205 @@
 
 {% block head %}
 <style>
-    /* Modern CSS Grid Layout */
-    .dashboard-grid {
-        display: grid;
-        grid-template-columns: 1fr 300px;
-        grid-template-rows: 100vh;
+    /* 
+     * Modern "Passive Display" Layout
+     * Stack: Fullscreen Slideshow (z=0) < Info Box (z=10) < Alarm Modal (z=100)
+     */
+    
+    body {
+        background: #000;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    /* --- Layer 1: Slideshow --- */
+    .slideshow-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 0;
+        background: #000;
+        overflow: hidden;
+    }
+
+    .slide-container {
+        width: 100%;
+        height: 100%;
+        animation: fadeIn 1s ease-in-out;
+    }
+
+    .full-slide {
+        width: 100%;
+        height: 100%;
+        object-fit: cover; /* Fill screen, crop if needed */
+        display: block;
+    }
+
+    /* --- Layer 2: Floating Info Box --- */
+    .info-box-container {
+        position: fixed;
+        top: 3vh; /* Slight gap from top */
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10;
+        
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        
+        background: rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(15px);
+        -webkit-backdrop-filter: blur(15px);
+        
+        padding: 1.5rem 3rem;
+        border-radius: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        
+        color: #fff;
+        min-width: 300px;
+    }
+
+    #clock {
+        font-size: 8rem;
+        font-weight: 200; /* Thin font */
+        line-height: 1;
+        letter-spacing: -2px;
+        margin-bottom: 0.5rem;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+
+    #date-display {
+        font-size: 2rem;
+        font-weight: 400;
+        opacity: 0.9;
+        margin-bottom: 1.5rem;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+    }
+
+    /* Weather Component Styling (injected via HTMX) */
+    .weather-info {
+        display: flex;
+        gap: 20px;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.8rem;
+        font-weight: 300;
+        border-top: 1px solid rgba(255,255,255,0.2);
+        padding-top: 1rem;
+        width: 100%;
     }
     
-    .slideshow-area {
-        position: relative;
-        background: #111;
+    .weather-info .temp { font-weight: 500; }
+    .weather-info .condition { opacity: 0.8; font-size: 1.2rem; }
+
+    /* --- Layer 3: Alarm Modal --- */
+    .alarm-modal {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        z-index: 100;
+        
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(5px);
+        
         display: flex;
         align-items: center;
         justify-content: center;
+        animation: pulseAlert 2s infinite;
     }
     
-    .slideshow-area img {
-        max-width: 100%;
-        max-height: 100%;
-        object-fit: contain;
+    .alarm-content {
+        background: #fff;
+        color: #000;
+        padding: 4rem;
+        border-radius: 20px;
+        text-align: center;
+        max-width: 600px;
+        box-shadow: 0 0 50px rgba(255, 0, 0, 0.5);
     }
     
-    .sidebar {
-        background: rgba(20, 20, 20, 0.9);
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-        border-left: 1px solid #333;
+    .alarm-content h1 {
+        font-size: 4rem;
+        margin: 0 0 1rem 0;
+        color: #d32f2f;
     }
     
-    .weather-widget {
-        background: #333;
-        padding: 15px;
-        border-radius: 8px;
+    .dismiss-btn {
+        background: #000;
+        color: #fff;
+        border: none;
+        padding: 1rem 3rem;
+        font-size: 1.5rem;
+        border-radius: 50px;
+        cursor: pointer;
+        margin-top: 2rem;
+    }
+
+    /* Animations */
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pulseAlert { 
+        0% { background: rgba(50, 0, 0, 0.85); }
+        50% { background: rgba(80, 0, 0, 0.85); }
+        100% { background: rgba(50, 0, 0, 0.85); }
+    }
+    
+    /* HTMX Transition Support */
+    .htmx-swapping > .slide-container {
+        opacity: 0;
+        transition: opacity 1s ease-out;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="dashboard-grid">
-    <!-- Slideshow Area -->
-    <div class="slideshow-area"
-         hx-get="/components/slide?mode=modern"
-         hx-trigger="load, every 30s"
-         hx-swap="innerHTML transition:true">
-         <!-- Content replaced by HTMX -->
-         <p>Loading Slideshow...</p>
-    </div>
+<!-- Slideshow Background -->
+<div class="slideshow-container"
+     hx-get="/components/slide?mode=modern"
+     hx-trigger="load, every 30s"
+     hx-swap="innerHTML transition:true">
+     <!-- Placeholder -->
+     <div style="width:100%; height:100%; background: #111;"></div>
+</div>
 
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <h2>Dashboard</h2>
-        
-        <!-- Weather Widget -->
-        <div hx-get="/components/weather" 
-             hx-trigger="load, every 10m"
-             hx-swap="outerHTML">
-             Loading Weather...
-        </div>
-        
-        <!-- Clock (JS) -->
-        <div id="clock" style="font-size: 2em; font-weight: bold;">00:00</div>
-        
-        <!-- Alarm Poller (Hidden) -->
-        <div hx-get="/components/alarm"
-             hx-trigger="every 60s"
-             hx-swap="innerHTML"></div>
+<!-- Top Center Info Box -->
+<div class="info-box-container">
+    <div id="clock">00:00</div>
+    <div id="date-display">Monday, January 1</div>
+    
+    <!-- Weather Widget (Updates every 10m) -->
+    <div hx-get="/components/weather" 
+         hx-trigger="load, every 600s"
+         hx-swap="outerHTML">
+         <div class="weather-info">Loading...</div>
     </div>
 </div>
 
+<!-- Alarm Poller (Updates every 10s for responsiveness) -->
+<div id="alarm-poller"
+     hx-get="/components/alarm"
+     hx-trigger="every 10s"
+     hx-swap="innerHTML">
+</div>
+
 <script>
-    // Simple Clock
-    setInterval(() => {
+    function updateTime() {
         const now = new Date();
-        document.getElementById('clock').innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-    }, 1000);
+        
+        // Time: HH:MM
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        document.getElementById('clock').innerText = timeStr;
+        
+        // Date: Month DD, YYYY (e.g., January 18, 2026)
+        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        document.getElementById('date-display').innerText = now.toLocaleDateString(undefined, options);
+    }
+    
+    // Update immediately and then every second
+    updateTime();
+    setInterval(updateTime, 1000);
 </script>
 {% endblock %}

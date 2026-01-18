@@ -6,7 +6,7 @@ This project aims to build a containerized Python web application that serves as
 A unique requirement is strict backward compatibility with an **iPad 2 (iOS 9.3.5)**, necessitating a specific "Legacy Mode" with optimized assets and simplified code.
 
 ### Core Goals
-- **Dashboard:** Real-time clock, weather widget, and photo carousel.
+- **Passive Display:** A digital photo frame experience with full-screen photos and a subtle information overlay.
 - **Admin Interface:** Manage photos, organize them into "Presets", and configure application settings.
 - **Calendar Integration:** Fetch events from iCloud (ICS/CalDAV) and display intrusive "Alarm" popups for upcoming events.
 - **Legacy Support:** Ensure full functionality on an iPad 2 (512MB RAM, old WebKit) via a dedicated low-resource mode.
@@ -27,107 +27,85 @@ A unique requirement is strict backward compatibility with an **iPad 2 (iOS 9.3.
 ### 2.2 System Components
 1.  **Web Server (FastAPI):** Serves HTML templates, static assets, and HTMX API endpoints.
 2.  **Gallery Manager:** Handles file system operations, image upload, deletion, and "Preset" logic.
-3.  **Image Optimizer:** Middleware/Service that resizes images on-the-fly (or caches them) for the Legacy Client (Target: 1024x768, High compression).
-4.  **Info Service:** Fetches Weather data (external API) and provides Time synchronization.
-5.  **Calendar Watcher:** Background task that polls the iCloud calendar feed, detects upcoming events, and flags "Alarms".
+3.  **Image Optimizer:** Service that resizes images for the Legacy Client (Target: 1024x768).
+4.  **Info Service:** Fetches Weather data and provides Time synchronization.
+5.  **Calendar Watcher:** Background task that polls the iCloud calendar feed for "Alarms".
 
-### 2.3 Directory Structure
-```
-.
-├── app/
-│   ├── core/           # Config, logging, utils
-│   ├── db/             # Database connection and models
-│   ├── routers/        # FastAPI route handlers (endpoints)
-│   ├── services/       # Business logic (Calendar, Image, Weather)
-│   ├── templates/      # Jinja2 templates (includes /legacy/ subfolder)
-│   ├── static/         # CSS, JS, Images (includes /polyfills/)
-│   └── main.py         # App entry point
-├── data/               # Persistent storage (uploaded images, sqlite db)
-├── tests/              # Pytest suite
-├── Dockerfile
-├── pyproject.toml
-└── uv.lock
-```
+## 3. Functional Requirements (Frontpage UI)
 
-## 3. Functional Requirements
+### 3.1 Layout & Aesthetic
+The frontpage is a **Passive Display** (Digital Photo Frame) designed to be attractive and readable from a distance.
 
-### 3.1 Dashboard Modes
-- **Modern Mode (`/`):**
-    -   Full-resolution images.
-    -   CSS Grid/Flexbox modern layouts.
-    -   Smooth transitions.
-- **Legacy Mode (`/legacy`):**
-    -   **Optimized Images:** Strictly served at 1024x768 max resolution to prevent iPad 2 RAM exhaustion.
-    -   **CSS Safety:** Floats or simple Flexbox with vendor prefixes (`-webkit-`). No CSS Grid.
-    -   **JS Compatibility:** Polyfills for `Promise`, `fetch`, `Array.prototype.find`, etc.
-    -   **Reduced DOM:** Simplified widgetry to lower rendering cost.
+- **Background:** Full-screen slideshow using high-quality images from the active preset.
+- **Floating Info Box:** 
+    - **Position:** Fixed at the **top-center** of the screen.
+    - **Adaptability:** Responsive design supporting both **Portrait** and **Landscape** orientations while remaining top-center.
+    - **Content:**
+        - **Clock:** Large, clear time display.
+        - **Date:** Including the month in full text (e.g., "January 18, 2026").
+        - **Weather:** Current temperature and condition icon.
+    - **Style (Modern):** Semi-transparent dark background (`rgba(0,0,0,0.6)`) with a blur effect (`backdrop-filter: blur(10px)`), white text, and clean typography.
+    - **Style (Legacy):** Fallback to solid semi-transparent background (no blur) with `-webkit-` prefixes for positioning.
 
-### 3.2 Features
+### 3.2 Feature Details
 - **Photo Carousel:**
-    -   Rotates images from the currently active "Preset".
-    -   Configurable interval (e.g., 30s, 1m).
-- **Weather Widget:**
-    -   Current temperature and condition icon.
-    -   Simple forecast (High/Low).
-- **Calendar Alarms:**
-    -   Backend polls ICS feed every X minutes.
-    -   Frontend polls `/api/alarms/active` every minute.
-    -   If an alarm is active:
-        -   Display a modal overlay (taking over the screen).
-        -   "Dismiss" button sends a request to backend to acknowledge the alarm.
-        -   Dismissed alarms are stored in DB to prevent reappearing.
+    - Rotates images automatically (default 30s).
+    - Uses CSS transitions for smooth fading between slides.
+- **Calendar Alarms (Popup):**
+    - When an event is active/upcoming, a **Popup Overlay** appears on top of the slideshow and info box.
+    - The popup must be intrusive enough to be noticed but maintain the app's aesthetic.
+    - Includes a "Dismiss" button to close the alert.
 
-### 3.3 Admin Panel
--   Create/Delete "Presets" (Folders).
--   Upload images to specific Presets.
--   Select the "Active Preset" for the dashboard.
--   Configure Weather API Key and iCloud Calendar URL.
+## 4. Dashboard Modes
 
-## 4. Data Models (SQLModel)
+### 4.1 Modern Mode (`/`)
+- Uses CSS Grid/Flexbox and `backdrop-filter`.
+- Full-resolution images.
+- Smooth HTMX-driven transitions (`transition: true`).
 
-### 4.1 Entities
+### 4.2 Legacy Mode (`/legacy`)
+- **Optimized Images:** Strictly served at 1024x768 max resolution.
+- **CSS Safety:** No CSS Grid; uses Floats and simple Flexbox with vendor prefixes.
+- **JS Compatibility:** Polyfills for `Promise`, `fetch`, etc.
+- **Performance:** Minimized DOM elements and simplified animations.
+
+## 5. Data Models (SQLModel)
+
+### 5.1 Entities
 
 **`Preset`**
--   `id`: int (PK)
--   `name`: str
--   `created_at`: datetime
+- `id`: int (PK)
+- `name`: str
+- `created_at`: datetime
 
 **`Photo`**
--   `id`: int (PK)
--   `filename`: str
--   `preset_id`: int (FK)
--   `uploaded_at`: datetime
+- `id`: int (PK)
+- `filename`: str
+- `preset_id`: int (FK)
+- `uploaded_at`: datetime
 
-**`AppSettings`** (Singleton row)
--   `id`: int (PK)
--   `active_preset_id`: int (FK, nullable)
--   `weather_api_key`: str (nullable)
--   `calendar_url`: str (nullable)
--   `weather_location`: str (nullable)
+**`AppSettings`** (Singleton)
+- `id`: int (PK)
+- `active_preset_id`: int (FK, nullable)
+- `weather_api_key`: str (nullable)
+- `calendar_url`: str (nullable)
+- `weather_location`: str (nullable)
 
 **`AlarmEvent`**
--   `id`: int (PK)
--   `uid`: str (Unique Event ID from ICS)
--   `trigger_time`: datetime
--   `dismissed_at`: datetime (nullable)
+- `id`: int (PK)
+- `uid`: str (Unique Event ID)
+- `trigger_time`: datetime
+- `dismissed_at`: datetime (nullable)
 
-## 5. API Design (HTMX Oriented)
+## 6. API Design (HTMX Oriented)
 
-### 5.1 Dashboard Endpoints
--   `GET /components/weather` -> Returns HTML fragment for weather widget.
--   `GET /components/slide` -> Returns HTML for the next slide (image + metadata).
--   `GET /components/alarm` -> Returns HTML for alarm modal if active, else empty 200 OK.
--   `POST /api/alarms/{uid}/dismiss` -> Marks alarm as dismissed.
+- `GET /components/weather` -> HTML fragment for weather.
+- `GET /components/slide` -> HTML fragment for the next slide.
+- `GET /components/alarm` -> HTML fragment for alarm popup (or 204 No Content).
+- `POST /api/alarms/{uid}/dismiss` -> Mark alarm as dismissed.
+- `GET /images/{photo_id}?mode=legacy` -> Returns resized image.
 
-### 5.2 Legacy Specifics
--   `GET /images/{photo_id}?mode=legacy` -> Returns resized image (generated or cached).
-
-## 6. Testing Strategy
--   **Unit Tests (`pytest`):**
-    -   Test Image resizing logic (ensure dimensions are correct).
-    -   Test ICS parsing (verify event extraction).
-    -   Test Database CRUD operations.
--   **Integration Tests:**
-    -   Test API endpoints return correct HTML fragments.
--   **Manual Validation:**
-    -   Verify CSS rendering on legacy WebKit simulator or actual device.
+## 7. Testing Strategy
+- **Unit Tests (`pytest`):** Image resizing logic, ICS parsing, and DB CRUD.
+- **Integration Tests:** Verify HTMX endpoints return valid HTML fragments.
+- **Cross-Platform Validation:** Manual check on Modern browsers and Legacy WebKit (iOS 9).
