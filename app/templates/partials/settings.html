@@ -6,9 +6,27 @@
         <p style="color: #888; font-size: 0.9em; margin-bottom: 15px;">
             Powered by Open-Meteo. Requires Latitude and Longitude.
             {% if location_name %}
-            <br><span style="color: #4caf50;">Detected: {{ location_name }}</span>
+            <br><span style="color: #4caf50;">Detected: <strong>{{ location_name }}</strong></span>
             {% endif %}
         </p>
+
+        <!-- Location Search -->
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <input type="text" 
+                   name="location_query" 
+                   placeholder="Enter City Name (e.g. Montreal)" 
+                   style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;"
+                   onkeydown="if(event.key === 'Enter'){ event.preventDefault(); document.getElementById('btn-search').click(); }"
+                   >
+            <button id="btn-search"
+                    type="button" 
+                    hx-post="/admin/settings/search" 
+                    hx-target="#admin-content"
+                    hx-include="[name='location_query']"
+                    style="background: #3182ce; padding: 8px 15px;">
+                Search
+            </button>
+        </div>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
             <div>
@@ -21,8 +39,8 @@
             </div>
         </div>
         
-        <button type="button" onclick="findLocation()" style="background: #444; margin-bottom: 20px;">
-            📍 Find My Location
+        <button type="button" onclick="findLocation()" style="background: #444; margin-bottom: 20px; margin-top: 10px;">
+            📍 Use Browser GPS
         </button>
         
         <h3>Slideshow Configuration</h3>

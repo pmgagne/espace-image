@@ -159,10 +159,7 @@
 <a href="/admin" class="admin-link">Admin</a>
 
 <!-- Slideshow -->
-<div class="slideshow-container"
-     hx-get="/components/slide?mode=legacy"
-     hx-trigger="load, every {{ settings.slideshow_duration or 30 }}s"
-     hx-swap="innerHTML">
+<div id="slide-wrapper" class="slideshow-container">
      <div style="background: #222; width: 100%; height: 100%;"></div>
 </div>
 
@@ -171,43 +168,131 @@
     <div id="clock">00:00</div>
     <div id="date-display">...</div>
     
-    <div hx-get="/components/weather" 
-         hx-trigger="load, every 600s"
-         hx-swap="outerHTML">
-         Loading...
+    <div id="weather-wrapper">
+         Loading Weather...
     </div>
 </div>
 
-<!-- Alarm Poller -->
-<div id="alarm-poller"
-     hx-get="/components/alarm"
-     hx-trigger="every 10s"
-     hx-swap="innerHTML">
-</div>
+<!-- Alarm Container -->
+<div id="alarm-wrapper"></div>
 
 <script>
-    // iOS 9 Compatible JS (ES5 preferred just in case)
+    // --- legacy_engine.js (ES5 for iOS 9) ---
+
+    // Configuration
+    var CONFIG = {
+        slideInterval: {{ settings.slideshow_duration or 30 }} * 1000,
+        weatherInterval: 600 * 1000, // 10 minutes
+        alarmInterval: 10 * 1000     // 10 seconds
+    };
+
+    // Helper: XHR Request
+    function fetchHTML(url, callback) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200) {
+                    callback(xhr.responseText);
+                } else {
+                    console.error("Error fetching " + url);
+                }
+            }
+        };
+        xhr.send();
+    }
+    
+    // Helper: POST Request (for Dismiss)
+    function postAction(url, targetId) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', url, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4 && xhr.status === 200) {
+                // Usually returns empty string or new content
+                document.getElementById(targetId).innerHTML = xhr.responseText;
+            }
+        };
+        xhr.send();
+    }
+
+    // --- Components ---
+
+    function updateWeather() {
+        fetchHTML('/components/weather', function(html) {
+            document.getElementById('weather-wrapper').innerHTML = html;
+        });
+    }
+
+    function updateSlide() {
+        fetchHTML('/components/slide?mode=legacy', function(html) {
+            var wrapper = document.getElementById('slide-wrapper');
+            // Simple cross-fade logic could go here, but direct swap is safer for performance on iPad 2
+            wrapper.innerHTML = html;
+        });
+    }
+
+    function checkAlarm() {
+        fetchHTML('/components/alarm', function(html) {
+            var wrapper = document.getElementById('alarm-wrapper');
+            // Only update if content changed significantly or if we need to show/hide
+            // For simplicity, just swap. If empty, it hides the modal.
+            if (html.trim() !== wrapper.innerHTML.trim()) {
+                 wrapper.innerHTML = html;
+                 
+                 // Re-attach dismiss listeners since we replaced HTML
+                 // The dismiss button has an onclick in the HTML response? 
+                 // No, the backend returns hx-post. We need to intercept that or change backend.
+                 // FIX: We will parse the response and fix the button on the fly, 
+                 // OR relies on the backend returning standard onclick.
+                 // FOR NOW: Let's patch the DOM after insert.
+                 
+                 var btn = wrapper.querySelector('.dismiss-btn');
+                 if (btn) {
+                     var postUrl = btn.getAttribute('hx-post');
+                     if (postUrl) {
+                         btn.removeAttribute('hx-post'); // Prevent confusion
+                         btn.onclick = function() {
+                             postAction(postUrl, 'alarm-wrapper');
+                         };
+                     }
+                 }
+            }
+        });
+    }
+
+    // --- Clock ---
     function updateTime() {
         var now = new Date();
-        
-        // Manual formatting for safety on very old browsers if Locale APIs vary
         var hours = now.getHours();
         var minutes = now.getMinutes();
         if (minutes < 10) minutes = '0' + minutes;
-        // 24h format preference
         var timeStr = hours + ':' + minutes;
         
-        document.getElementById('clock').innerText = timeStr;
+        var clockEl = document.getElementById('clock');
+        if (clockEl) clockEl.innerText = timeStr;
         
-        // Simple Date
         var months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
         var days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
         var dateStr = days[now.getDay()] + ", " + months[now.getMonth()] + " " + now.getDate();
         
-        document.getElementById('date-display').innerText = dateStr;
+        var dateEl = document.getElementById('date-display');
+        if (dateEl) dateEl.innerText = dateStr;
     }
-    
-    updateTime();
-    setInterval(updateTime, 1000);
+
+    // --- Initialization ---
+    function init() {
+        updateTime();
+        updateWeather();
+        updateSlide(); // Immediate load
+        checkAlarm();
+
+        setInterval(updateTime, 1000);
+        setInterval(updateSlide, CONFIG.slideInterval);
+        setInterval(updateWeather, CONFIG.weatherInterval);
+        setInterval(checkAlarm, CONFIG.alarmInterval);
+    }
+
+    // Start
+    init();
 </script>
 {% endblock %}
