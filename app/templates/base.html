@@ -14,13 +14,12 @@
     </style>
 
     {% if mode == 'legacy' %}
-    <!-- Legacy Mode: Polyfills -->
-    <!-- Assuming these exist in static/polyfills/ or loaded from CDN for now (but offline preferred) -->
-    <script src="https://unpkg.com/promise-polyfill"></script>
-    <script src="https://unpkg.com/whatwg-fetch@3.0.0/dist/fetch.umd.js"></script>
+    <!-- Legacy Mode: Polyfills (Locally Hosted for iOS 9/TLS compatibility) -->
+    <script src="/static/polyfills/promise.min.js"></script>
+    <script src="/static/polyfills/fetch.umd.js"></script>
     {% endif %}
     
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="/static/js/htmx.min.js"></script>
     
     {% block head %}{% endblock %}
 </head>
