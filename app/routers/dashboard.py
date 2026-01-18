@@ -16,11 +16,13 @@ templates = Jinja2Templates(directory="app/templates")
 @router.get("/")
 async def read_root(request: Request, session: Session = Depends(get_session)):
     """Modern Dashboard View"""
-    user_agent = request.headers.get("user-agent", "")
+    user_agent = request.headers.get("user-agent", "").lower()
+    print(f"DEBUG: Incoming User-Agent: {user_agent}")  # Debugging log
 
     # Auto-redirect for iPad 2 (iOS 9)
-    if "iPad" in user_agent and "OS 9_" in user_agent:
-        return RedirectResponse(url="/legacy")
+    # Broader check: "ipad" and "os 9" (case-insensitive)
+    if "ipad" in user_agent and "os 9" in user_agent:
+        return RedirectResponse(url="/legacy", status_code=302)
 
     settings = session.exec(select(AppSettings)).first()
     return templates.TemplateResponse(
