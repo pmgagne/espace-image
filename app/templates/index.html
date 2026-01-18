@@ -172,11 +172,21 @@
         color: rgba(255, 255, 255, 1); 
         background: rgba(0, 0, 0, 0.6);
     }
+    .legacy-link {
+        position: fixed;
+        bottom: 20px;
+        right: 100px; /* Offset from Admin link */
+        z-index: 50;
+        color: rgba(255, 255, 255, 0.3);
+        text-decoration: none;
+        font-size: 0.8rem;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <!-- Admin Access -->
+<a href="/legacy" class="legacy-link">Legacy Mode</a>
 <a href="/admin" class="admin-link">Admin</a>
 
 <!-- Slideshow Background -->
