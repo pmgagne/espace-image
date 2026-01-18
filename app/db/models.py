@@ -17,12 +17,19 @@ class Photo(SQLModel, table=True):
     
     preset: Preset = Relationship(back_populates="photos")
 
+class CalendarSource(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    label: str
+    url: str  # WebCal or ICS URL
+    color: Optional[str] = Field(default="#3182ce") # Default blue
+
 class AppSettings(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     active_preset_id: Optional[int] = Field(default=None, foreign_key="preset.id")
-    weather_api_key: Optional[str] = Field(default=None)
-    calendar_url: Optional[str] = Field(default=None)
-    weather_location: Optional[str] = Field(default=None)
+    weather_latitude: Optional[float] = Field(default=None)
+    weather_longitude: Optional[float] = Field(default=None)
+    weather_timezone: str = Field(default="auto")
+    slideshow_duration: int = Field(default=30) # in seconds
 
 class AlarmEvent(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

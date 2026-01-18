@@ -20,7 +20,7 @@
 - **Small Iterations**: Break each project into atomic tickets or steps. Only proceed to the next step when the previous one is tested and validated.
 
 ## 4. Reliability and Security (Shift Left)
-- **Tests First (TDD)**: Systematically generate unit tests (with `pytest`) before or during implementation.
+- **Tests First (TDD)**: Systematically generate unit tests (with `pytest` and `anyio`) before or during implementation.
 - **Security**: Apply security best practices from design inception (validation with Zod/Pydantic, no hardcoded secrets, use Managed Identity).
 - **Self-Correction**: If a test or lint command fails, analyze the error and propose a fix immediately.
 
@@ -41,12 +41,15 @@
 
 ## 8. Project-Specific Constraints
 - **Legacy Hardware**: This project supports an iPad 2 (iOS 9.3.5).
-    - **Frontend**: DO NOT use CSS Grid. Use Floats or simple Flexbox with `-webkit-` prefixes.
-    - **JavaScript**: Use HTMX 1.x. Ensure polyfills are available. Avoid modern ES6+ syntax in client-side scripts unless transpiled.
+    - **Frontend**: DO NOT use CSS Grid in `/legacy`. Use Floats or simple Flexbox with `-webkit-` prefixes.
+    - **JavaScript**: Use HTMX 1.x. Ensure polyfills are available. Avoid modern ES6+ syntax (like `const`, arrow functions) in client-side scripts unless transpiled or strictly for modern views.
     - **Assets**: Images meant for the legacy client must be resized (max 1024x768) to conserve RAM.
 - **Architecture**:
-    - **Backend**: FastAPI + Jinja2 + SQLite.
+    - **Backend**: FastAPI + Jinja2 + SQLite + SQLModel.
+    - **External APIs**: Open-Meteo (Weather), WebCal/ICS (Calendar).
     - **Deployment**: Docker containerization is required for the final artifact.
+- **Libraries**:
+    - Use `icalendar` (not `ics`) for robust parsing of Apple/Google calendar feeds.
 
 ## 9. Initialization & Maintenance Checklist
 For every new project or significant refactor, ensure the following are present and up-to-date:
