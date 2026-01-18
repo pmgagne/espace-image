@@ -26,15 +26,16 @@ A unique requirement is strict backward compatibility with an **iPad 2 (iOS 9.3.
 1.  **Web Server:** FastAPI serving Templates and JSON/HTML fragments.
 2.  **Gallery Manager:** Manages file uploads, deletions, and thumbnail generation.
 3.  **Calendar Service:** Aggregates events from multiple `CalendarSource` URLs (ICS/WebCal) using parallel async fetching.
-4.  **Weather Service:** Fetches data from Open-Meteo using Lat/Long coordinates with WMO code mapping.
+4.  **Weather Service:** Fetches weather data from Open-Meteo and resolves location names via **Open-Meteo Geocoding API**.
 
 ## 3. Functional Requirements
 
 ### 3.1 Admin Interface
-- **Layout:** Persistent **Sidebar Navigation** with content loaded via HTMX.
+- **Layout:** Persistent **Sidebar Navigation** with content loaded via HTMX (Legacy 1.0.0).
 - **Sections:**
     1.  **General Settings:**
-        -   **Weather:** Latitude/Longitude inputs + "Find My Location".
+        -   **Location Search:** Input city name -> Auto-fill Lat/Long via API.
+        -   **Weather:** Latitude/Longitude inputs + "Use Browser GPS".
         -   **Slideshow:** Active Preset + **Duration** (seconds).
     2.  **Calendar Sources:**
         -   List view of configured calendars (Label + URL + Color).
@@ -46,12 +47,16 @@ A unique requirement is strict backward compatibility with an **iPad 2 (iOS 9.3.
 
 ### 3.2 Dashboard UI
 - **Modern (`/`):** Full-screen, blurred overlay, CSS Grid.
-- **Legacy (`/legacy`):** Absolute positioning, solid backgrounds, optimized for iOS 9.
+- **Legacy (`/legacy`):** 
+    -   Absolute positioning, solid backgrounds, optimized for iOS 9.
+    -   Implemented using **Vanilla ES5 JS** (no external libraries).
+- **Routing:**
+    -   **Auto-Redirect:** Detects "iPad" + "OS 9" User-Agent and redirects to `/legacy`.
+    -   **Manual Fallback:** "Legacy Mode" link available on the modern dashboard footer.
 - **Features:**
-    -   **Clock/Date:** Large typography.
+    -   **Clock/Date:** Large typography (Localized in French).
     -   **Weather:** Localized condition + Temp (Open-Meteo).
     -   **Alarms:** Aggregated from all sources. Shows events from the last 12 hours (Today) that haven't been dismissed.
-    -   **Access:** Subtle "Admin" link on the bottom right.
 
 ## 4. Data Models (SQLModel)
 
