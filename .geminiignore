@@ -1,0 +1,22 @@
+# Python virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+.ruff_cache/
+.pytest_cache/
+
+# Project specific
+data/
+*.sqlite
+*.db
+uv.lock
+
+# System and Build
+.DS_Store
+*.egg-info/
+dist/
+build/
+
+# Chat history
+chat_history.txt

@@ -1,0 +1,20 @@
+description="Retrieves API documentation via URL and generates an llm.txt file for context."
+prompt = """
+Your goal is to create a COMPREHENSIVE technical "source of truth" for integrating a package or API.
+Target URL: {{args}}
+
+Process:
+1.  **Initial Analysis**: Use `web_fetch` on the target URL.
+2.  **Decide on Recursion**:
+    *   Assess if the documentation is split across multiple linked pages (e.g., separate pages for "Merge Requests", "Issues", etc.).
+    *   If you believe recursion is necessary for completeness, **stop and ask the user** for permission to crawl the sub-pages.
+    *   If the user agrees, proceed with recursive fetching; otherwise, only use the content from the initial URL.
+3.  **Check for Existing File**:
+    *   Determine the target filename: `./.gemini/api_specs/<api_name>.txt`.
+    *   Check if this file already exists.
+    *   If it exists, **stop and ask the user** if they want to **replace** the file or **update** it with the newly fetched information.
+4.  **Synthesize and Save**:
+    *   Synthesize all gathered information into a compact, highly technical "llm.txt" format.
+    *   Structure: Authentication -> Base Info -> Modules/Resources...
+    *   Save the content using `write_file` based on the user's decision from the previous step.
+"""

@@ -1,0 +1,9 @@
+description="Implements a specific phase from the PLAN.md."
+prompt = """
+Okay, let's implement **{{args}}** from the plan.
+
+1.  **Context**: Read `PLAN.md` to identify the specific tasks for this phase.
+2.  **Action**: Perform the necessary code changes (creating tools, updating prompts, etc.) as specified.
+3.  **Documentation**: Update `PLAN.md` with checkboxes (`[x]`) for completed items and add brief implementation notes.
+4.  **Wait**: Stop after completing the work for this phase. Wait for my review before moving to the next phase.
+"""

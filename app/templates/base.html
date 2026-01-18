@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Dashboard</title>
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: sans-serif; background: #000; color: #fff; overflow: hidden; }
+        
+        /* Utility classes */
+        .hidden { display: none; }
+        .full-screen { width: 100vw; height: 100vh; }
+    </style>
+
+    {% if mode == 'legacy' %}
+    <!-- Legacy Mode: Polyfills -->
+    <!-- Assuming these exist in static/polyfills/ or loaded from CDN for now (but offline preferred) -->
+    <script src="https://unpkg.com/promise-polyfill"></script>
+    <script src="https://unpkg.com/whatwg-fetch@3.0.0/dist/fetch.umd.js"></script>
+    {% endif %}
+    
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    {% block head %}{% endblock %}
+</head>
+<body>
+    {% block content %}{% endblock %}
+</body>
+</html>

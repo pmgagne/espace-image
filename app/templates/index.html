@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+    /* Modern CSS Grid Layout */
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        grid-template-rows: 100vh;
+    }
+    
+    .slideshow-area {
+        position: relative;
+        background: #111;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .slideshow-area img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    
+    .sidebar {
+        background: rgba(20, 20, 20, 0.9);
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        border-left: 1px solid #333;
+    }
+    
+    .weather-widget {
+        background: #333;
+        padding: 15px;
+        border-radius: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-grid">
+    <!-- Slideshow Area -->
+    <div class="slideshow-area"
+         hx-get="/components/slide?mode=modern"
+         hx-trigger="load, every 30s"
+         hx-swap="innerHTML transition:true">
+         <!-- Content replaced by HTMX -->
+         <p>Loading Slideshow...</p>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h2>Dashboard</h2>
+        
+        <!-- Weather Widget -->
+        <div hx-get="/components/weather" 
+             hx-trigger="load, every 10m"
+             hx-swap="outerHTML">
+             Loading Weather...
+        </div>
+        
+        <!-- Clock (JS) -->
+        <div id="clock" style="font-size: 2em; font-weight: bold;">00:00</div>
+        
+        <!-- Alarm Poller (Hidden) -->
+        <div hx-get="/components/alarm"
+             hx-trigger="every 60s"
+             hx-swap="innerHTML"></div>
+    </div>
+</div>
+
+<script>
+    // Simple Clock
+    setInterval(() => {
+        const now = new Date();
+        document.getElementById('clock').innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    }, 1000);
+</script>
+{% endblock %}
