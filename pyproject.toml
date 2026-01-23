@@ -47,6 +47,7 @@ select = [
 ignore = [
     "E501",   # line too long (ruff format handles this)
     "W293",   # blank line with whitespace
+    "B008",   # function calls in argument defaults (FastAPI Depends pattern)
 ]
 
 [tool.ruff.lint.per-file-ignores]
