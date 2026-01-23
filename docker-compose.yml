@@ -1,7 +1,7 @@
 services:
   web:
     build: .
-    container_name: gemini-dashboard
+    container_name: espace-image
     ports:
       - "8000:8000"
     volumes:

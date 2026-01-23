@@ -15,8 +15,8 @@ def test_docker_build_and_run():
     WARNING: This test involves building an image and running a container,
     which can be slow and resource intensive.
     """
-    image_tag = "gemini-pythonwebapp:test"
-    container_name = "gemini-test-container"
+    image_tag = "espace-image:test"
+    container_name = "espace-image-test"
     host_port = 8001
 
     # 1. Build the image
@@ -74,7 +74,7 @@ def test_docker_build_and_run():
         # Check root endpoint
         root_response = httpx.get(f"http://localhost:{host_port}/")
         assert root_response.status_code == 200
-        assert "Gemini" in root_response.text
+        assert "Espace Image" in root_response.text
 
     finally:
         # 5. Cleanup

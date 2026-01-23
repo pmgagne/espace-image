@@ -23,7 +23,7 @@ We love your input! We want to make contributing to this project as easy and tra
 
 **If you find a security vulnerability, please do NOT open an issue. Email the maintainers instead.**
 
-Report bugs using GitHub's [issue tracker](https://github.com/philippegagne/gemini_pythonwebapp/issues).
+Report bugs using GitHub's [issue tracker](https://github.com/philippegagne/espace-image/issues).
 
 ## License
 
