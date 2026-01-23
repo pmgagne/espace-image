@@ -1,5 +1,7 @@
-from app.db.models import AlarmEvent, CalendarSource
 from sqlmodel import select
+
+from app.db.models import CalendarSource
+
 
 def test_check_alarm_mock(client):
     """Verify that mock=True returns multiple mock events."""

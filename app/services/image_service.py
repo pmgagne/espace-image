@@ -1,6 +1,7 @@
-from PIL import Image
 from io import BytesIO
 from pathlib import Path
+
+from PIL import Image
 
 LEGACY_MAX_WIDTH = 1024
 LEGACY_MAX_HEIGHT = 768

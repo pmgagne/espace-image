@@ -1,10 +1,12 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session
-from app.db.session import get_session
+
 from app.db.models import Photo
+from app.db.session import get_session
 from app.services.image_service import ImageOptimizer
-from pathlib import Path
 
 router = APIRouter()
 

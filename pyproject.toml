@@ -48,10 +48,10 @@ ignore = [
     "E501",   # line too long (ruff format handles this)
     "W293",   # blank line with whitespace
 ]
-per-file-ignores = {
-    "tests/*" = ["ARG"],  # unused arguments in tests
-    "__init__.py" = ["F401"],  # unused imports
-}
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG"]  # unused arguments in tests
+"__init__.py" = ["F401"]  # unused imports
 
 [tool.ruff.format]
 quote-style = "double"

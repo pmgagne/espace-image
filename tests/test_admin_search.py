@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+
 def test_admin_settings_search(client, session):
     # Mock the geocode service
     with patch("app.services.weather_service.WeatherService.geocode_location") as mock_geo:

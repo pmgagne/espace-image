@@ -1,14 +1,16 @@
-from contextlib import asynccontextmanager
 import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
-from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
 from app.db.engine import create_db_and_tables
-from app.routers import dashboard, media, admin
+from app.routers import admin, dashboard, media
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     create_db_and_tables()
     yield
 

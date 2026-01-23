@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Request, Depends
+import random
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
+
+from app.db.models import AlarmEvent, AppSettings, CalendarSource, Photo
 from app.db.session import get_session
-from app.db.models import AppSettings, Photo, AlarmEvent, CalendarSource
-from app.services.weather_service import WeatherService
 from app.services.calendar_service import CalendarService
-from datetime import datetime
-import random
+from app.services.weather_service import WeatherService
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
