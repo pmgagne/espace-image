@@ -20,9 +20,7 @@ class ImageOptimizer:
                 if img.mode in ("RGBA", "P"):
                     img = img.convert("RGB")
 
-                img.thumbnail(
-                    (LEGACY_MAX_WIDTH, LEGACY_MAX_HEIGHT), Image.Resampling.LANCZOS
-                )
+                img.thumbnail((LEGACY_MAX_WIDTH, LEGACY_MAX_HEIGHT), Image.Resampling.LANCZOS)
 
                 output = BytesIO()
                 # Optimize and save as JPEG
@@ -40,9 +38,7 @@ class GalleryManager:
         self.upload_dir = Path(upload_dir)
         self.upload_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_upload(
-        self, file_content: bytes, filename: str, preset_name: str = "Default"
-    ) -> Path:
+    def save_upload(self, file_content: bytes, filename: str, preset_name: str = "Default") -> Path:
         """
         Saves an uploaded file to the specific preset folder.
         """
