@@ -17,6 +17,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # This uses uv.lock for deterministic builds and avoids manual export to requirements.txt
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
+COPY app ./app
+RUN uv pip install --no-deps .
 
 # Stage 2: Runtime
 FROM python:3.13-slim-bookworm
