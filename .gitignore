@@ -51,6 +51,7 @@ coverage.xml
 htmlcov/
 .tox/
 .hypothesis/
+tests/images/
 
 # Code Quality Tools
 .ruff_cache/

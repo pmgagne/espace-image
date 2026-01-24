@@ -14,8 +14,6 @@
     },
 
     // Linting & Code Quality
-    "ruff.lint.args": ["--line-length=100"],
-    "ruff.format.args": ["--line-length=100"],
     "ruff.fixAll": true,
     "ruff.organizeImports": true,
 
