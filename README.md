@@ -1,8 +1,6 @@
-# Personal Slideshow & Dashboard App
+# Espace Image Dashboard
 
-A Python-based dashboard designed to run in a Docker container, serving a modern UI for current devices and a **Legacy UI** optimized for the iPad 2 (iOS 9.3.5).
-
-For detailed architecture and functional requirements, please refer to [SPEC.md](SPEC.md).
+A FastAPI-based dashboard that serves a modern UI and a **Legacy UI** optimized for the iPad 2 (iOS 9.3.5). Ships as a containerized app with HTMX-powered interactions, calendar alarms, and weather widgets.
 
 ## Features
 - **Photo Slideshow:** Rotates through user-uploaded images.
@@ -12,46 +10,37 @@ For detailed architecture and functional requirements, please refer to [SPEC.md]
 
 ## Quick Start (Local)
 
-1. **Install uv:**
-   ```bash
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
+Requirements: Python 3.13+, [uv](https://docs.astral.sh/uv/) installed.
 
-2. **Install Dependencies:**
-   ```bash
-   uv sync
-   ```
+1) Install dependencies
+```bash
+uv sync
+```
 
-3. **Configure:**
-   Copy `.env.example` to `.env` and fill in your details.
-   ```bash
-   cp .env.example .env
-   ```
+2) Configure environment
+```bash
+cp .env.example .env
+# fill in credentials (calendar, weather, etc.)
+```
 
-4. **Run:**
-   ```bash
-   uv run uvicorn app.main:app --reload
-   ```
+3) Run the app
+```bash
+uv run uvicorn app.main:app --reload
+```
 
 ## Testing
 
-Run the full test suite (including Docker integration tests) using `pytest`:
-
 ```bash
-uv run python -m pytest tests/
+uv run pytest tests/ -v --cov=app --cov-report=xml
 ```
 
-To run only unit tests (skipping the slow Docker test):
-
-```bash
-uv run python -m pytest tests/test_app.py tests/test_routers.py tests/test_services.py
-```
+All current tests are unit/integration; no Docker build test is required.
 
 ## Docker
 
-1. **Build & Run:**
-   ```bash
-   docker-compose up --build
-   ```
+Local build and run with Compose (uses the multi-stage Dockerfile):
+```bash
+docker-compose up --build
+```
 
-This will start the application at `http://localhost:8000`, mounting the `./data` directory for persistence and loading configuration from `.env`.
+The app listens on `http://localhost:8000`, mounts `./data` for uploads, and reads configuration from `.env`.
