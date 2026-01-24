@@ -1,24 +1,214 @@
-# OS X
-.DS_Store
+# ============================================================================
+# OS-Specific Files
+# ============================================================================
 
-# Environments and dependencies
-.env
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+*.swp
+*.swo
+*~
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+.directory
+
+# ============================================================================
+# Python
+# ============================================================================
+
+# Virtual Environments
 .venv/
+venv/
+ENV/
+env/
+.python-version
+
+# Dependencies
 node_modules/
 
-# Python cache and tools
+# Python cache
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+.Python
+
+# Testing & Coverage
 .pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.hypothesis/
+
+# Code Quality Tools
 .ruff_cache/
 .mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
 
-# Project specific
+# Build artifacts
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ============================================================================
+# Environment & Configuration
+# ============================================================================
+
+# Sensitive files
+.env
+.env.local
+.env.*.local
+.env.*.vault
+
+# IDE & Editor Settings
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/*.md
+
+.idea/
+*.iml
+.gradle/
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Nano
+.nanorc
+
+# JetBrains
+*.iws
+*.ipr
+
+# VS Code extensions/cache
+.vscode-test/
+extensions/
+
+# ============================================================================
+# Project Specific
+# ============================================================================
+
+# Database files
 *.sqlite
 *.sqlite-journal
+*.db
+*.sqlite3
+
+# Data and uploads
 data/
 !data/.gitkeep
+uploads/
+!uploads/.gitkeep
 
-# IDEs
-.vscode/
-.idea/
+# Logs
+logs/
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Docker
+.dockerignore
+
+# ============================================================================
+# Package Managers
+# ============================================================================
+
+# npm
+package-lock.json (for pinned versions, can include if needed)
+yarn.lock (for pinned versions, can include if needed)
+
+# uv lock file is committed (for deterministic builds)
+# uv.lock is intentionally NOT ignored
+
+# pip
+requirements.txt (generated, use uv instead)
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ============================================================================
+# Temporary & Build Files
+# ============================================================================
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*.swo
+~*
+
+# Generated files
+*.orig
+*.rej
+
+# OS temp files
+.fuse_hidden*
+.#*
+
+# ============================================================================
+# IDE Runtime & Cache
+# ============================================================================
+
+.python_history
+.ipython_history
+.jupyterlab-settings/
+.jupyter/
+
+# ============================================================================
+# macOS-specific Xcode
+# ============================================================================
+
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspective{,v3}
+*.xcworkspace/xcuserdata/

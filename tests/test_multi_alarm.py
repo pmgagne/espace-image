@@ -1,5 +1,7 @@
-from app.db.models import AlarmEvent, CalendarSource
 from sqlmodel import select
+
+from app.db.models import CalendarSource
+
 
 def test_check_alarm_mock(client):
     """Verify that mock=True returns multiple mock events."""
@@ -10,6 +12,7 @@ def test_check_alarm_mock(client):
     assert "Dentist Appointment" in response.text
     # Verify we have at least two alarm items
     assert response.text.count("alarm-item") == 2
+
 
 def test_check_alarm_empty(client, session):
     """Verify that no alarms returns empty string."""
@@ -23,6 +26,7 @@ def test_check_alarm_empty(client, session):
     assert response.status_code == 200
     assert response.text == ""
 
+
 def test_dismiss_alarm_returns_updated_html(client, session):
     """Verify that dismissing an alarm returns the updated alarm list HTML."""
     uid = "test-uid-123"
@@ -31,6 +35,7 @@ def test_dismiss_alarm_returns_updated_html(client, session):
     # Should return empty string if no alarms left, or the container if some remain.
     # In this empty test environment, it should be empty string because no sources are set.
     assert response.text == ""
+
 
 def test_dismiss_alarm_mock_remains_mock(client, session):
     """Verify that dismissing a mock alarm returns mock data."""

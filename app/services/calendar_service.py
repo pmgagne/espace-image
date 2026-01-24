@@ -1,13 +1,13 @@
-from icalendar import Calendar
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
-import httpx
 import asyncio
+from datetime import UTC, datetime, timedelta
+
+import httpx
+from icalendar import Calendar
 
 
 class CalendarService:
     @staticmethod
-    def parse_ics(ics_content: str) -> Optional[Calendar]:
+    def parse_ics(ics_content: str) -> Calendar | None:
         """Parses ICS content string into a Calendar object."""
         try:
             return Calendar.from_ical(ics_content)
@@ -21,7 +21,7 @@ class CalendarService:
         check_time: datetime,
         lookahead_minutes: int = 15,
         lookback_minutes: int = 60 * 12,
-    ) -> List[dict]:
+    ) -> list[dict]:
         """
         Returns a list of events starting within the next `lookahead_minutes`
         OR that started in the last `lookback_minutes` (e.g. today).
@@ -32,7 +32,7 @@ class CalendarService:
 
         # Ensure check_time is aware (UTC)
         if check_time.tzinfo is None:
-            check_time = check_time.replace(tzinfo=timezone.utc)
+            check_time = check_time.replace(tzinfo=UTC)
 
         for component in calendar.walk():
             if component.name == "VEVENT":
@@ -48,11 +48,9 @@ class CalendarService:
 
                 # Normalize event_start to datetime (handle date objects)
                 if not isinstance(event_start, datetime):
-                    event_start = datetime.combine(
-                        event_start, datetime.min.time(), tzinfo=timezone.utc
-                    )
+                    event_start = datetime.combine(event_start, datetime.min.time(), tzinfo=UTC)
                 elif event_start.tzinfo is None:
-                    event_start = event_start.replace(tzinfo=timezone.utc)
+                    event_start = event_start.replace(tzinfo=UTC)
 
                 # Logic: Is event inside the window [now - lookback, now + lookahead]?
                 lower_bound = check_time - timedelta(minutes=lookback_minutes)
@@ -71,7 +69,7 @@ class CalendarService:
         return alarms
 
     @staticmethod
-    async def fetch_ics(url: str) -> Optional[str]:
+    async def fetch_ics(url: str) -> str | None:
         """Fetches ICS content from a URL."""
         if url.startswith("webcal://"):
             url = url.replace("webcal://", "https://", 1)
@@ -86,13 +84,11 @@ class CalendarService:
             return None
 
     @staticmethod
-    async def get_all_alarms(
-        urls: List[str], check_time: datetime = None
-    ) -> List[dict]:
+    async def get_all_alarms(urls: list[str], check_time: datetime | None = None) -> list[dict]:
         """Aggregates alarms from multiple URLs."""
         if check_time is None:
             # Always use UTC aware datetime for comparison with ics/arrow
-            check_time = datetime.now(timezone.utc)
+            check_time = datetime.now(UTC)
 
         tasks = [CalendarService.fetch_ics(url) for url in urls]
         results = await asyncio.gather(*tasks)

@@ -1,6 +1,8 @@
-import pytest
-from app.services.calendar_service import CalendarService
 from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from app.services.calendar_service import CalendarService
 
 
 @pytest.mark.anyio

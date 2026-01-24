@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Request, Depends
+import random
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
+
+from app.db.models import AlarmEvent, AppSettings, CalendarSource, Photo
 from app.db.session import get_session
-from app.db.models import AppSettings, Photo, AlarmEvent, CalendarSource
-from app.services.weather_service import WeatherService
 from app.services.calendar_service import CalendarService
-from datetime import datetime
-import random
+from app.services.weather_service import WeatherService
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -63,13 +65,9 @@ async def get_next_slide(mode: str = "modern", session: Session = Depends(get_se
     """Returns HTML fragment for the next slide."""
     settings = session.exec(select(AppSettings)).first()
     if not settings or not settings.active_preset_id:
-        return (
-            "<div class='error-msg'>No Preset Active. Please configure in Admin.</div>"
-        )
+        return "<div class='error-msg'>No Preset Active. Please configure in Admin.</div>"
 
-    photos = session.exec(
-        select(Photo).where(Photo.preset_id == settings.active_preset_id)
-    ).all()
+    photos = session.exec(select(Photo).where(Photo.preset_id == settings.active_preset_id)).all()
 
     if not photos:
         return "<div class='error-msg'>No Photos found in the active preset.</div>"
@@ -87,13 +85,23 @@ async def get_next_slide(mode: str = "modern", session: Session = Depends(get_se
 @router.get("/components/alarm", response_class=HTMLResponse)
 async def check_alarm(mock: bool = False, session: Session = Depends(get_session)):
     """Checks for active alarms and returns a list of them if any exist."""
-    
+
     active_alarms = []
 
     if mock:
         active_alarms = [
-            {"uid": "mock-1", "name": "Meeting with Client", "description": "Discuss project roadmap", "time": "14:00"},
-            {"uid": "mock-2", "name": "Dentist Appointment", "description": "Dr. Smith", "time": "16:30"}
+            {
+                "uid": "mock-1",
+                "name": "Meeting with Client",
+                "description": "Discuss project roadmap",
+                "time": "14:00",
+            },
+            {
+                "uid": "mock-2",
+                "name": "Dentist Appointment",
+                "description": "Dr. Smith",
+                "time": "16:30",
+            },
         ]
     else:
         # Real logic
@@ -129,8 +137,8 @@ async def check_alarm(mock: bool = False, session: Session = Depends(get_session
             <div class="alarm-body">
                 {alarm.get("description") or "Event Started"}
             </div>
-            <button hx-post="/api/alarms/{alarm["uid"]}/dismiss?mock={'true' if mock else 'false'}" 
-                    hx-target="#alarm-poller" 
+            <button hx-post="/api/alarms/{alarm["uid"]}/dismiss?mock={"true" if mock else "false"}"
+                    hx-target="#alarm-poller"
                     hx-swap="innerHTML"
                     class="dismiss-btn-small">Dismiss</button>
         </div>
@@ -146,7 +154,7 @@ async def check_alarm(mock: bool = False, session: Session = Depends(get_session
 @router.post("/api/alarms/{uid}/dismiss", response_class=HTMLResponse)
 async def dismiss_alarm(uid: str, mock: bool = False, session: Session = Depends(get_session)):
     """Dismisses an alarm and returns the updated alarm list."""
-    
+
     if not mock:
         # Check if already dismissed
         existing = session.exec(select(AlarmEvent).where(AlarmEvent.uid == uid)).first()

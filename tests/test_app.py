@@ -3,7 +3,7 @@ def test_read_root(client):
     response = client.get("/")
     assert response.status_code == 200
     # Check for expected content from templates/index.html
-    assert "Gemini" in response.text
+    assert "Gemini Dashboard" in response.text
 
 
 def test_health_check(client):

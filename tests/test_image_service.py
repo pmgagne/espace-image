@@ -1,6 +1,7 @@
 import pytest
 from PIL import Image
-from app.services.image_service import ImageOptimizer, GalleryManager
+
+from app.services.image_service import GalleryManager, ImageOptimizer
 
 
 @pytest.fixture

@@ -1,11 +1,12 @@
-import pytest
 from unittest.mock import patch
-from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine
-from app.main import app as fastapi_app
-from app.db.session import get_session
 
+import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
+from sqlmodel import Session, SQLModel, create_engine
+
+from app.db.session import get_session
+from app.main import app as fastapi_app
 
 # Use in-memory SQLite for tests
 # check_same_thread=False is needed for SQLite with multiple threads (FastAPI)
@@ -40,8 +41,7 @@ def client_fixture(session: Session):
     fastapi_app.dependency_overrides[get_session] = get_session_override
 
     # We patch the function imported in app.main to prevent side effects on disk
-    with patch("app.main.create_db_and_tables"):
-        with TestClient(fastapi_app) as client:
-            yield client
+    with patch("app.main.create_db_and_tables"), TestClient(fastapi_app) as client:
+        yield client
 
     fastapi_app.dependency_overrides.clear()

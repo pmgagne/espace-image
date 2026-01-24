@@ -1,10 +1,12 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session
-from app.db.session import get_session
+
 from app.db.models import Photo
+from app.db.session import get_session
 from app.services.image_service import ImageOptimizer
-from pathlib import Path
 
 router = APIRouter()
 
@@ -12,9 +14,7 @@ UPLOAD_DIR = Path("data/uploads")
 
 
 @router.get("/images/{photo_id}")
-async def get_image(
-    photo_id: int, mode: str = "modern", session: Session = Depends(get_session)
-):
+async def get_image(photo_id: int, mode: str = "modern", session: Session = Depends(get_session)):
     """
     Serves the image file.
     If mode='legacy', resizes it on the fly.
@@ -47,6 +47,4 @@ async def get_image(
     else:
         # Serve original
         with open(file_path, "rb") as f:
-            return Response(
-                content=f.read(), media_type="image/jpeg"
-            )  # Or verify mime type
+            return Response(content=f.read(), media_type="image/jpeg")  # Or verify mime type

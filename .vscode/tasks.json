@@ -1,0 +1,116 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "uv: sync dependencies",
+            "type": "shell",
+            "command": "uv",
+            "args": ["sync"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "ruff: lint and check",
+            "type": "shell",
+            "command": "uv",
+            "args": ["run", "ruff", "check", "."],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^([^\\s].*):(\\d+):(\\d+).*$",
+                    "file": 1,
+                    "location": 2,
+                    "message": 3
+                }
+            }
+        },
+        {
+            "label": "ruff: format code",
+            "type": "shell",
+            "command": "uv",
+            "args": ["run", "ruff", "format", "."],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "pytest: run all tests",
+            "type": "shell",
+            "command": "uv",
+            "args": ["run", "pytest", "tests/", "-v"],
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^([^\\s].*)::(\\w+).*FAILED|PASSED.*$",
+                    "file": 1,
+                    "location": 2
+                }
+            }
+        },
+        {
+            "label": "pytest: run with coverage",
+            "type": "shell",
+            "command": "uv",
+            "args": ["run", "pytest", "tests/", "-v", "--cov=app"],
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "docker: build image",
+            "type": "shell",
+            "command": "docker",
+            "args": ["build", "-t", "espace-image:latest", "."],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "docker: run container",
+            "type": "shell",
+            "command": "docker-compose",
+            "args": ["up"],
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^.*$",
+                    "line": 0
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "^.*Starting.*$",
+                    "endsPattern": "^.*listening.*$"
+                }
+            }
+        }
+    ]
+}

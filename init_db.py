@@ -1,6 +1,7 @@
 from sqlmodel import Session, select
+
 from app.db.engine import create_db_and_tables, engine
-from app.db.models import Preset, AppSettings
+from app.db.models import AppSettings, Preset
 
 
 def init():

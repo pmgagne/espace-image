@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from app.services.calendar_service import CalendarService
 
 # Sample ICS content
@@ -34,7 +35,7 @@ def test_get_upcoming_alarms():
     # Note: ICS library uses Arrow objects or strict datetime.
     # The SAMPLE_ICS has Z (UTC) times.
 
-    now = datetime(2026, 1, 16, 9, 50, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 16, 9, 50, 0, tzinfo=UTC)
 
     alarms = CalendarService.get_upcoming_alarms(calendar, now, lookahead_minutes=15)
 
@@ -47,7 +48,7 @@ def test_no_upcoming_alarms():
     calendar = CalendarService.parse_ics(SAMPLE_ICS)
 
     # Mock "now" as 2026-01-16 09:00:00 UTC (1 hour before event1)
-    now = datetime(2026, 1, 16, 9, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 1, 16, 9, 0, 0, tzinfo=UTC)
 
     alarms = CalendarService.get_upcoming_alarms(calendar, now, lookahead_minutes=15)
 

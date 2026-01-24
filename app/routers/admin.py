@@ -1,12 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
+
+from app.db.models import AppSettings, CalendarSource, Photo, Preset
 from app.db.session import get_session
-from app.db.models import Preset, Photo, AppSettings, CalendarSource
 from app.services.image_service import GalleryManager
 from app.services.weather_service import WeatherService
-from typing import List, Optional
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
@@ -22,9 +22,7 @@ async def admin_shell(request: Request):
 
 # --- Partials: Settings ---
 @router.get("/partials/settings", response_class=HTMLResponse)
-async def get_settings_partial(
-    request: Request, session: Session = Depends(get_session)
-):
+async def get_settings_partial(request: Request, session: Session = Depends(get_session)):
     settings = session.exec(select(AppSettings)).first()
     presets = session.exec(select(Preset)).all()
 
@@ -36,9 +34,7 @@ async def get_settings_partial(
 
             url = f"https://nominatim.openstreetmap.org/reverse?lat={settings.weather_latitude}&lon={settings.weather_longitude}&format=json"
             async with httpx.AsyncClient() as client:
-                resp = await client.get(
-                    url, headers={"User-Agent": "GeminiDashboard/1.0"}
-                )
+                resp = await client.get(url, headers={"User-Agent": "GeminiDashboard/1.0"})
                 if resp.status_code == 200:
                     data = resp.json()
                     address = data.get("address", {})
@@ -96,7 +92,7 @@ async def search_location(
 @router.post("/settings", response_class=HTMLResponse)
 async def update_settings(
     request: Request,
-    active_preset_id: Optional[int] = Form(None),
+    active_preset_id: int | None = Form(None),
     latitude: float = Form(...),
     longitude: float = Form(...),
     duration: int = Form(30),
@@ -119,13 +115,9 @@ async def update_settings(
 
 # --- Partials: Calendars ---
 @router.get("/partials/calendars", response_class=HTMLResponse)
-async def get_calendars_partial(
-    request: Request, session: Session = Depends(get_session)
-):
+async def get_calendars_partial(request: Request, session: Session = Depends(get_session)):
     sources = session.exec(select(CalendarSource)).all()
-    return templates.TemplateResponse(
-        request, "partials/calendars.html", {"sources": sources}
-    )
+    return templates.TemplateResponse(request, "partials/calendars.html", {"sources": sources})
 
 
 @router.post("/calendars", response_class=HTMLResponse)
@@ -157,7 +149,7 @@ async def delete_calendar(
 @router.get("/partials/gallery", response_class=HTMLResponse)
 async def get_gallery_partial(
     request: Request,
-    preset_id: Optional[int] = None,
+    preset_id: int | None = None,
     session: Session = Depends(get_session),
 ):
     presets = session.exec(select(Preset)).all()
@@ -195,7 +187,7 @@ async def create_preset(
 async def upload_photos(
     request: Request,
     preset_id: int = Form(...),
-    files: List[UploadFile] = File(...),
+    files: list[UploadFile] = File(...),
     session: Session = Depends(get_session),
 ):
     preset = session.get(Preset, preset_id)
@@ -215,9 +207,7 @@ async def upload_photos(
 
 
 @router.delete("/photos/{photo_id}", response_class=HTMLResponse)
-async def delete_photo(
-    request: Request, photo_id: int, session: Session = Depends(get_session)
-):
+async def delete_photo(request: Request, photo_id: int, session: Session = Depends(get_session)):
     photo = session.get(Photo, photo_id)
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")

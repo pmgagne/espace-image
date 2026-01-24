@@ -1,11 +1,12 @@
+from typing import ClassVar
+
 import httpx
-from typing import Dict
 
 
 class WeatherService:
     # WMO Weather interpretation codes (WW)
     # https://open-meteo.com/en/docs
-    WMO_CODES = {
+    WMO_CODES: ClassVar[dict[int, str]] = {
         0: "Ciel dégagé",
         1: "Principalement dégagé",
         2: "Partiellement nuageux",
@@ -33,7 +34,7 @@ class WeatherService:
     }
 
     @staticmethod
-    async def get_current_weather(lat: float, lon: float) -> Dict:
+    async def get_current_weather(lat: float, lon: float) -> dict:
         """
         Fetches current weather from Open-Meteo.
         """
@@ -64,7 +65,7 @@ class WeatherService:
             }
 
     @staticmethod
-    async def geocode_location(query: str) -> Dict | None:
+    async def geocode_location(query: str) -> dict | None:
         """
         Searches for a location name using Open-Meteo Geocoding API.
         Returns: {'lat': float, 'lon': float, 'name': str} or None

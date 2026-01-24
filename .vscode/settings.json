@@ -1,9 +1,47 @@
 {
-    "python.testing.pytestArgs": [
-        "tests"
-    ],
+    // Python & Testing
+    "python.testing.pytestArgs": ["tests"],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
+    "python.envFile": "${workspaceFolder}/.env",
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit",
+            "source.fixAll": "explicit"
+        },
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+
+    // Linting & Code Quality
+    "ruff.lint.args": ["--line-length=100"],
+    "ruff.format.args": ["--line-length=100"],
+    "ruff.fixAll": true,
+    "ruff.organizeImports": true,
+
+    // Copilot & IntelliSense
+    "github.copilot.enable": {
+        "*": true,
+        "plaintext": true,
+        "markdown": true
+    },
+    "python.analysis.typeCheckingMode": "strict",
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportGeneralTypeIssues": "warning"
+    },
+
+    // Editor Configuration
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "editor.rulers": [100],
+    "editor.wordWrap": "on",
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+
+    // Terminal
     "terminal.integrated.env.osx": {
         "PYTHONPATH": "${workspaceFolder}"
     },
@@ -13,5 +51,18 @@
     "terminal.integrated.env.windows": {
         "PYTHONPATH": "${workspaceFolder}"
     },
-    "python.envFile": "${workspaceFolder}/.env"
+
+    // Files & Search
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/.pytest_cache": true,
+        "**/.ruff_cache": true,
+        "**/node_modules": true
+    },
+    "search.exclude": {
+        "**/.venv": true,
+        "**/node_modules": true,
+        "**/dist": true
+    }
 }

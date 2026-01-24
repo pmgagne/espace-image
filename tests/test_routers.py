@@ -1,5 +1,6 @@
 from sqlmodel import select
-from app.db.models import Preset, AppSettings
+
+from app.db.models import AppSettings, Preset
 
 
 def test_dashboard_modern(client):
