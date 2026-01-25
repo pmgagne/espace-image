@@ -1,38 +1,27 @@
 {
-    "recommendations": [
-        // Python Development
-        "ms-python.python",
-        "ms-python.vscode-pylance",
-        "ms-python.debugpy",
-        "charliermarsh.ruff",
-
-        // Copilot & AI
-        "GitHub.copilot",
-        "GitHub.copilot-chat",
-
-        // Web Development
-        "bradlc.vscode-tailwindcss",
-        "formulahendry.auto-rename-tag",
-        "Ritwickdey.LiveServer",
-
-        // Docker
-        "ms-azuretools.vscode-docker",
-
-        // Git & Version Control
-        "eamodio.gitlens",
-        "GitHub.vscode-github-actions",
-
-        // Utilities
-        "EditorConfig.EditorConfig",
-        "DavidAnson.vscode-markdownlint",
-        "redhat.vscode-yaml",
-        "tamasfe.even-better-toml",
-        "qwtel.sqlite-viewer",
-
-        // Testing
-        "littlefoxteam.vscode-python-test-adapter",
-
-        // Code Quality
-        "streetsidesoftware.code-spell-checker"
-    ]
+  "recommendations": [
+    // Python Development
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.debugpy",
+    "charliermarsh.ruff",
+    // Copilot & AI
+    "GitHub.copilot",
+    "GitHub.copilot-chat",
+    // Web Development
+    "bradlc.vscode-tailwindcss",
+    "formulahendry.auto-rename-tag",
+    // Docker
+    "ms-azuretools.vscode-docker",
+    // Git & Version Control
+    "eamodio.gitlens",
+    "GitHub.vscode-github-actions",
+    // Utilities
+    "DavidAnson.vscode-markdownlint",
+    "redhat.vscode-yaml",
+    "tamasfe.even-better-toml",
+    "qwtel.sqlite-viewer",
+    // Code Quality
+    "streetsidesoftware.code-spell-checker"
+  ]
 }
