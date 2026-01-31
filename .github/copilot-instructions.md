@@ -120,7 +120,8 @@ async def get_photo(
 - **Static Files:** `app/static/` (js, css, manifest.json)
 - **HTMX:** Use `hx-get`, `hx-post`, `hx-target`, `hx-swap` attributes for dynamic content
 - **Legacy Support:** `app/templates/legacy/` uses ES5 JS (no arrow functions, const/let, template literals)
-- **CSS:** Use utility classes from `app/static/css/main.css` when available; avoid excessive inline styles
+- **CSS (Modern):** Use modern CSS features (Grid, CSS variables, flexbox). Use utility classes from `app/static/css/main.css` when available; avoid excessive inline styles.
+- **CSS (Legacy):** Emulate the modern UI's aesthetic while adhering to legacy constraints. Tune specifically for iPad 2 landscape (1024x768) and portrait (768x1024) displays.
 
 **HTMX Example:**
 ```html
