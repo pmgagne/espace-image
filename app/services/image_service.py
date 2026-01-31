@@ -2,6 +2,10 @@ from io import BytesIO
 from pathlib import Path
 
 from PIL import Image
+import pillow_heif
+
+# Register HEIF opener to support .heic files
+pillow_heif.register_heif_opener()
 
 LEGACY_MAX_WIDTH = 1024
 LEGACY_MAX_HEIGHT = 768
