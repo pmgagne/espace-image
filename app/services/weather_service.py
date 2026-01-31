@@ -60,8 +60,8 @@ class WeatherService:
             print(f"Weather API Error: {e}")
             return {
                 "temp": "--",
-                "condition": "Erreur",
-                "location": "Service indisponible",
+                "condition": "Service Error",
+                "location": "Unavailable",
             }
 
     @staticmethod

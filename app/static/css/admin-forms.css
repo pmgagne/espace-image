@@ -1,0 +1,107 @@
+/* Shared Admin Form Styles */
+
+/* Inputs & Selects */
+.form-control, input[type="text"], input[type="number"], select {
+    width: 100%;
+    height: 40px;
+    padding: 6px 12px;
+    margin-bottom: 15px;
+    background: #222;
+    border: 1px solid #444;
+    color: #fff;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-size: 14px;
+    vertical-align: middle;
+}
+
+/* Buttons */
+.btn, button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    padding: 0 16px;
+    background: #007bff;
+    color: white;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    box-sizing: border-box;
+    font-size: 14px;
+    vertical-align: middle;
+    text-align: center;
+    text-decoration: none;
+    white-space: nowrap;
+}
+button:hover, .btn:hover { background: #0056b3; }
+button.delete-btn, .btn-danger { background: #dc3545; }
+button.delete-btn:hover, .btn-danger:hover { background: #a71d2a; }
+
+/* File Input Wrapper */
+.file-input-wrapper {
+    position: relative;
+    overflow: hidden;
+    vertical-align: middle;
+}
+
+.file-input-wrapper input[type=file] {
+    position: absolute;
+    top: 0;
+    right: 0;
+    min-width: 100%;
+    min-height: 100%;
+    font-size: 100px;
+    text-align: right;
+    filter: alpha(opacity=0);
+    opacity: 0;
+    outline: none;
+    background: white;
+    cursor: inherit;
+    display: block;
+}
+
+label { display: block; margin-bottom: 5px; color: #ccc; }
+h2 { border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 20px; }
+
+/* HTMX Indicator */
+.htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
+.htmx-request .htmx-indicator { opacity: 1 }
+.htmx-request.htmx-indicator { opacity: 1 }
+
+/* Gallery Grid (Common) */
+.gallery-grid {
+    display: -webkit-flex;
+    display: flex;
+    flex-wrap: wrap;
+    margin-top: 20px;
+    margin-left: -10px; margin-right: -10px;
+}
+
+.photo-card {
+    background: #222;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    width: 150px;
+    height: 150px;
+    margin: 10px;
+}
+
+.photo-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.photo-actions {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(0,0,0,0.7);
+    padding: 5px;
+    text-align: right;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.photo-card:hover .photo-actions { opacity: 1; }

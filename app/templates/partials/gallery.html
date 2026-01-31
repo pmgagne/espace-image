@@ -38,8 +38,13 @@
                   hx-encoding="multipart/form-data"
                   style="display: flex; gap: 10px; align-items: center;">
                 <input type="hidden" name="preset_id" value="{{ selected_preset.id }}">
-                <input type="file" name="files" multiple accept="image/*" style="margin-bottom: 0; background: #333;">
-                <button type="submit">Upload Photos</button>
+                
+                <label class="file-input-wrapper btn" data-placeholder="Choose Photos" style="margin-bottom: 0;">
+                    <span class="btn-text">Choose Photos</span>
+                    <input type="file" name="files" multiple accept="image/*">
+                </label>
+                
+                <button type="submit" style="margin-bottom: 0;">Upload Photos</button>
             </form>
         </div>
 

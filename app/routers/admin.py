@@ -91,11 +91,11 @@ async def search_location(
 
 @router.post("/settings", response_class=HTMLResponse)
 async def update_settings(
-    request: Request,
+    request: Request,  # noqa: ARG001
     active_preset_id: int | None = Form(None),
-    latitude: float = Form(...),
-    longitude: float = Form(...),
-    duration: int = Form(30),
+    latitude: float | None = Form(None),
+    longitude: float | None = Form(None),
+    duration: int | None = Form(None),
     session: Session = Depends(get_session),
 ):
     settings = session.exec(select(AppSettings)).first()
@@ -105,12 +105,15 @@ async def update_settings(
     settings.active_preset_id = active_preset_id
     settings.weather_latitude = latitude
     settings.weather_longitude = longitude
-    settings.slideshow_duration = duration
+    if duration is not None:
+        settings.slideshow_duration = duration
     session.add(settings)
     session.commit()
 
-    # Return updated partial
-    return await get_settings_partial(request, session)
+    # Redirect to the main slideshow using HTMX
+    response = HTMLResponse()
+    response.headers["HX-Redirect"] = "/"
+    return response
 
 
 # --- Partials: Calendars ---
