@@ -1,8 +1,8 @@
 from io import BytesIO
 from pathlib import Path
 
-from PIL import Image
 import pillow_heif
+from PIL import Image
 
 # Register HEIF opener to support .heic files
 pillow_heif.register_heif_opener()

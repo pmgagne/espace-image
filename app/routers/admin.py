@@ -91,7 +91,7 @@ async def search_location(
 
 @router.post("/settings", response_class=HTMLResponse)
 async def update_settings(
-    request: Request,
+    request: Request,  # noqa: ARG001
     active_preset_id: int | None = Form(None),
     latitude: float | None = Form(None),
     longitude: float | None = Form(None),
