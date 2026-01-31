@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block head %}
+<link rel="stylesheet" href="/static/css/admin-forms.css">
+{% endblock %}
+
 {% block content %}
 <div style="padding: 20px; background: #222; min-height: 100vh; color: #fff;">
     <h1>Admin Panel</h1>
@@ -7,9 +11,9 @@
     
     <hr>
     
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <div style="display: flex; flex-wrap: wrap; gap: 20px;">
         <!-- Settings -->
-        <div style="background: #333; padding: 20px; border-radius: 8px;">
+        <div style="background: #333; padding: 20px; border-radius: 8px; flex: 1; min-width: 300px;">
             <h2>Settings</h2>
             <form action="/admin/settings/active-preset" method="post">
                 <label>Active Slideshow Preset:</label>
@@ -25,7 +29,7 @@
         </div>
         
         <!-- Create Preset -->
-        <div style="background: #333; padding: 20px; border-radius: 8px;">
+        <div style="background: #333; padding: 20px; border-radius: 8px; flex: 1; min-width: 300px;">
             <h2>New Preset</h2>
             <form action="/admin/presets" method="post">
                 <input type="text" name="name" placeholder="Preset Name" required>
@@ -47,10 +51,33 @@
                 {% endfor %}
             </select>
             <br><br>
-            <input type="file" name="files" multiple accept="image/*">
+            <div class="file-input-wrapper btn" data-placeholder="Choose Photos" style="background: #444; border-color: #555;">
+                <span class="btn-text">Choose Photos</span>
+                <input type="file" name="files" multiple accept="image/*">
+            </div>
             <br><br>
             <button type="submit">Upload</button>
         </form>
     </div>
 </div>
+
+<script>
+    // Include file input logic for this page too
+    document.body.addEventListener('change', function(e) {
+        if (e.target && e.target.type === 'file') {
+            var wrapper = e.target.parentNode;
+            if (wrapper.classList.contains('file-input-wrapper')) {
+                var labelSpan = wrapper.querySelector('.btn-text');
+                if (labelSpan) {
+                    var count = e.target.files ? e.target.files.length : 1;
+                    if (count > 0) {
+                        labelSpan.innerText = count + (count === 1 ? " File Selected" : " Files Selected");
+                    } else {
+                        labelSpan.innerText = wrapper.getAttribute('data-placeholder') || "Choose Files";
+                    }
+                }
+            }
+        }
+    });
+</script>
 {% endblock %}
