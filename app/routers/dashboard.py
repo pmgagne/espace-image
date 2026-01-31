@@ -46,9 +46,15 @@ async def get_weather(session: Session = Depends(get_session)):
     """Returns HTML fragment for weather widget."""
     settings = session.exec(select(AppSettings)).first()
 
-    # Defaults if not set
-    lat = settings.weather_latitude if settings else 45.5
-    lon = settings.weather_longitude if settings else -73.5
+    if not settings or settings.weather_latitude is None or settings.weather_longitude is None:
+        return """
+        <div id="weather-display" class="weather-info">
+            <span class="condition" style="font-size: 0.8em; opacity: 0.8;">No location defined</span>
+        </div>
+        """
+
+    lat = settings.weather_latitude
+    lon = settings.weather_longitude
 
     weather = await WeatherService.get_current_weather(lat, lon)
 

@@ -31,11 +31,11 @@
         <div style="display: flex; gap: 20px;">
             <div style="flex: 1;">
                 <label>Latitude</label>
-                <input type="number" step="any" name="latitude" id="lat" value="{{ settings.weather_latitude or '' }}" required>
+                <input type="number" step="any" name="latitude" id="lat" value="{{ settings.weather_latitude or '' }}">
             </div>
             <div style="flex: 1;">
                 <label>Longitude</label>
-                <input type="number" step="any" name="longitude" id="lon" value="{{ settings.weather_longitude or '' }}" required>
+                <input type="number" step="any" name="longitude" id="lon" value="{{ settings.weather_longitude or '' }}">
             </div>
         </div>
         
@@ -58,7 +58,7 @@
             </div>
             <div style="flex: 1;">
                 <label>Duration (seconds)</label>
-                <input type="number" name="duration" value="{{ settings.slideshow_duration or 30 }}" min="5" required>
+                <input type="number" name="duration" value="{{ settings.slideshow_duration or 30 }}" min="5">
             </div>
         </div>
         
