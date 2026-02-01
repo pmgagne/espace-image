@@ -94,7 +94,9 @@
         max-width: 80vw;
         max-height: 40vh;
         overflow-y: auto;
+    }
 
+    .alarm-box-container.animate-in {
         animation: slideUp 0.5s ease-out;
     }
 
@@ -282,6 +284,7 @@
 <script>
     // Smart swap for alarms to prevent flickering on dismiss
     var lastAlarmContent = "";
+    var hasAnimated = false;
     document.body.addEventListener('htmx:beforeSwap', function (evt) {
         if (evt.detail.target.id === 'alarm-poller') {
             var newHtml = evt.detail.xhr.responseText || "";
@@ -295,6 +298,17 @@
                 evt.detail.shouldSwap = false;
             } else {
                 lastAlarmContent = normalizedNew;
+            }
+        }
+    });
+
+    // Animate alarm box only on first appearance
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+        if (evt.detail.target.id === 'alarm-poller') {
+            var alarmBox = document.querySelector('.alarm-box-container');
+            if (alarmBox && !hasAnimated) {
+                alarmBox.classList.add('animate-in');
+                hasAnimated = true;
             }
         }
     });
