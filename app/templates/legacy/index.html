@@ -29,6 +29,13 @@
     .slide-container {
         width: 100%;
         height: 100%;
+        opacity: 1;
+        -webkit-transition: opacity 0.8s ease-in-out;
+        transition: opacity 0.8s ease-in-out;
+    }
+
+    .slide-container.fade-out {
+        opacity: 0;
     }
 
     .full-slide {
@@ -281,8 +288,49 @@
     function updateSlide() {
         fetchHTML('/components/slide?mode=legacy', function (html) {
             var wrapper = document.getElementById('slide-wrapper');
-            // Simple cross-fade logic could go here, but direct swap is safer for performance on iPad 2
-            wrapper.innerHTML = html;
+            var slideContainer = wrapper.querySelector('.slide-container');
+
+            // Extract image URL from HTML to preload
+            var tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            var imgElement = tempDiv.querySelector('img');
+            var imgUrl = imgElement ? imgElement.src : null;
+
+            // Preload the image before transition
+            if (imgUrl) {
+                var preloadImg = new Image();
+                preloadImg.onload = function () {
+                    // Image is loaded, now do the transition
+                    if (slideContainer) {
+                        slideContainer.classList.add('fade-out');
+                        setTimeout(function () {
+                            wrapper.innerHTML = html;
+                            var newSlide = wrapper.querySelector('.slide-container');
+                            if (newSlide) {
+                                // Add fade-out class first (opacity: 0)
+                                newSlide.classList.add('fade-out');
+                                // Trigger reflow to ensure transition applies
+                                void newSlide.offsetHeight;
+                                // Remove fade-out class to trigger fade-in (opacity: 1)
+                                newSlide.classList.remove('fade-out');
+                            }
+                        }, 500);
+                    } else {
+                        wrapper.innerHTML = html;
+                    }
+                };
+                preloadImg.src = imgUrl;
+            } else {
+                // No image found, just swap
+                if (slideContainer) {
+                    slideContainer.classList.add('fade-out');
+                    setTimeout(function () {
+                        wrapper.innerHTML = html;
+                    }, 500);
+                } else {
+                    wrapper.innerHTML = html;
+                }
+            }
         });
     }
 
