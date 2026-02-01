@@ -84,3 +84,25 @@ def test_gallery_manager_reencodes_non_jpeg(tmp_path, monkeypatch, png_bytes):
     assert stored_filename.endswith(".jpg")
     with Image.open(saved_path) as img:
         assert img.format == "JPEG"
+
+
+def test_gallery_manager_delete(tmp_path, monkeypatch, jpeg_bytes):
+    """Test deleting a photo from disk."""
+    upload_dir = tmp_path / "uploads"
+    manager = GalleryManager(upload_dir=str(upload_dir))
+    filename = "test.jpg"
+    preset_name = "TestPreset"
+
+    monkeypatch.setenv("IMAGE_OPTIMIZE_MIN_BYTES", "10000000")
+    saved_path, _ = manager.save_upload(jpeg_bytes, filename, preset_name)
+
+    assert saved_path.exists()
+
+    # Delete the photo
+    result = manager.delete_photo(filename, preset_name)
+    assert result is True
+    assert not saved_path.exists()
+
+    # Try deleting again (should return False)
+    result = manager.delete_photo(filename, preset_name)
+    assert result is False

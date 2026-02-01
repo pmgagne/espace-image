@@ -218,8 +218,9 @@ async def delete_photo(request: Request, photo_id: int, session: Session = Depen
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
 
-    # We should delete from disk too (TODO: Add method to gallery_manager)
-    # gallery_manager.delete_photo(photo.filename, photo.preset.name)
+    # Delete from disk
+    preset_name = photo.preset.name if photo.preset else "Default"
+    gallery_manager.delete_photo(photo.filename, preset_name)
 
     preset_id = photo.preset_id
     session.delete(photo)

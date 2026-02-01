@@ -104,3 +104,16 @@ class GalleryManager:
             f.write(optimized_content)
 
         return file_path, stored_filename
+
+    def delete_photo(self, filename: str, preset_name: str = "Default") -> bool:
+        """
+        Deletes a photo file from the specific preset folder.
+        Returns True if the file was deleted, False if it didn't exist.
+        """
+        preset_dir = self.upload_dir / preset_name
+        file_path = preset_dir / filename
+
+        if file_path.exists():
+            file_path.unlink()
+            return True
+        return False
