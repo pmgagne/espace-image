@@ -2,10 +2,26 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Run Espace-Image Webapp ",
+            "type": "shell",
+            "command": "uv run uvicorn app.main:app --reload",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
             "label": "uv: sync dependencies",
             "type": "shell",
             "command": "uv",
-            "args": ["sync"],
+            "args": [
+                "sync"
+            ],
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -20,7 +36,12 @@
             "label": "ruff: lint and check",
             "type": "shell",
             "command": "uv",
-            "args": ["run", "ruff", "check", "."],
+            "args": [
+                "run",
+                "ruff",
+                "check",
+                "."
+            ],
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -39,7 +60,12 @@
             "label": "ruff: format code",
             "type": "shell",
             "command": "uv",
-            "args": ["run", "ruff", "format", "."],
+            "args": [
+                "run",
+                "ruff",
+                "format",
+                "."
+            ],
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -51,7 +77,12 @@
             "label": "pytest: run all tests",
             "type": "shell",
             "command": "uv",
-            "args": ["run", "pytest", "tests/", "-v"],
+            "args": [
+                "run",
+                "pytest",
+                "tests/",
+                "-v"
+            ],
             "group": "test",
             "presentation": {
                 "reveal": "always",
@@ -69,7 +100,13 @@
             "label": "pytest: run with coverage",
             "type": "shell",
             "command": "uv",
-            "args": ["run", "pytest", "tests/", "-v", "--cov=app"],
+            "args": [
+                "run",
+                "pytest",
+                "tests/",
+                "-v",
+                "--cov=app"
+            ],
             "group": "test",
             "presentation": {
                 "reveal": "always",
@@ -81,7 +118,12 @@
             "label": "docker: build image",
             "type": "shell",
             "command": "docker",
-            "args": ["build", "-t", "espace-image:latest", "."],
+            "args": [
+                "build",
+                "-t",
+                "espace-image:latest",
+                "."
+            ],
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -93,7 +135,9 @@
             "label": "docker: run container",
             "type": "shell",
             "command": "docker-compose",
-            "args": ["up"],
+            "args": [
+                "up"
+            ],
             "group": "test",
             "presentation": {
                 "reveal": "always",

@@ -1,9 +1,11 @@
+import os
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
-from app.db.models import AppSettings, CalendarSource, Photo, Preset
+from app.db.models import AlarmEvent, AppSettings, CalendarSource, Photo, Preset
 from app.db.session import get_session
 from app.services.image_service import GalleryManager
 from app.services.weather_service import WeatherService
@@ -17,7 +19,8 @@ gallery_manager = GalleryManager()
 @router.get("/")
 async def admin_shell(request: Request):
     """Admin Shell with Sidebar"""
-    return templates.TemplateResponse(request, "admin_base.html", {})
+    debug_mode = os.getenv("WEBAPP_DEBUG", "").lower() in ("true", "1", "yes")
+    return templates.TemplateResponse(request, "admin_base.html", {"debug_mode": debug_mode})
 
 
 # --- Partials: Settings ---
@@ -223,3 +226,39 @@ async def delete_photo(request: Request, photo_id: int, session: Session = Depen
     session.commit()
 
     return await get_gallery_partial(request, preset_id, session)
+
+
+# --- Debug Panel ---
+@router.get("/partials/debug", response_class=HTMLResponse)
+async def get_debug_partial(request: Request):
+    """Debug control panel for testing (HTMX partial)."""
+    return templates.TemplateResponse(request, "partials/debug.html", {})
+
+
+@router.post("/debug/simulate-alarm", response_class=HTMLResponse)
+async def simulate_alarm(
+    request: Request,
+    delay_seconds: int = Form(...),
+    session: Session = Depends(get_session),
+):
+    """Create a simulated alarm that appears after the specified delay."""
+    from datetime import datetime, timedelta
+    from uuid import uuid4
+
+    # Calculate trigger time
+    trigger_time = datetime.now() + timedelta(seconds=delay_seconds)
+
+    # Create alarm event with unique UID
+    alarm = AlarmEvent(
+        uid=f"test-{uuid4()}",
+        trigger_time=trigger_time,
+    )
+
+    session.add(alarm)
+    session.commit()
+
+    return templates.TemplateResponse(
+        request,
+        "partials/debug.html",
+        {"success_message": f"Simulated alarm created! It will appear in {delay_seconds} seconds."},
+    )

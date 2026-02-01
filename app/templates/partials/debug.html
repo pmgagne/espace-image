@@ -1,0 +1,44 @@
+<div>
+    <h2>Debug Panel</h2>
+
+    <div style="background: #f0f0f0; color: #333; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <p style="margin: 0;">
+            <strong>Simulated Alarms:</strong> Create test alarms that appear immediately in the dashboard.
+            You can dismiss them like normal alarms. Test alarms are stored in the database.
+        </p>
+    </div>
+
+    {% if success_message %}
+    <div style="background: #4caf50; color: #fff; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <strong>✓ Success:</strong> {{ success_message }}
+    </div>
+    {% endif %}
+
+    <h3>Simulate Alarm</h3>
+
+    <form hx-post="/admin/debug/simulate-alarm" hx-target="#admin-content">
+        <div style="margin-bottom: 15px;">
+            <label for="delay-seconds" style="display: block; margin-bottom: 5px;">
+                Delay before alarm appears (seconds)
+            </label>
+            <input type="number" id="delay-seconds" name="delay_seconds" value="5" min="0" step="1"
+                placeholder="Enter delay in seconds" style="width: 100%; padding: 8px; box-sizing: border-box;">
+            <small style="color: #666; display: block; margin-top: 5px;">
+                0 = Alarm appears immediately
+            </small>
+        </div>
+
+        <button type="submit"
+            style="background: #ff9800; color: #fff; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem;">
+            🔔 Simulate Alarm
+        </button>
+    </form>
+
+    <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+
+    <h3>Debug Information</h3>
+    <p style="color: #666; font-size: 0.9em;">
+        <strong>WEBAPP_DEBUG:</strong> Enabled<br>
+        Check the dashboard to see simulated alarms appear in the alarm list.
+    </p>
+</div>
