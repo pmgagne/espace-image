@@ -38,6 +38,35 @@
         display: block;
     }
 
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    @keyframes fadeOut {
+        from {
+            opacity: 1;
+        }
+
+        to {
+            opacity: 0;
+        }
+    }
+
+    /* Cross-dissolve: fade out before swap, fade in after */
+    .htmx-swapping .slide-container {
+        animation: fadeOut 1s ease-in-out forwards;
+    }
+
+    .htmx-added.slide-container {
+        animation: fadeIn 1s ease-in-out;
+    }
+
     /* --- Layer 2: Floating Info Box --- */
     .info-box-container {
         position: fixed;
@@ -261,7 +290,7 @@
 
 <!-- Slideshow Background -->
 <div class="slideshow-container" hx-get="/components/slide?mode=modern"
-    hx-trigger="load, every {{ settings.slideshow_duration or 30 }}s" hx-swap="innerHTML transition:true">
+    hx-trigger="load, every {{ settings.slideshow_duration or 30 }}s" hx-swap="innerHTML swap:1s">
     <!-- Placeholder -->
     <div style="width:100%; height:100%; background: #111;"></div>
 </div>
@@ -278,10 +307,29 @@
 </div>
 
 <!-- Alarm Poller (Updates every 10s for responsiveness) -->
-<div id="alarm-poller" hx-get="/components/alarm" hx-trigger="load, every 10s" hx-swap="innerHTML">
+<div id="alarm-poller" hx-get="/components/alarm" hx-trigger="load, every 10s" hx-swap="innerHTML"
+    hx-vals='js:{tz_offset: (new Date()).getTimezoneOffset()}'>
 </div>
 
 <script>
+    // Preload image before swapping for smooth fade-in
+    document.body.addEventListener('htmx:beforeSwap', function (evt) {
+        if (evt.detail.target.classList.contains('slideshow-container')) {
+            var newHtml = evt.detail.xhr.responseText || "";
+            var tempDiv = document.createElement('div');
+            tempDiv.innerHTML = newHtml;
+            var imgElement = tempDiv.querySelector('img');
+            var imgUrl = imgElement ? imgElement.src : null;
+
+            if (imgUrl) {
+                // Preload image
+                var preloadImg = new Image();
+                preloadImg.src = imgUrl;
+                // Allow swap to proceed; by the time fade-in happens, image will be cached
+            }
+        }
+    });
+
     // Smart swap for alarms to prevent flickering on dismiss
     var lastAlarmContent = "";
     var hasAnimated = false;
