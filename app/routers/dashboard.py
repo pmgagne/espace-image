@@ -1,5 +1,5 @@
 import random
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -89,10 +89,26 @@ async def get_next_slide(mode: str = "modern", session: Session = Depends(get_se
 
 
 @router.get("/components/alarm", response_class=HTMLResponse)
-async def check_alarm(mock: bool = False, session: Session = Depends(get_session)):
+async def check_alarm(
+    mock: bool = False,
+    tz_offset: int | None = None,
+    session: Session = Depends(get_session),
+):
     """Checks for active alarms and returns a list of them if any exist."""
 
     active_alarms = []
+
+    now = datetime.now()
+    purge_before = now - timedelta(days=30)
+    dismissed_alarms = session.exec(
+        select(AlarmEvent).where(
+            (AlarmEvent.dismissed_at.is_not(None)) & (AlarmEvent.dismissed_at < purge_before)
+        )
+    ).all()
+    for alarm_event in dismissed_alarms:
+        session.delete(alarm_event)
+    if dismissed_alarms:
+        session.commit()
 
     if mock:
         active_alarms = [
@@ -113,8 +129,34 @@ async def check_alarm(mock: bool = False, session: Session = Depends(get_session
         # Real logic - fetch from calendar sources
         sources = session.exec(select(CalendarSource)).all()
         if sources:
-            urls = [s.url for s in sources]
-            alarms = await CalendarService.get_all_alarms(urls)
+            tz_offset_minutes = tz_offset if tz_offset is not None else 0
+            utc_now = datetime.now(UTC)
+            device_now = (utc_now - timedelta(minutes=tz_offset_minutes)).replace(tzinfo=None)
+            device_midnight = device_now.replace(hour=0, minute=0, second=0, microsecond=0)
+            device_midnight_utc = (device_midnight + timedelta(minutes=tz_offset_minutes)).replace(
+                tzinfo=UTC
+            )
+            lookback_minutes = max(
+                int((utc_now - device_midnight_utc).total_seconds() / 60),
+                0,
+            )
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.info(
+                f"Alarm check: tz_offset={tz_offset_minutes}min, utc_now={utc_now}, "
+                f"device_now={device_now}, lookback={lookback_minutes}min"
+            )
+            source_pairs = [
+                (s.id if s.id is not None else index + 1, s.url) for index, s in enumerate(sources)
+            ]
+            alarms = await CalendarService.get_all_alarms(
+                source_pairs,
+                check_time=utc_now,
+                lookback_minutes=lookback_minutes,
+                tz_offset_minutes=tz_offset_minutes,
+            )
+            logger.info(f"Fetched {len(alarms)} alarms: {[(a['uid'], a['begin']) for a in alarms]}")
 
             if alarms:
                 # Filter out dismissed alarms
@@ -122,12 +164,16 @@ async def check_alarm(mock: bool = False, session: Session = Depends(get_session
                     dismissed = session.exec(
                         select(AlarmEvent).where(AlarmEvent.uid == alarm["uid"])
                     ).first()
+                    if not dismissed and ":" in alarm["uid"]:
+                        raw_uid = alarm["uid"].split(":", 1)[1]
+                        dismissed = session.exec(
+                            select(AlarmEvent).where(AlarmEvent.uid == raw_uid)
+                        ).first()
                     # Only include if alarm hasn't been dismissed
                     if not dismissed or dismissed.dismissed_at is None:
                         active_alarms.append(alarm)
 
         # Also fetch simulated alarms from database
-        now = datetime.now()
         simulated_alarms = session.exec(
             select(AlarmEvent).where(
                 (AlarmEvent.uid.like("test-%"))
@@ -154,6 +200,7 @@ async def check_alarm(mock: bool = False, session: Session = Depends(get_session
 
     # Generate HTML for all active alarms
     alarms_html = ""
+    tz_query = f"&tz_offset={tz_offset}" if tz_offset is not None else ""
     for alarm in active_alarms:
         alarms_html += f"""
         <div class="alarm-item">
@@ -164,7 +211,7 @@ async def check_alarm(mock: bool = False, session: Session = Depends(get_session
             <div class="alarm-body">
                 {alarm.get("description") or "Event Started"}
             </div>
-            <button hx-post="/api/alarms/{alarm["uid"]}/dismiss?mock={"true" if mock else "false"}"
+            <button hx-post="/api/alarms/{alarm["uid"]}/dismiss?mock={"true" if mock else "false"}{tz_query}"
                     hx-target="#alarm-poller"
                     hx-swap="innerHTML"
                     class="dismiss-btn-small">Dismiss</button>
@@ -179,7 +226,12 @@ async def check_alarm(mock: bool = False, session: Session = Depends(get_session
 
 
 @router.post("/api/alarms/{uid}/dismiss", response_class=HTMLResponse)
-async def dismiss_alarm(uid: str, mock: bool = False, session: Session = Depends(get_session)):
+async def dismiss_alarm(
+    uid: str,
+    mock: bool = False,
+    tz_offset: int | None = None,
+    session: Session = Depends(get_session),
+):
     """Dismisses an alarm and returns the updated alarm list."""
 
     if not mock:
@@ -200,4 +252,4 @@ async def dismiss_alarm(uid: str, mock: bool = False, session: Session = Depends
         session.expunge_all()
 
     # Return the updated list immediately
-    return await check_alarm(mock=mock, session=session)
+    return await check_alarm(mock=mock, tz_offset=tz_offset, session=session)

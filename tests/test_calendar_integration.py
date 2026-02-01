@@ -26,8 +26,8 @@ END:VCALENDAR"""
         mock_get.return_value.text = ics_content
         mock_get.return_value.raise_for_status = lambda: None
 
-        urls = ["http://example.com/cal1.ics", "webcal://example.com/cal2.ics"]
-        await CalendarService.get_all_alarms(urls)
+        sources = [(1, "http://example.com/cal1.ics"), (2, "webcal://example.com/cal2.ics")]
+        await CalendarService.get_all_alarms(sources)
 
         # We expect fetch_ics to be called twice
         assert mock_get.call_count == 2

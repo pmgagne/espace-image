@@ -1,6 +1,10 @@
+from datetime import UTC, datetime, timedelta
+
+import pytest
 from sqlmodel import select
 
-from app.db.models import CalendarSource
+from app.db.models import AlarmEvent, CalendarSource
+from app.services.calendar_service import CalendarService
 
 
 def test_check_alarm_mock(client):
@@ -44,3 +48,58 @@ def test_dismiss_alarm_mock_remains_mock(client, session):
     assert response.status_code == 200
     assert "alarm-box-container" in response.text
     assert "Dentist Appointment" in response.text
+
+
+@pytest.mark.anyio
+async def test_get_all_alarms_namespaces_uids(monkeypatch):
+    """Verify alarms from multiple calendars are namespaced by source id."""
+    ics_one = """BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:shared-uid
+SUMMARY:Calendar One
+DTSTART:20260201T100000Z
+DESCRIPTION:One
+END:VEVENT
+END:VCALENDAR"""
+    ics_two = """BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:shared-uid
+SUMMARY:Calendar Two
+DTSTART:20260201T100000Z
+DESCRIPTION:Two
+END:VEVENT
+END:VCALENDAR"""
+
+    async def fake_fetch(url: str) -> str | None:
+        return {"https://one": ics_one, "https://two": ics_two}.get(url)
+
+    monkeypatch.setattr(CalendarService, "fetch_ics", fake_fetch)
+
+    check_time = datetime(2026, 2, 1, 10, 0, tzinfo=UTC)
+    alarms = await CalendarService.get_all_alarms(
+        [(1, "https://one"), (2, "https://two")],
+        check_time=check_time,
+        lookback_minutes=60,
+        lookahead_minutes=60,
+    )
+
+    uids = {alarm["uid"] for alarm in alarms}
+    assert "1:shared-uid" in uids
+    assert "2:shared-uid" in uids
+
+
+def test_purge_old_dismissed_alarms(client, session):
+    """Verify dismissed alarms older than 30 days are purged."""
+    old_alarm = AlarmEvent(
+        uid="old-dismissed",
+        trigger_time=datetime.now() - timedelta(days=60),
+        dismissed_at=datetime.now() - timedelta(days=31),
+    )
+    session.add(old_alarm)
+    session.commit()
+
+    response = client.get("/components/alarm?tz_offset=0")
+    assert response.status_code == 200
+
+    remaining = session.exec(select(AlarmEvent).where(AlarmEvent.uid == "old-dismissed")).all()
+    assert remaining == []

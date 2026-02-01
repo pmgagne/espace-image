@@ -2,13 +2,14 @@
 
 {% block head %}
 <style>
-    /* 
+    /*
      * Legacy "Passive Display" Layout (iPad 2 / iOS 9)
      * No Flexbox centering in full-screen if problematic, no Backdrop Filter.
      */
-    
+
     body {
-        margin: 0; padding: 0;
+        margin: 0;
+        padding: 0;
         background: #000;
         font-family: Helvetica, Arial, sans-serif;
         overflow: hidden;
@@ -48,15 +49,15 @@
         -webkit-transform: translateX(-50%);
         transform: translateX(-50%);
         z-index: 10;
-        
+
         width: 450px;
         text-align: center;
-        
+
         /* Fallback: Solid semi-transparent background (No blur) */
         background: rgba(0, 0, 0, 0.7);
         padding: 30px;
         border-radius: 20px;
-        
+
         color: #fff;
     }
 
@@ -79,36 +80,43 @@
         border-top: 1px solid #555;
         padding-top: 12px;
         font-size: 24px;
-        /* Using floats or inline-block for side-by-side if flex acts up, 
+        /* Using floats or inline-block for side-by-side if flex acts up,
            but iOS 9 supports display:flex enough for simple rows */
         display: -webkit-flex;
         display: flex;
         -webkit-justify-content: center;
         justify-content: center;
     }
-    
-    .weather-info .temp { margin-right: 15px; font-weight: bold; }
-    .weather-info .condition { opacity: 0.8; }
+
+    .weather-info .temp {
+        margin-right: 15px;
+        font-weight: bold;
+    }
+
+    .weather-info .condition {
+        opacity: 0.8;
+    }
 
     /* --- Layer 3: Persistent Alarm Box (Legacy) --- */
     .alarm-box-container {
         position: absolute;
-        bottom: 60px; /* Above Admin link */
+        bottom: 60px;
+        /* Above Admin link */
         left: 50%;
         /* iOS 9 supports transform */
         -webkit-transform: translateX(-50%);
         transform: translateX(-50%);
         z-index: 20;
-        
+
         width: 450px;
         text-align: center;
-        
+
         /* Solid background for legacy */
         background: rgba(0, 0, 0, 0.7);
         padding: 20px;
         border-radius: 20px;
         border: 1px solid #555;
-        
+
         color: #fff;
     }
 
@@ -117,7 +125,7 @@
         margin-bottom: 15px;
         border-bottom: 1px solid #555;
     }
-    
+
     .alarm-item:last-child {
         border-bottom: none;
         margin-bottom: 0;
@@ -126,18 +134,19 @@
 
     .alarm-header {
         font-size: 24px;
-        color: #ff5555; /* Brighter red for dark bg */
+        color: #ff5555;
+        /* Brighter red for dark bg */
         font-weight: bold;
         margin-bottom: 5px;
         text-transform: uppercase;
     }
-    
+
     .alarm-body {
-        font-size: 18px; 
-        color: #ddd; 
+        font-size: 18px;
+        color: #ddd;
         margin-bottom: 10px;
     }
-    
+
     .dismiss-btn-small {
         background: #222;
         color: #aaa;
@@ -146,7 +155,8 @@
         font-size: 16px;
         border-radius: 5px;
         cursor: pointer;
-        -webkit-appearance: none; /* iOS Reset */
+        -webkit-appearance: none;
+        /* iOS Reset */
     }
 
     /* Simple Fade */
@@ -154,8 +164,8 @@
         -webkit-transition: opacity 1s;
         transition: opacity 1s;
     }
-    
-    .htmx-swapping > .slide-container {
+
+    .htmx-swapping>.slide-container {
         opacity: 0;
     }
 
@@ -181,16 +191,16 @@
 
 <!-- Slideshow -->
 <div id="slide-wrapper" class="slideshow-container">
-     <div style="background: #222; width: 100%; height: 100%;"></div>
+    <div style="background: #222; width: 100%; height: 100%;"></div>
 </div>
 
 <!-- Info Box -->
 <div class="info-box-container">
     <div id="clock">00:00</div>
     <div id="date-display">...</div>
-    
+
     <div id="weather-wrapper">
-         Loading Weather...
+        Loading Weather...
     </div>
 </div>
 
@@ -203,15 +213,15 @@
     // Configuration
     var CONFIG = {
         slideInterval: {{ settings.slideshow_duration or 30 }} * 1000,
-        weatherInterval: 600 * 1000, // 10 minutes
-        alarmInterval: 10 * 1000     // 10 seconds
+            weatherInterval: 600 * 1000, // 10 minutes
+                alarmInterval: 10 * 1000     // 10 seconds
     };
 
     // Helper: XHR Request
     function fetchHTML(url, callback) {
         var xhr = new XMLHttpRequest();
         xhr.open('GET', url, true);
-        xhr.onreadystatechange = function() {
+        xhr.onreadystatechange = function () {
             if (xhr.readyState === 4) {
                 if (xhr.status === 200) {
                     callback(xhr.responseText);
@@ -222,12 +232,12 @@
         };
         xhr.send();
     }
-    
+
     // Helper: POST Request (for Dismiss)
     function postAction(url, targetId) {
         var xhr = new XMLHttpRequest();
         xhr.open('POST', url, true);
-        xhr.onreadystatechange = function() {
+        xhr.onreadystatechange = function () {
             if (xhr.readyState === 4 && xhr.status === 200) {
                 // Returns updated content
                 var html = xhr.responseText;
@@ -245,7 +255,7 @@
     function bindDismissButtons() {
         var wrapper = document.getElementById('alarm-wrapper');
         if (!wrapper) return;
-        
+
         var buttons = wrapper.querySelectorAll('.dismiss-btn-small');
         for (var i = 0; i < buttons.length; i++) {
             var btn = buttons[i];
@@ -253,8 +263,8 @@
             if (postUrl) {
                 btn.removeAttribute('hx-post'); // Prevent confusion
                 // Create a closure for the URL
-                (function(url) {
-                    btn.onclick = function() {
+                (function (url) {
+                    btn.onclick = function () {
                         postAction(url, 'alarm-wrapper');
                     };
                 })(postUrl);
@@ -263,13 +273,13 @@
     }
 
     function updateWeather() {
-        fetchHTML('/components/weather', function(html) {
+        fetchHTML('/components/weather', function (html) {
             document.getElementById('weather-wrapper').innerHTML = html;
         });
     }
 
     function updateSlide() {
-        fetchHTML('/components/slide?mode=legacy', function(html) {
+        fetchHTML('/components/slide?mode=legacy', function (html) {
             var wrapper = document.getElementById('slide-wrapper');
             // Simple cross-fade logic could go here, but direct swap is safer for performance on iPad 2
             wrapper.innerHTML = html;
@@ -277,18 +287,19 @@
     }
 
     function checkAlarm() {
-        fetchHTML('/components/alarm', function(html) {
+        var tzOffset = (new Date()).getTimezoneOffset();
+        fetchHTML('/components/alarm?tz_offset=' + tzOffset, function (html) {
             var wrapper = document.getElementById('alarm-wrapper');
             // Strip all whitespace and newlines for a robust comparison
-            var normalize = function(s) {
+            var normalize = function (s) {
                 return s.replace(/\s/g, '').toLowerCase();
             };
             var normalizedHtml = normalize(html);
             // Only update if content changed significantly
             if (normalizedHtml !== lastAlarmHtml) {
-                 lastAlarmHtml = normalizedHtml;
-                 wrapper.innerHTML = html;
-                 bindDismissButtons(); // Bind listeners to new buttons
+                lastAlarmHtml = normalizedHtml;
+                wrapper.innerHTML = html;
+                bindDismissButtons(); // Bind listeners to new buttons
             }
         });
     }
@@ -300,14 +311,14 @@
         var minutes = now.getMinutes();
         if (minutes < 10) minutes = '0' + minutes;
         var timeStr = hours + ':' + minutes;
-        
+
         var clockEl = document.getElementById('clock');
         if (clockEl) clockEl.innerText = timeStr;
-        
+
         var months = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
         var days = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
         var dateStr = days[now.getDay()] + " " + now.getDate() + " " + months[now.getMonth()];
-        
+
         var dateEl = document.getElementById('date-display');
         if (dateEl) dateEl.innerText = dateStr;
     }
