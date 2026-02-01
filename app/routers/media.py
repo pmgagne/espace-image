@@ -1,3 +1,4 @@
+from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -40,11 +41,8 @@ async def get_image(photo_id: int, mode: str = "modern", session: Session = Depe
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
 
+    optimized_bytes = ImageOptimizer.optimize_path(file_path)
     if mode == "legacy":
-        # Resize logic
-        optimized_io = ImageOptimizer.resize_for_legacy(file_path)
-        return StreamingResponse(optimized_io, media_type="image/jpeg")
-    else:
-        # Serve original
-        with open(file_path, "rb") as f:
-            return Response(content=f.read(), media_type="image/jpeg")  # Or verify mime type
+        return StreamingResponse(BytesIO(optimized_bytes), media_type="image/jpeg")
+
+    return Response(content=optimized_bytes, media_type="image/jpeg")

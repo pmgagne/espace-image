@@ -15,7 +15,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="Gemini Dashboard", lifespan=lifespan)
+app = FastAPI(title="Espace-Image", lifespan=lifespan)
 
 # Ensure static directory exists
 os.makedirs("app/static", exist_ok=True)

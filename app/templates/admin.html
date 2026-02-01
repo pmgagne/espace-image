@@ -7,10 +7,10 @@
 {% block content %}
 <div style="padding: 20px; background: #222; min-height: 100vh; color: #fff;">
     <h1>Admin Panel</h1>
-    <a href="/" style="color: #aaa;">Back to Dashboard</a>
-    
+    <a href="/" style="color: #aaa;">Back to Slideshow</a>
+
     <hr>
-    
+
     <div style="display: flex; flex-wrap: wrap; gap: 20px;">
         <!-- Settings -->
         <div style="background: #333; padding: 20px; border-radius: 8px; flex: 1; min-width: 300px;">
@@ -19,7 +19,7 @@
                 <label>Active Slideshow Preset:</label>
                 <select name="preset_id">
                     {% for preset in presets %}
-                    <option value="{{ preset.id }}" {% if settings.active_preset_id == preset.id %}selected{% endif %}>
+                    <option value="{{ preset.id }}" {% if settings.active_preset_id==preset.id %}selected{% endif %}>
                         {{ preset.name }} ({{ preset.photos|length }} photos)
                     </option>
                     {% endfor %}
@@ -27,7 +27,7 @@
                 <button type="submit">Save</button>
             </form>
         </div>
-        
+
         <!-- Create Preset -->
         <div style="background: #333; padding: 20px; border-radius: 8px; flex: 1; min-width: 300px;">
             <h2>New Preset</h2>
@@ -37,9 +37,9 @@
             </form>
         </div>
     </div>
-    
+
     <hr>
-    
+
     <!-- Upload -->
     <div style="background: #333; padding: 20px; border-radius: 8px;">
         <h2>Upload Photos</h2>
@@ -63,7 +63,7 @@
 
 <script>
     // Include file input logic for this page too
-    document.body.addEventListener('change', function(e) {
+    document.body.addEventListener('change', function (e) {
         if (e.target && e.target.type === 'file') {
             var wrapper = e.target.parentNode;
             if (wrapper.classList.contains('file-input-wrapper')) {

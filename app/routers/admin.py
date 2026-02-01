@@ -37,7 +37,7 @@ async def get_settings_partial(request: Request, session: Session = Depends(get_
 
             url = f"https://nominatim.openstreetmap.org/reverse?lat={settings.weather_latitude}&lon={settings.weather_longitude}&format=json"
             async with httpx.AsyncClient() as client:
-                resp = await client.get(url, headers={"User-Agent": "GeminiDashboard/1.0"})
+                resp = await client.get(url, headers={"User-Agent": "Espace-Image/1.0"})
                 if resp.status_code == 200:
                     data = resp.json()
                     address = data.get("address", {})
@@ -204,8 +204,8 @@ async def upload_photos(
         if not file.filename:
             continue
         content = await file.read()
-        gallery_manager.save_upload(content, file.filename, preset.name)
-        photo = Photo(filename=file.filename, preset_id=preset.id)
+        _path, stored_filename = gallery_manager.save_upload(content, file.filename, preset.name)
+        photo = Photo(filename=stored_filename, preset_id=preset.id)
         session.add(photo)
 
     session.commit()
@@ -218,8 +218,9 @@ async def delete_photo(request: Request, photo_id: int, session: Session = Depen
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
 
-    # We should delete from disk too (TODO: Add method to gallery_manager)
-    # gallery_manager.delete_photo(photo.filename, photo.preset.name)
+    # Delete from disk
+    preset_name = photo.preset.name if photo.preset else "Default"
+    gallery_manager.delete_photo(photo.filename, preset_name)
 
     preset_id = photo.preset_id
     session.delete(photo)
