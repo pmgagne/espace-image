@@ -1,8 +1,8 @@
-# GitHub Copilot Instructions for Espace Image Dashboard
+# GitHub Copilot Instructions for Espace-Image
 
 ## Project Overview
 
-**Espace Image** is a FastAPI-based dashboard application that serves modern and legacy UIs (optimized for iPad 2 / iOS 9.3.5). It features photo slideshows, calendar alarms (iCloud Calendar integration), weather widgets, and HTMX-powered admin interactions.
+**Espace-Image** is a FastAPI-based slideshow application that serves modern and legacy UIs (optimized for iPad 2 / iOS 9.3.5). It features photo slideshows, calendar alarms (iCloud Calendar integration), weather widgets, and HTMX-powered admin interactions.
 
 **Tech Stack:**
 - **Backend:** FastAPI 0.123+, Python 3.13+
@@ -180,7 +180,7 @@ app/
 │   └── session.py       # Session dependency injection
 ├── routers/
 │   ├── admin.py         # Admin panel routes (/admin/*)
-│   ├── dashboard.py     # Main dashboard routes (/, /legacy)
+│   ├── dashboard.py     # Main slideshow routes (/, /legacy)
 │   └── media.py         # Image serving routes (/images/*)
 ├── services/
 │   ├── calendar_service.py  # iCloud Calendar integration
@@ -197,10 +197,10 @@ app/
 └── templates/
     ├── base.html            # Base template (modern pages)
     ├── admin_base.html      # Admin panel base
-    ├── index.html           # Main dashboard (modern)
+    ├── index.html           # Main slideshow (modern)
     ├── admin.html           # Admin panel (fallback non-HTMX)
     ├── legacy/
-    │   └── index.html       # Legacy dashboard (iPad 2 optimized)
+    │   └── index.html       # Legacy slideshow (iPad 2 optimized)
     └── partials/
         ├── calendars.html   # Calendar management partial (HTMX)
         ├── gallery.html     # Gallery management partial (HTMX)

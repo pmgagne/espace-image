@@ -17,7 +17,7 @@ templates = Jinja2Templates(directory="app/templates")
 
 @router.get("/")
 async def read_root(request: Request, session: Session = Depends(get_session)):
-    """Modern Dashboard View"""
+    """Modern Slideshow View"""
     user_agent = request.headers.get("user-agent", "").lower()
     print(f"DEBUG: Incoming User-Agent: {user_agent}")  # Debugging log
 
@@ -34,7 +34,7 @@ async def read_root(request: Request, session: Session = Depends(get_session)):
 
 @router.get("/legacy")
 async def read_legacy(request: Request, session: Session = Depends(get_session)):
-    """Legacy Dashboard View (iPad 2)"""
+    """Legacy Slideshow View (iPad 2)"""
     settings = session.exec(select(AppSettings)).first()
     return templates.TemplateResponse(
         request, "legacy/index.html", {"mode": "legacy", "settings": settings}
