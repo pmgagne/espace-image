@@ -1,23 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gemini Dashboard Admin</title>
-    
+
     <!-- Polyfills for Legacy Browsers (iPad 2 / iOS 9) -->
     <script src="/static/polyfills/promise.min.js"></script>
     <script src="/static/polyfills/fetch.umd.js"></script>
-    
+
     <!-- HTMX (Pure ES5 Version 1.0.0 for iPad 2) -->
     <script src="/static/js/htmx.min.js"></script>
-    
+
     <!-- Shared Admin Form Styles -->
     <link rel="stylesheet" href="/static/css/admin-forms.css">
-    
+
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; background: #1a1a1a; color: #fff; height: 100vh; overflow: hidden; display: flex; }
-        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+        }
+
         /* Sidebar */
         .sidebar {
             width: 250px;
@@ -27,12 +37,25 @@
             flex-direction: column;
             padding: 20px;
         }
-        
-        .sidebar h1 { margin-top: 0; font-size: 1.2rem; color: #ddd; text-transform: uppercase; letter-spacing: 1px; }
-        
-        .nav-links { list-style: none; padding: 0; margin-top: 2rem; }
-        .nav-links li { margin-bottom: 10px; }
-        
+
+        .sidebar h1 {
+            margin-top: 0;
+            font-size: 1.2rem;
+            color: #ddd;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .nav-links {
+            list-style: none;
+            padding: 0;
+            margin-top: 2rem;
+        }
+
+        .nav-links li {
+            margin-bottom: 10px;
+        }
+
         .nav-link {
             display: block;
             padding: 10px 15px;
@@ -42,14 +65,23 @@
             transition: background 0.2s, color 0.2s;
             cursor: pointer;
         }
-        
-        .nav-link:hover, .nav-link.active {
+
+        .nav-link:hover,
+        .nav-link.active {
             background: #333;
             color: #fff;
         }
-        
-        .back-link { margin-top: auto; color: #666; text-decoration: none; font-size: 0.9rem; }
-        .back-link:hover { color: #fff; }
+
+        .back-link {
+            margin-top: auto;
+            color: #666;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .back-link:hover {
+            color: #fff;
+        }
 
         /* Content Area */
         .content {
@@ -59,30 +91,30 @@
         }
     </style>
 </head>
+
 <body>
 
     <nav class="sidebar">
         <h1>Admin Panel</h1>
-        
+
         <ul class="nav-links">
             <li>
-                <a class="nav-link" id="link-settings"
-                   hx-get="/admin/partials/settings" 
-                   hx-target="#admin-content" 
-                   hx-trigger="click">General Settings</a>
+                <a class="nav-link" id="link-settings" hx-get="/admin/partials/settings" hx-target="#admin-content"
+                    hx-trigger="click">General Settings</a>
             </li>
             <li>
-                <a class="nav-link" 
-                   hx-get="/admin/partials/calendars" 
-                   hx-target="#admin-content">Calendars</a>
+                <a class="nav-link" hx-get="/admin/partials/calendars" hx-target="#admin-content">Calendars</a>
             </li>
             <li>
-                <a class="nav-link" 
-                   hx-get="/admin/partials/gallery" 
-                   hx-target="#admin-content">Gallery</a>
+                <a class="nav-link" hx-get="/admin/partials/gallery" hx-target="#admin-content">Gallery</a>
             </li>
+            {% if debug_mode %}
+            <li>
+                <a class="nav-link" hx-get="/admin/partials/debug" hx-target="#admin-content">Debug</a>
+            </li>
+            {% endif %}
         </ul>
-        
+
         <a href="/" class="back-link">← Back to Dashboard</a>
     </nav>
 
@@ -93,7 +125,7 @@
 
     <script>
         // Simple script to toggle active class on sidebar (ES5)
-        document.body.addEventListener('htmx:afterOnLoad', function(evt) {
+        document.body.addEventListener('htmx:afterOnLoad', function (evt) {
             var path = evt.detail.requestConfig.path;
             var links = document.querySelectorAll('.nav-link');
             for (var i = 0; i < links.length; i++) {
@@ -106,13 +138,13 @@
         });
 
         // Auto-load first tab safely (iPad 2 needs a delay)
-        setTimeout(function() {
+        setTimeout(function () {
             var el = document.getElementById('link-settings');
             if (el) el.click();
         }, 800);
 
         // File Input Label Update
-        document.body.addEventListener('change', function(e) {
+        document.body.addEventListener('change', function (e) {
             if (e.target && e.target.type === 'file') {
                 // Find closest label or wrapper text
                 var wrapper = e.target.parentNode;
@@ -131,4 +163,5 @@
         });
     </script>
 </body>
+
 </html>

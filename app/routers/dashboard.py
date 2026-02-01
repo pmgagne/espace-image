@@ -110,7 +110,7 @@ async def check_alarm(mock: bool = False, session: Session = Depends(get_session
             },
         ]
     else:
-        # Real logic
+        # Real logic - fetch from calendar sources
         sources = session.exec(select(CalendarSource)).all()
         if sources:
             urls = [s.url for s in sources]
@@ -122,8 +122,29 @@ async def check_alarm(mock: bool = False, session: Session = Depends(get_session
                     dismissed = session.exec(
                         select(AlarmEvent).where(AlarmEvent.uid == alarm["uid"])
                     ).first()
-                    if not dismissed:
+                    # Only include if alarm hasn't been dismissed
+                    if not dismissed or dismissed.dismissed_at is None:
                         active_alarms.append(alarm)
+
+        # Also fetch simulated alarms from database
+        now = datetime.now()
+        simulated_alarms = session.exec(
+            select(AlarmEvent).where(
+                (AlarmEvent.uid.like("test-%"))
+                & (AlarmEvent.trigger_time <= now)
+                & (AlarmEvent.dismissed_at.is_(None))
+            )
+        ).all()
+
+        for alarm_event in simulated_alarms:
+            active_alarms.append(
+                {
+                    "uid": alarm_event.uid,
+                    "name": "Simulated Event",
+                    "description": "Test alarm for debugging",
+                    "time": alarm_event.trigger_time.strftime("%H:%M"),
+                }
+            )
 
     if not active_alarms:
         return ""
@@ -162,14 +183,21 @@ async def dismiss_alarm(uid: str, mock: bool = False, session: Session = Depends
     """Dismisses an alarm and returns the updated alarm list."""
 
     if not mock:
-        # Check if already dismissed
+        # Check if alarm already exists
         existing = session.exec(select(AlarmEvent).where(AlarmEvent.uid == uid)).first()
-        if not existing:
+        if existing:
+            # Update existing alarm record with dismissal time
+            existing.dismissed_at = datetime.now()
+            session.add(existing)
+        else:
+            # Create new alarm record (for alarms from calendar that haven't been seen yet)
             alarm_event = AlarmEvent(
                 uid=uid, trigger_time=datetime.now(), dismissed_at=datetime.now()
             )
             session.add(alarm_event)
-            session.commit()
+        session.commit()
+        # Refresh session to ensure we get updated data
+        session.expunge_all()
 
     # Return the updated list immediately
     return await check_alarm(mock=mock, session=session)

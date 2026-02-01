@@ -23,6 +23,10 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 templates = Jinja2Templates(directory="app/templates")
 
+# Debug mode flag
+DEBUG_MODE = os.getenv("WEBAPP_DEBUG", "").lower() in ("true", "1", "yes")
+templates.env.globals["debug_mode"] = DEBUG_MODE
+
 # Include Routers
 app.include_router(dashboard.router)
 app.include_router(media.router)
