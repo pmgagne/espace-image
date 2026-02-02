@@ -428,9 +428,13 @@ Copilot should avoid suggesting changes to:
 
 ## Environment Variables
 
+
 ```bash
 # Database (optional, defaults to SQLite in data/)
 DATABASE_URL=sqlite:///./data/app.db
+
+# Logging level (default: WARNING)
+LOG_LEVEL=INFO
 
 # Uvicorn settings
 HOST=0.0.0.0

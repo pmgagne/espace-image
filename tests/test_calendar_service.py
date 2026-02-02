@@ -93,12 +93,12 @@ def test_sync_calendar_events_success(session):
     async def _fake_fetch(url: str) -> str | None:
         return ics_content
 
-    original_fetch = CalendarService.fetch_ics_with_retry
-    CalendarService.fetch_ics_with_retry = _fake_fetch
+    original_fetch = CalendarService.fetch_ics
+    CalendarService.fetch_ics = _fake_fetch
     try:
         asyncio.run(CalendarService.sync_calendar_events(session))
     finally:
-        CalendarService.fetch_ics_with_retry = original_fetch
+        CalendarService.fetch_ics = original_fetch
 
     cached = session.exec(
         select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == source.id)
@@ -125,12 +125,12 @@ def test_sync_calendar_events_failure(session):
     async def _fake_fetch(url: str) -> str | None:
         return None
 
-    original_fetch = CalendarService.fetch_ics_with_retry
-    CalendarService.fetch_ics_with_retry = _fake_fetch
+    original_fetch = CalendarService.fetch_ics
+    CalendarService.fetch_ics = _fake_fetch
     try:
         asyncio.run(CalendarService.sync_calendar_events(session))
     finally:
-        CalendarService.fetch_ics_with_retry = original_fetch
+        CalendarService.fetch_ics = original_fetch
 
     status = session.exec(
         select(CalendarSyncStatusEntry).where(
