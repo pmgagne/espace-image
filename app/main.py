@@ -14,7 +14,8 @@ from app.routers import admin, dashboard, media
 from app.services.calendar_service import CalendarService
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+LOG_LEVEL = os.getenv("LOG_LEVEL", "WARNING").upper()
+logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.WARNING))
 logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler()
