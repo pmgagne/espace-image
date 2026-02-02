@@ -2,6 +2,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
+import backoff
 import httpx
 from icalendar import Calendar
 from sqlmodel import Session, select
@@ -18,6 +19,28 @@ logger = logging.getLogger(__name__)
 
 
 class CalendarService:
+    @staticmethod
+    def _on_backoff(details):
+        """Callback for backoff retry attempts."""
+        tries = details.get("tries", 0)
+        exception = details.get("exception")
+        wait = details.get("wait", 0)
+        logger.info(
+            f"Retrying calendar fetch (attempt {tries}/5): "
+            f"Exception: {exception.__class__.__name__}, "
+            f"waiting {wait:.1f}s"
+        )
+
+    @staticmethod
+    def _on_giveup(details):
+        """Callback when backoff gives up after max retries."""
+        tries = details.get("tries", 0)
+        exception = details.get("exception")
+        logger.warning(
+            f"Failed to fetch ICS after {tries} attempts: "
+            f"{exception.__class__.__name__}: {exception}"
+        )
+
     @staticmethod
     def parse_ics(ics_content: str) -> Calendar | None:
         """Parses ICS content string into a Calendar object."""
@@ -90,8 +113,16 @@ class CalendarService:
         return alarms
 
     @staticmethod
+    @backoff.on_exception(
+        backoff.expo,
+        Exception,
+        max_tries=5,
+        jitter=backoff.full_jitter,
+        on_backoff=lambda details: CalendarService._on_backoff(details),
+        on_giveup=lambda details: CalendarService._on_giveup(details),
+    )
     async def fetch_ics(url: str) -> str | None:
-        """Fetches ICS content from a URL."""
+        """Fetches ICS content from a URL with exponential backoff retry."""
         if url.startswith("webcal://"):
             url = url.replace("webcal://", "https://", 1)
 
@@ -100,14 +131,10 @@ class CalendarService:
             "Accept": "text/calendar,*/*;q=0.8",
         }
 
-        try:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
-                response = await client.get(url, headers=headers)
-                response.raise_for_status()
-                return response.text
-        except Exception as e:
-            logger.warning("Failed to fetch ICS from %s: %s", url, e)
-            return None
+        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return response.text
 
     @staticmethod
     async def get_all_alarms(
@@ -149,59 +176,6 @@ class CalendarService:
                 logger.warning("Skipping calendar %s due to missing content.", source_id)
 
         return all_alarms
-
-    @staticmethod
-    async def fetch_ics_with_retry(
-        url: str, max_retries: int = 3, base_delay: float = 1.0
-    ) -> str | None:
-        """
-        Fetches ICS content with exponential backoff retry for 503 errors.
-        Returns None on persistent failure.
-        """
-        if url.startswith("webcal://"):
-            url = url.replace("webcal://", "https://", 1)
-
-        headers = {
-            "User-Agent": "Espace-Image/1.0 (+https://github.com/pmgagne/espace-image)",
-            "Accept": "text/calendar,*/*;q=0.8",
-        }
-
-        for attempt in range(max_retries):
-            try:
-                async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
-                    response = await client.get(url, headers=headers)
-                    if response.status_code == 503:
-                        # Rate limited or temporarily unavailable
-                        if attempt < max_retries - 1:
-                            delay = base_delay * (2**attempt)
-                            logger.info(
-                                f"Got 503 from {url}, retrying in {delay}s (attempt {attempt + 1}/{max_retries})"
-                            )
-                            await asyncio.sleep(delay)
-                            continue
-                        else:
-                            logger.warning(
-                                f"Failed to fetch {url} after {max_retries} retries (503)"
-                            )
-                            return None
-                    response.raise_for_status()
-                    return response.text
-            except TimeoutError:
-                if attempt < max_retries - 1:
-                    delay = base_delay * (2**attempt)
-                    logger.info(
-                        f"Timeout fetching {url}, retrying in {delay}s (attempt {attempt + 1}/{max_retries})"
-                    )
-                    await asyncio.sleep(delay)
-                    continue
-                else:
-                    logger.warning(f"Failed to fetch {url} after {max_retries} retries (timeout)")
-                    return None
-            except Exception as e:
-                logger.warning(f"Failed to fetch {url}: {e}")
-                return None
-
-        return None
 
     @staticmethod
     def extract_events_from_ics(
@@ -288,13 +262,13 @@ class CalendarService:
         session.commit()
 
         try:
-            ics_content = await CalendarService.fetch_ics_with_retry(source.url)
+            ics_content = await CalendarService.fetch_ics(source.url)
 
             if ics_content is None:
                 sync_status.sync_status = CalendarSyncStatus.FAILED
                 sync_status.error_count += 1
                 sync_status.last_error_at = utc_now
-                sync_status.error_message = "Failed to fetch ICS after retries"
+                sync_status.error_message = "Failed to fetch ICS after 5 attempts"
                 session.add(sync_status)
                 session.commit()
                 logger.warning(f"Failed to sync calendar {source_id}: {source.label}")
@@ -312,10 +286,25 @@ class CalendarService:
             for existing_event in existing:
                 session.delete(existing_event)
 
+            session.flush()
+
+            latest_by_uid: dict[str, dict] = {}
             for event in events:
+                uid = event["uid"]
+                if uid not in latest_by_uid:
+                    latest_by_uid[uid] = event
+                    continue
+                existing = latest_by_uid[uid]
+                if event["event_end"] > existing["event_end"] or (
+                    event["event_end"] == existing["event_end"]
+                    and event["event_start"] > existing["event_start"]
+                ):
+                    latest_by_uid[uid] = event
+
+            for uid, event in latest_by_uid.items():
                 cache_entry = CalendarEventCache(
                     calendar_source_id=source_id,
-                    uid=event["uid"],
+                    uid=uid,
                     event_start=event["event_start"],
                     event_end=event["event_end"],
                     summary=event["summary"],
@@ -339,7 +328,7 @@ class CalendarService:
             )
 
         except Exception as e:
-            logger.exception(f"Error syncing calendar {source_id}: {e}")
+            logger.error(f"Error syncing calendar {source_id}: {e}")
             sync_status.sync_status = CalendarSyncStatus.FAILED
             sync_status.error_count += 1
             sync_status.last_error_at = utc_now

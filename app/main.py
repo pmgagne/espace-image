@@ -1,3 +1,4 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -12,6 +13,10 @@ from app.db.engine import create_db_and_tables, engine
 from app.routers import admin, dashboard, media
 from app.services.calendar_service import CalendarService
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 scheduler = AsyncIOScheduler()
 
 
@@ -21,9 +26,6 @@ async def background_sync_calendars():
     try:
         await CalendarService.sync_calendar_events(session)
     except Exception as e:
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.exception(f"Error in background calendar sync: {e}")
     finally:
         session.close()
