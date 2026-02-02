@@ -4,6 +4,15 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 from icalendar import Calendar
+from sqlmodel import Session, select
+
+from app.db.models import (
+    AlarmEvent,
+    CalendarEventCache,
+    CalendarSource,
+    CalendarSyncStatus,
+    CalendarSyncStatusEntry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,9 +95,14 @@ class CalendarService:
         if url.startswith("webcal://"):
             url = url.replace("webcal://", "https://", 1)
 
+        headers = {
+            "User-Agent": "Espace-Image/1.0 (+https://github.com/pmgagne/espace-image)",
+            "Accept": "text/calendar,*/*;q=0.8",
+        }
+
         try:
-            async with httpx.AsyncClient(follow_redirects=True) as client:
-                response = await client.get(url)
+            async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+                response = await client.get(url, headers=headers)
                 response.raise_for_status()
                 return response.text
         except Exception as e:
@@ -135,3 +149,245 @@ class CalendarService:
                 logger.warning("Skipping calendar %s due to missing content.", source_id)
 
         return all_alarms
+
+    @staticmethod
+    async def fetch_ics_with_retry(
+        url: str, max_retries: int = 3, base_delay: float = 1.0
+    ) -> str | None:
+        """
+        Fetches ICS content with exponential backoff retry for 503 errors.
+        Returns None on persistent failure.
+        """
+        if url.startswith("webcal://"):
+            url = url.replace("webcal://", "https://", 1)
+
+        headers = {
+            "User-Agent": "Espace-Image/1.0 (+https://github.com/pmgagne/espace-image)",
+            "Accept": "text/calendar,*/*;q=0.8",
+        }
+
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+                    response = await client.get(url, headers=headers)
+                    if response.status_code == 503:
+                        # Rate limited or temporarily unavailable
+                        if attempt < max_retries - 1:
+                            delay = base_delay * (2**attempt)
+                            logger.info(
+                                f"Got 503 from {url}, retrying in {delay}s (attempt {attempt + 1}/{max_retries})"
+                            )
+                            await asyncio.sleep(delay)
+                            continue
+                        else:
+                            logger.warning(
+                                f"Failed to fetch {url} after {max_retries} retries (503)"
+                            )
+                            return None
+                    response.raise_for_status()
+                    return response.text
+            except TimeoutError:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2**attempt)
+                    logger.info(
+                        f"Timeout fetching {url}, retrying in {delay}s (attempt {attempt + 1}/{max_retries})"
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    logger.warning(f"Failed to fetch {url} after {max_retries} retries (timeout)")
+                    return None
+            except Exception as e:
+                logger.warning(f"Failed to fetch {url}: {e}")
+                return None
+
+        return None
+
+    @staticmethod
+    def extract_events_from_ics(
+        ics_content: str, source_id: int, window_start: datetime, window_end: datetime
+    ) -> list[dict]:
+        """
+        Parses ICS content and extracts events within the given time window.
+        Returns list of event dicts with keys: uid, event_start, event_end, summary, description, location.
+        """
+        events = []
+        cal = CalendarService.parse_ics(ics_content)
+        if not cal:
+            return events
+
+        for component in cal.walk():
+            if component.name == "VEVENT":
+                uid = component.get("uid")
+                summary = component.get("summary", "")
+                description = component.get("description", "")
+                location = component.get("location", "")
+                dtstart = component.get("dtstart")
+                dtend = component.get("dtend")
+
+                if not dtstart:
+                    continue
+
+                event_start = dtstart.dt
+                event_end = dtend.dt if dtend else event_start
+
+                # Normalize to datetime if date object
+                if not isinstance(event_start, datetime):
+                    event_start = datetime.combine(event_start, datetime.min.time(), tzinfo=UTC)
+                elif event_start.tzinfo is None:
+                    event_start = event_start.replace(tzinfo=UTC)
+
+                if not isinstance(event_end, datetime):
+                    event_end = datetime.combine(event_end, datetime.min.time(), tzinfo=UTC)
+                elif event_end.tzinfo is None:
+                    event_end = event_end.replace(tzinfo=UTC)
+
+                # Check if event overlaps with window [window_start, window_end]
+                if event_start <= window_end and event_end >= window_start:
+                    events.append(
+                        {
+                            "uid": str(uid),
+                            "event_start": event_start,
+                            "event_end": event_end,
+                            "summary": str(summary),
+                            "description": str(description),
+                            "location": str(location),
+                            "source_id": source_id,
+                        }
+                    )
+
+        return events
+
+    @staticmethod
+    async def _sync_single_source(
+        session: Session,
+        source: CalendarSource,
+        utc_now: datetime,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> None:
+        """Sync a single calendar source: fetch, parse, upsert cache, update status."""
+        source_id = source.id
+
+        # Get or create sync status
+        sync_status = session.exec(
+            select(CalendarSyncStatusEntry).where(
+                CalendarSyncStatusEntry.calendar_source_id == source_id
+            )
+        ).first()
+
+        if not sync_status:
+            sync_status = CalendarSyncStatusEntry(calendar_source_id=source_id)
+            session.add(sync_status)
+            session.commit()
+            session.refresh(sync_status)
+
+        # Mark as syncing
+        sync_status.sync_status = CalendarSyncStatus.SYNCING
+        session.add(sync_status)
+        session.commit()
+
+        try:
+            ics_content = await CalendarService.fetch_ics_with_retry(source.url)
+
+            if ics_content is None:
+                sync_status.sync_status = CalendarSyncStatus.FAILED
+                sync_status.error_count += 1
+                sync_status.last_error_at = utc_now
+                sync_status.error_message = "Failed to fetch ICS after retries"
+                session.add(sync_status)
+                session.commit()
+                logger.warning(f"Failed to sync calendar {source_id}: {source.label}")
+                return
+
+            events = CalendarService.extract_events_from_ics(
+                ics_content, source_id, window_start, window_end
+            )
+
+            # Remove cached events for this source (we'll re-insert)
+            existing = session.exec(
+                select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == source_id)
+            ).all()
+
+            for existing_event in existing:
+                session.delete(existing_event)
+
+            for event in events:
+                cache_entry = CalendarEventCache(
+                    calendar_source_id=source_id,
+                    uid=event["uid"],
+                    event_start=event["event_start"],
+                    event_end=event["event_end"],
+                    summary=event["summary"],
+                    description=event["description"],
+                    location=event["location"],
+                )
+                session.add(cache_entry)
+
+            session.commit()
+
+            sync_status.sync_status = CalendarSyncStatus.SUCCESS
+            sync_status.last_synced_at = utc_now
+            sync_status.next_sync_at = utc_now + timedelta(minutes=10)
+            sync_status.error_count = 0
+            sync_status.error_message = ""
+            session.add(sync_status)
+            session.commit()
+
+            logger.info(
+                f"Successfully synced calendar {source_id} ({source.label}): {len(events)} events"
+            )
+
+        except Exception as e:
+            logger.exception(f"Error syncing calendar {source_id}: {e}")
+            sync_status.sync_status = CalendarSyncStatus.FAILED
+            sync_status.error_count += 1
+            sync_status.last_error_at = utc_now
+            sync_status.error_message = str(e)
+            session.add(sync_status)
+            session.commit()
+
+    @staticmethod
+    async def sync_calendar_events(session: Session) -> None:
+        """
+        Background task: Fetches all calendar sources and caches events within the 1-week window.
+        Automatically purges events outside the window and handles errors gracefully.
+        """
+        utc_now = datetime.now(UTC)
+        window_start = utc_now - timedelta(days=7)
+        window_end = utc_now + timedelta(days=7)
+
+        sources = session.exec(select(CalendarSource)).all()
+        if not sources:
+            logger.info("No calendar sources configured.")
+            return
+
+        logger.info(f"Starting background sync for {len(sources)} calendar sources.")
+
+        for source in sources:
+            if not source.id:
+                continue
+
+            await CalendarService._sync_single_source(
+                session, source, utc_now, window_start, window_end
+            )
+
+        # Auto-cleanup: Purge dismissed events outside the window
+        try:
+            old_dismissed = session.exec(
+                select(AlarmEvent).where(
+                    (AlarmEvent.dismissed_at.is_not(None))
+                    & (AlarmEvent.trigger_time < window_start)
+                )
+            ).all()
+
+            for alarm in old_dismissed:
+                session.delete(alarm)
+
+            if old_dismissed:
+                session.commit()
+                logger.info(f"Purged {len(old_dismissed)} dismissed events outside window")
+        except Exception as e:
+            logger.warning(f"Error purging old dismissed events: {e}")
+
+        logger.info("Background sync completed.")

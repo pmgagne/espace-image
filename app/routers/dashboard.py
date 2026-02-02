@@ -6,9 +6,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
-from app.db.models import AlarmEvent, AppSettings, CalendarSource, Photo
+from app.db.models import AlarmEvent, AppSettings, CalendarEventCache, Photo
 from app.db.session import get_session
-from app.services.calendar_service import CalendarService
 from app.services.weather_service import WeatherService
 
 router = APIRouter()
@@ -103,54 +102,49 @@ def _purge_old_dismissed_alarms(session: Session) -> None:
         session.commit()
 
 
-async def _fetch_calendar_alarms(session: Session, tz_offset: int | None = None) -> list[dict]:
-    """Fetch alarms from calendar sources and filter dismissed ones."""
+async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None) -> list[dict]:
+    """Fetch alarms from cached calendar events and filter dismissed ones."""
     import logging
 
     logger = logging.getLogger(__name__)
     active_alarms = []
 
-    sources = session.exec(select(CalendarSource)).all()
-    if not sources:
-        return active_alarms
-
-    tz_offset_minutes = tz_offset if tz_offset is not None else 0
+    # Query cached events within window (past 7 days to future 7 days)
     utc_now = datetime.now(UTC)
-    device_now = (utc_now - timedelta(minutes=tz_offset_minutes)).replace(tzinfo=None)
-    device_midnight = device_now.replace(hour=0, minute=0, second=0, microsecond=0)
-    device_midnight_utc = (device_midnight + timedelta(minutes=tz_offset_minutes)).replace(
-        tzinfo=UTC
-    )
-    lookback_minutes = max(
-        int((utc_now - device_midnight_utc).total_seconds() / 60),
-        0,
-    )
+    window_start = utc_now - timedelta(days=7)
+    window_end = utc_now + timedelta(days=7)
 
-    logger.info(
-        f"Alarm check: tz_offset={tz_offset_minutes}min, utc_now={utc_now}, "
-        f"device_now={device_now}, lookback={lookback_minutes}min"
-    )
+    cached_events = session.exec(
+        select(CalendarEventCache).where(
+            (CalendarEventCache.event_start >= window_start)
+            & (CalendarEventCache.event_start <= window_end)
+        )
+    ).all()
 
-    source_pairs = [
-        (s.id if s.id is not None else index + 1, s.url) for index, s in enumerate(sources)
-    ]
-    alarms = await CalendarService.get_all_alarms(
-        source_pairs,
-        check_time=utc_now,
-        lookback_minutes=lookback_minutes,
-        tz_offset_minutes=tz_offset_minutes,
-    )
-    logger.info(f"Fetched {len(alarms)} alarms: {[(a['uid'], a['begin']) for a in alarms]}")
+    logger.info(f"Found {len(cached_events)} cached events in window")
 
-    # Filter out dismissed alarms
-    for alarm in alarms:
-        dismissed = session.exec(select(AlarmEvent).where(AlarmEvent.uid == alarm["uid"])).first()
-        if not dismissed and ":" in alarm["uid"]:
-            raw_uid = alarm["uid"].split(":", 1)[1]
-            dismissed = session.exec(select(AlarmEvent).where(AlarmEvent.uid == raw_uid)).first()
-        # Only include if alarm hasn't been dismissed
+    # Convert cached events to alarm format
+    for event in cached_events:
+        # Create composite UID: source_id:uid
+        composite_uid = f"{event.calendar_source_id}:{event.uid}"
+
+        # Check if dismissed
+        dismissed = session.exec(select(AlarmEvent).where(AlarmEvent.uid == composite_uid)).first()
+
+        # Fallback: also check raw uid without source_id prefix
+        if not dismissed:
+            dismissed = session.exec(select(AlarmEvent).where(AlarmEvent.uid == event.uid)).first()
+
+        # Only include if not dismissed
         if not dismissed or dismissed.dismissed_at is None:
-            active_alarms.append(alarm)
+            active_alarms.append(
+                {
+                    "uid": composite_uid,
+                    "name": event.summary,
+                    "begin": event.event_start,
+                    "description": event.description or event.location or "",
+                }
+            )
 
     return active_alarms
 

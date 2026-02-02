@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -5,8 +6,17 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
-from app.db.models import AlarmEvent, AppSettings, CalendarSource, Photo, Preset
+from app.db.engine import engine
+from app.db.models import (
+    AlarmEvent,
+    AppSettings,
+    CalendarSource,
+    CalendarSyncStatusEntry,
+    Photo,
+    Preset,
+)
 from app.db.session import get_session
+from app.services.calendar_service import CalendarService
 from app.services.image_service import GalleryManager
 from app.services.weather_service import WeatherService
 
@@ -123,7 +133,20 @@ async def update_settings(
 @router.get("/partials/calendars", response_class=HTMLResponse)
 async def get_calendars_partial(request: Request, session: Session = Depends(get_session)):
     sources = session.exec(select(CalendarSource)).all()
-    return templates.TemplateResponse(request, "partials/calendars.html", {"sources": sources})
+    sync_statuses = {}
+    for source in sources:
+        if source.id:
+            status = session.exec(
+                select(CalendarSyncStatusEntry).where(
+                    CalendarSyncStatusEntry.calendar_source_id == source.id
+                )
+            ).first()
+            sync_statuses[source.id] = status
+    return templates.TemplateResponse(
+        request,
+        "partials/calendars.html",
+        {"sources": sources, "sync_statuses": sync_statuses},
+    )
 
 
 @router.post("/calendars", response_class=HTMLResponse)
@@ -148,6 +171,23 @@ async def delete_calendar(
     if source:
         session.delete(source)
         session.commit()
+    return await get_calendars_partial(request, session)
+
+
+@router.post("/calendars/sync-now", response_class=HTMLResponse)
+async def sync_calendars_now(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    """Manually trigger calendar synchronization."""
+
+    async def _run_sync() -> None:
+        with Session(engine) as sync_session:
+            await CalendarService.sync_calendar_events(sync_session)
+
+    _task = asyncio.create_task(_run_sync())
+    # Ensure any exception is not swallowed silently
+    _task.add_done_callback(lambda fut: fut.exception())
     return await get_calendars_partial(request, session)
 
 

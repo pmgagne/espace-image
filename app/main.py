@@ -1,18 +1,55 @@
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlmodel import Session
 
-from app.db.engine import create_db_and_tables
+from app.db.engine import create_db_and_tables, engine
 from app.routers import admin, dashboard, media
+from app.services.calendar_service import CalendarService
+
+scheduler = AsyncIOScheduler()
+
+
+async def background_sync_calendars():
+    """Background task to sync calendar events every 10 minutes."""
+    session = Session(engine)
+    try:
+        await CalendarService.sync_calendar_events(session)
+    except Exception as e:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.exception(f"Error in background calendar sync: {e}")
+    finally:
+        session.close()
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Startup
     create_db_and_tables()
+
+    # Start the APScheduler
+    scheduler.add_job(
+        background_sync_calendars,
+        "interval",
+        minutes=10,
+        id="calendar_sync",
+        name="Sync calendar events every 10 minutes",
+        next_run_time=datetime.now(),
+    )
+    scheduler.start()
+
     yield
+
+    # Shutdown
+    if scheduler.running:
+        scheduler.shutdown()
 
 
 app = FastAPI(title="Espace-Image", lifespan=lifespan)
