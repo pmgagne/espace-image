@@ -1,5 +1,14 @@
-from datetime import UTC, datetime
+import asyncio
+from datetime import UTC, datetime, timedelta
 
+from sqlmodel import select
+
+from app.db.models import (
+    CalendarEventCache,
+    CalendarSource,
+    CalendarSyncStatus,
+    CalendarSyncStatusEntry,
+)
 from app.services.calendar_service import CalendarService
 
 # Sample ICS content
@@ -53,3 +62,82 @@ def test_no_upcoming_alarms():
     alarms = CalendarService.get_upcoming_alarms(calendar, now, lookahead_minutes=15)
 
     assert len(alarms) == 0
+
+
+def _build_ics(start: datetime, end: datetime) -> str:
+    return f"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Espace-Image//EN
+BEGIN:VEVENT
+UID:event-dynamic@example.com
+DTSTAMP:{start.strftime("%Y%m%dT%H%M%SZ")}
+DTSTART:{start.strftime("%Y%m%dT%H%M%SZ")}
+DTEND:{end.strftime("%Y%m%dT%H%M%SZ")}
+SUMMARY:Dynamic Event
+DESCRIPTION:Test event
+END:VEVENT
+END:VCALENDAR"""
+
+
+def test_sync_calendar_events_success(session):
+    now = datetime.now(UTC)
+    start = now + timedelta(hours=1)
+    end = now + timedelta(hours=2)
+    ics_content = _build_ics(start, end)
+
+    source = CalendarSource(label="Test", url="webcal://example.com/test.ics")
+    session.add(source)
+    session.commit()
+    session.refresh(source)
+
+    async def _fake_fetch(url: str) -> str | None:
+        return ics_content
+
+    original_fetch = CalendarService.fetch_ics_with_retry
+    CalendarService.fetch_ics_with_retry = _fake_fetch
+    try:
+        asyncio.run(CalendarService.sync_calendar_events(session))
+    finally:
+        CalendarService.fetch_ics_with_retry = original_fetch
+
+    cached = session.exec(
+        select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == source.id)
+    ).all()
+
+    assert len(cached) == 1
+
+    status = session.exec(
+        select(CalendarSyncStatusEntry).where(
+            CalendarSyncStatusEntry.calendar_source_id == source.id
+        )
+    ).first()
+
+    assert status is not None
+    assert status.sync_status == CalendarSyncStatus.SUCCESS
+
+
+def test_sync_calendar_events_failure(session):
+    source = CalendarSource(label="Test", url="webcal://example.com/test.ics")
+    session.add(source)
+    session.commit()
+    session.refresh(source)
+
+    async def _fake_fetch(url: str) -> str | None:
+        return None
+
+    original_fetch = CalendarService.fetch_ics_with_retry
+    CalendarService.fetch_ics_with_retry = _fake_fetch
+    try:
+        asyncio.run(CalendarService.sync_calendar_events(session))
+    finally:
+        CalendarService.fetch_ics_with_retry = original_fetch
+
+    status = session.exec(
+        select(CalendarSyncStatusEntry).where(
+            CalendarSyncStatusEntry.calendar_source_id == source.id
+        )
+    ).first()
+
+    assert status is not None
+    assert status.sync_status == CalendarSyncStatus.FAILED
+    assert status.error_count >= 1
