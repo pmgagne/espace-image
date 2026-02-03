@@ -6,34 +6,9 @@ from app.db.engine import create_db_and_tables, engine
 from app.db.models import AppSettings, Preset
 
 
-def _run_alembic_upgrade():
-    """Run Alembic migrations programmatically using Alembic's API.
-
-    Falls back silently if Alembic is not installed.
-    """
-    try:
-        from alembic.config import Config
-
-        from alembic import command
-    except Exception:  # ImportError or similar
-        print("Alembic not installed; skipping automatic migrations.")
-        return
-
-    cfg = Config("alembic.ini")
-    try:
-        print("Running Alembic migrations (programmatic): upgrade head")
-        command.upgrade(cfg, "head")
-        print("Alembic migrations applied successfully.")
-    except Exception as e:
-        print(f"Alembic migration failed: {e}")
-
-
 def init():
     print("Initializing database...")
     create_db_and_tables()
-
-    # Attempt to run Alembic migrations to update existing schemas
-    _run_alembic_upgrade()
 
     with Session(engine) as session:
         # Check for existing default preset to avoid duplicates
