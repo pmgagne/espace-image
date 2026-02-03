@@ -1,11 +1,3 @@
-.alarm-time-small {
-font-size: 1rem;
-color: #ccc;
-display: block;
-margin-top: 2px;
-font-weight: 400;
-letter-spacing: 0.5px;
-}
 {% extends "base.html" %}
 
 {% block head %}
@@ -19,6 +11,8 @@ letter-spacing: 0.5px;
         background: #000;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
+
+
 
     /* --- Layer 1: Slideshow --- */
     .slideshow-container {
@@ -100,6 +94,16 @@ letter-spacing: 0.5px;
 
         color: #fff;
         min-width: 300px;
+    }
+
+    /* Small timestamp used for alarm items */
+    .alarm-time-small {
+        font-size: 1rem;
+        color: #ccc;
+        display: block;
+        margin-top: 2px;
+        font-weight: 400;
+        letter-spacing: 0.5px;
     }
 
     /* --- Layer 3: Persistent Alarm Box (Bottom Center) --- */
@@ -289,6 +293,20 @@ letter-spacing: 0.5px;
         font-size: 0.8rem;
     }
 </style>
+
+<link rel="manifest" href="/static/manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/espaceimage-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/static/espaceimage-512.png">
+<link rel="icon" href="/static/espaceimage-512.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/espaceimage-192.png">
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/static/sw.js');
+        });
+    }
+</script>
+
 {% endblock %}
 
 {% block content %}

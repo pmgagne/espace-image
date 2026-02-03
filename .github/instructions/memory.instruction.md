@@ -4,6 +4,25 @@ applyTo: '**'
 
 # Memory Bank: Espace-Image
 
+## 2026-02-03 — Migration PWA & Branding Espace-Image
+
+- Ajout du support PWA pour moderne, legacy et admin : manifestes dédiés, icônes SVG/PNG, service worker minimal, balises meta/link dans les templates.
+- Suppression des anciens fichiers et références "gemini", tout renommé en "espaceimage".
+- Documentation d’installation et note sur la conversion SVG→PNG dans `PWA-INSTALL.md`.
+- Conversion SVG→PNG optimisée à faire localement (voir note et commandes dans la doc).
+- Linting et formatage à faire avec `ruff` (voir instructions fournies).
+- PR créée : "Add PWA support and Espace-Image icons".
+
+### Standards et rappels
+- Respecter les conventions Python (voir `python.instructions.md`).
+- Toujours mettre à jour la Memory Bank après une évolution majeure ou une PR.
+- Documenter les limitations techniques (ex : impossibilité d’exécuter certains outils dans l’environnement distant).
+
+### Prochaines étapes
+- Conversion SVG→PNG à finaliser localement.
+- Vérifier le lint/format Python régulièrement.
+- Continuer à documenter toute évolution ou décision importante ici.
+
 ## Project Context
 
 - FastAPI-based slideshow app with calendar alarms, weather, and legacy iPad 2 support.
