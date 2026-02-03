@@ -1,40 +1,46 @@
-# Installation Espace-Image sur écran d’accueil (iPad/PC)
 
-## Version moderne
-1. Ouvrez l’URL principale dans Safari (iPad/iPhone) ou Chrome/Edge (PC).
-2. Cliquez sur le bouton de partage (Safari) ou le menu (Chrome).
-3. Sélectionnez « Ajouter à l’écran d’accueil ».
-4. L’icône Espace-Image apparaîtra sur le bureau, ouvrant l’app en plein écran.
+# Espace-Image Home Screen Installation (iPad/PC)
 
-## Version legacy
-1. Ouvrez l’URL `/legacy` dans le navigateur.
-2. Répétez les étapes ci-dessus pour l’ajouter à l’écran d’accueil.
+## Modern Version
+
+1. Open the main URL in Safari (iPad/iPhone) or Chrome/Edge (PC).
+2. Click the share button (Safari) or the menu (Chrome).
+3. Select "Add to Home Screen".
+4. The Espace-Image icon will appear on your desktop, opening the app in full screen.
+
+## Legacy Version
+
+1. Open the `/legacy` URL in your browser.
+2. Repeat the steps above to add it to your home screen.
 
 ## Admin
-1. Ouvrez l’URL `/admin` dans le navigateur.
-2. Utilisez « Ajouter à l’écran d’accueil » comme pour les autres pages.
-3. L’app admin ouvrira en mode standalone avec l'icône Espace-Image Admin.
 
-## Fonctionnalités PWA
-- Icône personnalisée
-- Mode plein écran
-- Fonctionne hors-ligne (cache statique)
-- Service worker minimal
+1. Open the `/admin` URL in your browser.
+2. Use "Add to Home Screen" as with the other pages.
+3. The admin app will open in standalone mode with the Espace-Image Admin icon.
+
+## PWA Features
+
+- Custom icon
+- Full screen mode
+- Works offline (static cache)
+- Minimal service worker
 
 ## Notes
-- Testé sur iPad (Safari) et PC (Chrome/Edge).
-- Pour une expérience optimale, utilisez la version moderne sur les appareils récents.
 
-## Note — Conversion SVG → PNG (à faire plus tard)
+- Tested on iPad (Safari) and PC (Chrome/Edge).
+- For the best experience, use the modern version on recent devices.
 
-Les icônes vectorielles `app/static/espaceimage-192.svg` et `app/static/espaceimage-512.svg` sont présentes.
-Si vous voulez des PNG raster optimisés (pour compatibilité maximale), exécutez localement :
+## Note — SVG → PNG Conversion (to do later)
+
+The vector icons `app/static/espaceimage-192.svg` and `app/static/espaceimage-512.svg` are present.
+If you want optimized raster PNGs (for maximum compatibility), run locally:
 
 ```bash
-python3 -m pip install --user cairosvg
-python3 -m cairosvg app/static/espaceimage-192.svg -o app/static/espaceimage-192.png -w 192 -h 192
-python3 -m cairosvg app/static/espaceimage-512.svg -o app/static/espaceimage-512.png -w 512 -h 512
+uv add --dev cairosvg
+uv run cairosvg app/static/espaceimage-192.svg -o app/static/espaceimage-192.png -W 192 -H 192
+uv run cairosvg app/static/espaceimage-512.svg -o app/static/espaceimage-512.png -W 512 -H 512
 ls -la app/static/espaceimage-*
 ```
 
-Note : l'environnement d'édition distant peut bloquer l'installation d'outils (erreur FS). Exécutez ces commandes sur votre machine locale si nécessaire.
+Note: The remote editing environment may block tool installation (FS error). Run these commands on your local machine if needed.
