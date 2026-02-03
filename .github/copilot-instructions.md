@@ -23,3 +23,8 @@
 - Calendar sources: iCloud/ICS URLs stored in CalendarSource; background sync every 10 minutes.
 - Weather: WeatherService hits Open-Meteo; admin geocoding uses Nominatim (see app/routers/admin.py).
 - Env flags: LOG_LEVEL (logging), WEBAPP_DEBUG (template debug flag), DATABASE_URL (SQLite by default).
+
+## Documentation Maintenance
+- Always keep the `docs/` folder up to date with any changes to database schema, business logic, algorithms, or workflows.
+- Update relevant documentation files (e.g., `docs/db/DB.md`) whenever you modify models, event/alarm logic, or system patterns.
+- Documentation must be clear and actionable for LLM agents and human developers.

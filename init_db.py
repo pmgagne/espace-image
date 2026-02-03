@@ -1,3 +1,5 @@
+import sys
+
 from sqlmodel import Session, select
 
 from app.db.engine import create_db_and_tables, engine
@@ -41,4 +43,9 @@ def init():
 
 
 if __name__ == "__main__":
-    init()
+    # Ensure script runs with the project's working directory on sys.path
+    try:
+        init()
+    except Exception:
+        print("init_db encountered an error", file=sys.stderr)
+        raise
