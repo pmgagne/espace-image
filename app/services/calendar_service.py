@@ -70,7 +70,9 @@ class CalendarService:
             return datetime.combine(val, datetime.min.time(), tzinfo=UTC)
 
         @staticmethod
-        def _expand_event_recurrences(component, base_start: datetime, window_start: datetime, window_end: datetime) -> list[datetime]:  # noqa: C901
+        def _expand_event_recurrences(
+            component, base_start: datetime, window_start: datetime, window_end: datetime
+        ) -> list[datetime]:  # noqa: C901
             """Return a list of occurrence datetimes for a VEVENT component within window."""
             occurrences: list[datetime] = []
             try:
@@ -248,7 +250,7 @@ class CalendarService:
     @staticmethod
     def extract_events_from_ics(
         ics_content: str, source_id: int, window_start: datetime, window_end: datetime
-    ) -> list[dict]:  # noqa: C901
+    ) -> list[dict]:
         """
         Parses ICS content and extracts events within the given time window.
         Returns list of event dicts with keys: uid, event_start, event_end, summary, description, location.
@@ -278,7 +280,9 @@ class CalendarService:
 
             has_non_time_alarm = CalendarService._has_non_time_alarm(component)
 
-            occurrences = CalendarService._expand_event_recurrences(component, base_start, window_start, window_end)
+            occurrences = CalendarService._expand_event_recurrences(
+                component, base_start, window_start, window_end
+            )
 
             results: list[dict] = []
 

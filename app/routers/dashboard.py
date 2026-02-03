@@ -219,9 +219,13 @@ def _render_alarms_html(
         except Exception:
             pass
 
-        fallback_text = _format_fallback_datetime(alarm.get("start"), alarm.get("end"), all_day, start_iso)
+        fallback_text = _format_fallback_datetime(
+            alarm.get("start"), alarm.get("end"), all_day, start_iso
+        )
 
-        alarms_html += _render_alarm_item(alarm, fallback_text, start_iso, end_iso, all_day, mock, tz_query)
+        alarms_html += _render_alarm_item(
+            alarm, fallback_text, start_iso, end_iso, all_day, mock, tz_query
+        )
 
     return f"""
     <div id="alarm-box" class="alarm-box-container">
@@ -294,7 +298,15 @@ def _format_fallback_datetime(dt_obj, end_obj, all_day_flag: bool, start_iso_str
         return start_iso_str or ""
 
 
-def _render_alarm_item(alarm: dict, fallback_text: str, start_iso: str, end_iso: str, all_day: bool, mock: bool, tz_query: str) -> str:
+def _render_alarm_item(
+    alarm: dict,
+    fallback_text: str,
+    start_iso: str,
+    end_iso: str,
+    all_day: bool,
+    mock: bool,
+    tz_query: str,
+) -> str:
     """Render a single alarm item HTML snippet."""
     uid = alarm.get("uid")
     name = alarm.get("name", "")
