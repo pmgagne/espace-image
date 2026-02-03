@@ -443,8 +443,29 @@ async def dismiss_alarm(
             session.add(existing)
         else:
             # Create new alarm record (for alarms from calendar that haven't been seen yet)
+            # Try to find a matching cached calendar event to preserve the event's start time
+            trigger_time = datetime.now()
+            try:
+                # CalendarEventCache stores events with calendar_source_id + uid as composite in the UI
+                # Try both composite and raw uid lookups
+                cached = session.exec(
+                    select(CalendarEventCache).where(CalendarEventCache.uid == uid)
+                ).first()
+                if not cached and uid and ":" in uid:
+                    # Try to split composite UID and lookup by raw uid
+                    _src, raw_uid = uid.split(":", 1)
+                    cached = session.exec(
+                        select(CalendarEventCache).where(CalendarEventCache.uid == raw_uid)
+                    ).first()
+
+                if cached:
+                    trigger_time = cached.event_start
+            except Exception:
+                # Fall back to now on any DB lookup error
+                trigger_time = datetime.now()
+
             alarm_event = AlarmEvent(
-                uid=uid, trigger_time=datetime.now(), dismissed_at=datetime.now()
+                uid=uid, trigger_time=trigger_time, dismissed_at=datetime.now()
             )
             session.add(alarm_event)
         session.commit()
