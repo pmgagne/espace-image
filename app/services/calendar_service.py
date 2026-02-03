@@ -43,7 +43,7 @@ class CalendarService:
         )
 
     @staticmethod
-    def parse_ics(ics_content: str) -> Calendar | None:  # noqa: C901
+    def parse_ics(ics_content: str) -> Calendar | None:
         """Parses ICS content string into a Calendar object."""
         try:
             return Calendar.from_ical(ics_content)
@@ -51,74 +51,71 @@ class CalendarService:
             logger.warning("Failed to parse ICS content: %s", e)
             return None
 
-        @staticmethod
-        def _has_non_time_alarm(component) -> bool:
-            """Return True if component contains a VALARM with PROXIMITY (non-time alarm)."""
+    @staticmethod
+    def _has_non_time_alarm(component) -> bool:
+        """Return True if component contains a VALARM with PROXIMITY (non-time alarm)."""
+        try:
+            return any(
+                getattr(sub, "name", "") == "VALARM" and sub.get("PROXIMITY") is not None
+                for sub in getattr(component, "subcomponents", [])
+            )
+        except Exception:
+            return False
+
+    @staticmethod
+    def _to_datetime(val):
+        """Normalize a date or datetime to an aware UTC datetime."""
+        if isinstance(val, datetime):
+            return val if val.tzinfo is not None else val.replace(tzinfo=UTC)
+        return datetime.combine(val, datetime.min.time(), tzinfo=UTC)
+
+    @staticmethod
+    def _expand_event_recurrences(
+        component, base_start: datetime, window_start: datetime, window_end: datetime
+    ) -> list[datetime]:
+        """Return a list of occurrence datetimes for a VEVENT component within window."""
+        occurrences: list[datetime] = []
+        rrule_prop = component.get("rrule")
+        rdate_prop = component.get("rdate")
+        exdate_prop = component.get("exdate")
+
+        if not (rrule_prop or rdate_prop):
+            return []
+
+        rset = rruleset()
+
+        if rrule_prop:
             try:
-                return any(
-                    getattr(sub, "name", "") == "VALARM" and sub.get("PROXIMITY") is not None
-                    for sub in getattr(component, "subcomponents", [])
-                )
+                rrule_str = "RRULE:" + rrule_prop.to_ical().decode()
+                r = rrulestr(rrule_str, dtstart=base_start)
+                rset.rrule(r)
             except Exception:
-                return False
+                pass
 
-        @staticmethod
-        def _to_datetime(val):
-            """Normalize a date or datetime to an aware UTC datetime."""
-            if isinstance(val, datetime):
-                return val if val.tzinfo is not None else val.replace(tzinfo=UTC)
-            return datetime.combine(val, datetime.min.time(), tzinfo=UTC)
-
-        @staticmethod
-        def _expand_event_recurrences(
-            component, base_start: datetime, window_start: datetime, window_end: datetime
-        ) -> list[datetime]:  # noqa: C901
-            """Return a list of occurrence datetimes for a VEVENT component within window."""
-            occurrences: list[datetime] = []
+        if rdate_prop:
             try:
-                rrule_prop = component.get("rrule")
-                rdate_prop = component.get("rdate")
-                exdate_prop = component.get("exdate")
-
-                if not (rrule_prop or rdate_prop):
-                    return []
-
-                rset = rruleset()
-
-                if rrule_prop:
-                    try:
-                        rrule_str = "RRULE:" + rrule_prop.to_ical().decode()
-                        r = rrulestr(rrule_str, dtstart=base_start)
-                        rset.rrule(r)
-                    except Exception:
-                        pass
-
-                if rdate_prop:
-                    try:
-                        dts = getattr(rdate_prop, "dts", None) or rdate_prop
-                        for dt in dts:
-                            dtval = getattr(dt, "dt", dt)
-                            rset.rdate(CalendarService._to_datetime(dtval))
-                    except Exception:
-                        pass
-
-                if exdate_prop:
-                    try:
-                        dts = getattr(exdate_prop, "dts", None) or exdate_prop
-                        for dt in dts:
-                            dtval = getattr(dt, "dt", dt)
-                            rset.exdate(CalendarService._to_datetime(dtval))
-                    except Exception:
-                        pass
-
-                try:
-                    occurrences = rset.between(window_start, window_end, inc=True)
-                except Exception:
-                    occurrences = []
+                dts = getattr(rdate_prop, "dts", None) or rdate_prop
+                for dt in dts:
+                    dtval = getattr(dt, "dt", dt)
+                    rset.rdate(CalendarService._to_datetime(dtval))
             except Exception:
-                occurrences = []
+                pass
 
-            return occurrences
+        if exdate_prop:
+            try:
+                dts = getattr(exdate_prop, "dts", None) or exdate_prop
+                for dt in dts:
+                    dtval = getattr(dt, "dt", dt)
+                    rset.exdate(CalendarService._to_datetime(dtval))
+            except Exception:
+                pass
+
+        try:
+            occurrences = rset.between(window_start, window_end, inc=True)
+        except Exception:
+            occurrences = []
+
+        return occurrences
 
     @staticmethod
     def get_upcoming_alarms(
