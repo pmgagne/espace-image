@@ -14,8 +14,8 @@ def test_check_alarm_mock(client):
     assert "alarm-box-container" in response.text
     assert "Meeting with Client" in response.text
     assert "Dentist Appointment" in response.text
-    # Verify we have at least two alarm items
-    assert response.text.count("alarm-item") == 2
+    # Verify we have three alarm items (including all-day event)
+    assert response.text.count("alarm-item") == 3
 
 
 def test_check_alarm_empty(client, session):

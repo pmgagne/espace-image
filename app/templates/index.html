@@ -1,3 +1,11 @@
+.alarm-time-small {
+font-size: 1rem;
+color: #ccc;
+display: block;
+margin-top: 2px;
+font-weight: 400;
+letter-spacing: 0.5px;
+}
 {% extends "base.html" %}
 
 {% block head %}
@@ -358,6 +366,12 @@
                 alarmBox.classList.add('animate-in');
                 hasAnimated = true;
             }
+            // Format any ISO datetimes in the newly swapped alarm HTML
+            try {
+                formatAlarmTimes();
+            } catch (e) {
+                console.error('formatAlarmTimes error', e);
+            }
         }
     });
 
@@ -377,5 +391,53 @@
     // Update immediately and then every second
     updateTime();
     setInterval(updateTime, 1000);
+
+    // Format alarm datetimes inserted by /components/alarm
+    function formatAlarmTimes() {
+        var els = document.querySelectorAll('.alarm-time[data-start]');
+        var now = new Date();
+        for (var i = 0; i < els.length; i++) {
+            var el = els[i];
+            var startIso = el.getAttribute('data-start');
+            var endIso = el.getAttribute('data-end');
+            var allDay = el.getAttribute('data-allday') === 'true';
+            if (!startIso) continue;
+            try {
+                var start = new Date(startIso);
+                var end = endIso ? new Date(endIso) : null;
+                var text = '';
+                // Always show day information (Aujourd'hui/Demain or Weekday, D Month YYYY)
+                var dayText = '';
+                var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                var startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                var diffDays = Math.round((startDay - today) / 86400000);
+                if (diffDays === 0) {
+                    dayText = "Aujourd'hui";
+                } else if (diffDays === 1) {
+                    dayText = "Demain";
+                } else {
+                    var days = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+                    var months = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+                    var month = months[start.getMonth()];
+                    var dayNum = start.getDate();
+                    var yearPart = start.getFullYear() === now.getFullYear() ? '' : ' ' + start.getFullYear();
+                    dayText = days[start.getDay()] + ", " + dayNum + " " + month + yearPart;
+                }
+
+                if (allDay) {
+                    text = dayText;
+                } else {
+                    var pad = function (n) { return n < 10 ? '0' + n : n; };
+                    var t1 = pad(start.getHours()) + ':' + pad(start.getMinutes());
+                    var t2 = end ? pad(end.getHours()) + ':' + pad(end.getMinutes()) : '';
+                    var timeText = t1 + (t2 && t2 !== t1 ? '–' + t2 : '');
+                    text = dayText + ' ' + timeText;
+                }
+                el.innerText = text;
+            } catch (e) {
+                el.innerText = startIso;
+            }
+        }
+    }
 </script>
 {% endblock %}

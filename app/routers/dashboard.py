@@ -137,12 +137,22 @@ async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None
 
         # Only include if not dismissed
         if not dismissed or dismissed.dismissed_at is None:
+            # All-day event detection: if start is at 00:00 and end is at 23:59 or 00:00 next day
+            is_all_day = False
+            # End is either 23:59 same day or 00:00 next day
+            if (
+                event.event_start.hour == 0
+                and event.event_start.minute == 0
+                and (event.event_end - event.event_start).days >= 1
+            ):
+                is_all_day = True
             active_alarms.append(
                 {
                     "uid": composite_uid,
                     "name": event.summary,
-                    "begin": event.event_start,
-                    "description": event.description or event.location or "",
+                    "start": event.event_start,
+                    "end": event.event_end,
+                    "all_day": is_all_day,
                 }
             )
 
@@ -166,8 +176,9 @@ def _fetch_simulated_alarms(session: Session) -> list[dict]:
             {
                 "uid": alarm_event.uid,
                 "name": "Simulated Event",
-                "description": "Test alarm for debugging",
-                "time": alarm_event.trigger_time.strftime("%H:%M"),
+                "start": alarm_event.trigger_time,
+                "end": alarm_event.trigger_time + timedelta(hours=1),
+                "all_day": False,
             }
         )
     return alarms
@@ -186,6 +197,20 @@ def _render_alarms_html(
     tz_query = f"&tz_offset={tz_offset}" if tz_offset is not None else ""
     alarms_html = ""
     for alarm in active_alarms:
+        # Provide ISO strings for start/end, and all_day flag
+        start_iso = ""
+        end_iso = ""
+        all_day = False
+        try:
+            if "start" in alarm and hasattr(alarm["start"], "isoformat"):
+                start_iso = alarm["start"].isoformat()
+            if "end" in alarm and hasattr(alarm["end"], "isoformat"):
+                end_iso = alarm["end"].isoformat()
+            if "all_day" in alarm:
+                all_day = alarm["all_day"]
+        except Exception:
+            pass
+
         alarms_html += f"""
         <div class="alarm-item">
             <div class="alarm-header">
@@ -193,7 +218,7 @@ def _render_alarms_html(
                 <span class="alarm-title">{alarm["name"]}</span>
             </div>
             <div class="alarm-body">
-                {alarm.get("description") or "Event Started"}
+                <span class="alarm-time alarm-time-small" data-start="{start_iso}" data-end="{end_iso}" data-allday="{str(all_day).lower()}"></span>
             </div>
             <button hx-post="/api/alarms/{alarm["uid"]}/dismiss?mock={"true" if mock else "false"}{tz_query}"
                     hx-target="#alarm-poller"
@@ -218,18 +243,31 @@ async def check_alarm(
     _purge_old_dismissed_alarms(session)
 
     if mock:
+        # Provide ISO datetimes so client-side can format using browser locale
+        now = datetime.now()
+        dt1 = now.replace(hour=14, minute=0, second=0, microsecond=0)
+        dt2 = now.replace(hour=16, minute=30, second=0, microsecond=0)
         active_alarms = [
             {
                 "uid": "mock-1",
                 "name": "Meeting with Client",
-                "description": "Discuss project roadmap",
-                "time": "14:00",
+                "start": dt1,
+                "end": dt1 + timedelta(hours=1),
+                "all_day": False,
             },
             {
                 "uid": "mock-2",
                 "name": "Dentist Appointment",
-                "description": "Dr. Smith",
-                "time": "16:30",
+                "start": dt2,
+                "end": dt2 + timedelta(hours=1),
+                "all_day": False,
+            },
+            {
+                "uid": "mock-3",
+                "name": "Journée pédagogique",
+                "start": now.replace(hour=0, minute=0, second=0, microsecond=0),
+                "end": (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0),
+                "all_day": True,
             },
         ]
     else:
