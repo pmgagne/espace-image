@@ -109,104 +109,84 @@ def _purge_old_dismissed_alarms(session: Session) -> None:
         session.commit()
 
 
+def _format_alarm(event, composite_uid, utc_now):
+    # All-day event detection: if start is at 00:00 and duration >= 1 day
+    is_all_day = (
+        event.event_start.hour == 0
+        and event.event_start.minute == 0
+        and (event.event_end - event.event_start).days >= 1
+    )
+    # Determine the display time: event start, or start-of-day for all-day events
+    try:
+        if is_all_day:
+            display_time = event.event_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            display_time = event.event_start
+    except Exception:
+        display_time = event.event_start
+    # Normalize display_time and event_end to UTC-aware datetimes
+    try:
+        if getattr(display_time, "tzinfo", None) is None:
+            display_time = display_time.replace(tzinfo=UTC)
+    except Exception:
+        pass
+    try:
+        event_end = (
+            event.event_end
+            if getattr(event.event_end, "tzinfo", None) is not None
+            else event.event_end.replace(tzinfo=UTC)
+        )
+    except Exception:
+        event_end = event.event_end
+    # Show the alarm once its display time has arrived and keep it until dismissed.
+    if display_time <= utc_now:
+        try:
+            start_val = (
+                event.event_start
+                if getattr(event.event_start, "tzinfo", None) is not None
+                else event.event_start.replace(tzinfo=UTC)
+            )
+        except Exception:
+            start_val = event.event_start
+        try:
+            end_val = event_end
+        except Exception:
+            end_val = event.event_end
+        return {
+            "uid": composite_uid,
+            "name": event.summary,
+            "start": start_val,
+            "end": end_val,
+            "all_day": is_all_day,
+        }
+    return None
+
+
 async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None) -> list[dict]:
     """Fetch alarms from cached calendar events and filter dismissed ones."""
     import logging
 
     logger = logging.getLogger(__name__)
     active_alarms = []
-
-    # Query cached events within window (past 7 days to future 7 days)
     utc_now = datetime.now(UTC)
     window_start = utc_now - timedelta(days=7)
     window_end = utc_now + timedelta(days=7)
-
-    # Select events that overlap the window (start <= window_end AND end >= window_start)
     cached_events = session.exec(
         select(CalendarEventCache).where(
             (CalendarEventCache.event_start <= window_end)
             & (CalendarEventCache.event_end >= window_start)
         )
     ).all()
-
     logger.info(f"Found {len(cached_events)} cached events in window")
-
-    # Convert cached events to alarm format
     for event in cached_events:
-        # Create composite UID: source_id:uid
         composite_uid = f"{event.calendar_source_id}:{event.uid}"
-
-        # Check if dismissed
         dismissed = session.exec(select(AlarmEvent).where(AlarmEvent.uid == composite_uid)).first()
-
-        # Fallback: also check raw uid without source_id prefix
         if not dismissed:
             dismissed = session.exec(select(AlarmEvent).where(AlarmEvent.uid == event.uid)).first()
-
-        # Only include if not dismissed
         if not dismissed or dismissed.dismissed_at is None:
-            # All-day event detection: if start is at 00:00 and duration >= 1 day
-            is_all_day = False
-            if (
-                event.event_start.hour == 0
-                and event.event_start.minute == 0
-                and (event.event_end - event.event_start).days >= 1
-            ):
-                is_all_day = True
-
-            # Determine the display time: event start, or start-of-day for all-day events
-            try:
-                if is_all_day:
-                    display_time = event.event_start.replace(
-                        hour=0, minute=0, second=0, microsecond=0
-                    )
-                else:
-                    display_time = event.event_start
-            except Exception:
-                display_time = event.event_start
-
-            # Normalize display_time and event_end to UTC-aware datetimes
-            try:
-                if getattr(display_time, "tzinfo", None) is None:
-                    display_time = display_time.replace(tzinfo=UTC)
-            except Exception:
-                pass
-
-            try:
-                event_end = (
-                    event.event_end
-                    if getattr(event.event_end, "tzinfo", None) is not None
-                    else event.event_end.replace(tzinfo=UTC)
-                )
-            except Exception:
-                event_end = event.event_end
-
-            # Show the alarm once its display time has arrived and keep it until dismissed.
-            if display_time <= utc_now:
-                # Ensure start/end in result are timezone-aware as well
-                try:
-                    start_val = (
-                        event.event_start
-                        if getattr(event.event_start, "tzinfo", None) is not None
-                        else event.event_start.replace(tzinfo=UTC)
-                    )
-                except Exception:
-                    start_val = event.event_start
-                try:
-                    end_val = event_end
-                except Exception:
-                    end_val = event.event_end
-
-                active_alarms.append(
-                    {
-                        "uid": composite_uid,
-                        "name": event.summary,
-                        "start": start_val,
-                        "end": end_val,
-                        "all_day": is_all_day,
-                    }
-                )
-
+            alarm = _format_alarm(event, composite_uid, utc_now)
+            if alarm:
+                active_alarms.append(alarm)
     return active_alarms
 
 

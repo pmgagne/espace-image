@@ -70,20 +70,8 @@ class CalendarService:
         return datetime.combine(val, datetime.min.time(), tzinfo=UTC)
 
     @staticmethod
-    def _expand_event_recurrences(
-        component, base_start: datetime, window_start: datetime, window_end: datetime
-    ) -> list[datetime]:
-        """Return a list of occurrence datetimes for a VEVENT component within window."""
-        occurrences: list[datetime] = []
-        rrule_prop = component.get("rrule")
-        rdate_prop = component.get("rdate")
-        exdate_prop = component.get("exdate")
-
-        if not (rrule_prop or rdate_prop):
-            return []
-
-        rset = rruleset()
-
+    @staticmethod
+    def _add_rrule(rset, rrule_prop, base_start):
         if rrule_prop:
             try:
                 rrule_str = "RRULE:" + rrule_prop.to_ical().decode()
@@ -92,6 +80,8 @@ class CalendarService:
             except Exception:
                 pass
 
+    @staticmethod
+    def _add_rdate(rset, rdate_prop):
         if rdate_prop:
             try:
                 dts = getattr(rdate_prop, "dts", None) or rdate_prop
@@ -101,6 +91,8 @@ class CalendarService:
             except Exception:
                 pass
 
+    @staticmethod
+    def _add_exdate(rset, exdate_prop):
         if exdate_prop:
             try:
                 dts = getattr(exdate_prop, "dts", None) or exdate_prop
@@ -110,12 +102,24 @@ class CalendarService:
             except Exception:
                 pass
 
+    @staticmethod
+    def _expand_event_recurrences(
+        component, base_start: datetime, window_start: datetime, window_end: datetime
+    ) -> list[datetime]:
+        """Return a list of occurrence datetimes for a VEVENT component within window."""
+        rrule_prop = component.get("rrule")
+        rdate_prop = component.get("rdate")
+        exdate_prop = component.get("exdate")
+        if not (rrule_prop or rdate_prop):
+            return []
+        rset = rruleset()
+        CalendarService._add_rrule(rset, rrule_prop, base_start)
+        CalendarService._add_rdate(rset, rdate_prop)
+        CalendarService._add_exdate(rset, exdate_prop)
         try:
-            occurrences = rset.between(window_start, window_end, inc=True)
+            return rset.between(window_start, window_end, inc=True)
         except Exception:
-            occurrences = []
-
-        return occurrences
+            return []
 
     @staticmethod
     def get_upcoming_alarms(
@@ -252,37 +256,26 @@ class CalendarService:
         Parses ICS content and extracts events within the given time window.
         Returns list of event dicts with keys: uid, event_start, event_end, summary, description, location.
         """
-        events: list[dict] = []
-        cal = CalendarService.parse_ics(ics_content)
-        if not cal:
-            return events
 
-        def _process_component(component):
+        def _process_vevent(component, source_id, window_start, window_end):
             if getattr(component, "name", None) != "VEVENT":
-                return None
-
+                return []
             uid = component.get("uid")
             summary = component.get("summary", "")
             description = component.get("description", "")
             location = component.get("location", "")
             dtstart = component.get("dtstart")
             dtend = component.get("dtend")
-
             if not dtstart:
-                return None
-
+                return []
             base_start = CalendarService._to_datetime(dtstart.dt)
             base_end = CalendarService._to_datetime(dtend.dt) if dtend else base_start
             duration = base_end - base_start
-
             has_non_time_alarm = CalendarService._has_non_time_alarm(component)
-
             occurrences = CalendarService._expand_event_recurrences(
                 component, base_start, window_start, window_end
             )
-
             results: list[dict] = []
-
             if occurrences:
                 for occ in occurrences:
                     ev_start = occ if occ.tzinfo is not None else occ.replace(tzinfo=UTC)
@@ -300,10 +293,8 @@ class CalendarService:
                                 "source_id": source_id,
                             }
                         )
-                return results
-
-            if base_start <= window_end and base_end >= window_start:
-                return [
+            elif base_start <= window_end and base_end >= window_start:
+                results.append(
                     {
                         "uid": str(uid),
                         "event_start": base_start,
@@ -314,15 +305,15 @@ class CalendarService:
                         "has_non_time_alarm": has_non_time_alarm,
                         "source_id": source_id,
                     }
-                ]
+                )
+            return results
 
-            return None
-
+        events: list[dict] = []
+        cal = CalendarService.parse_ics(ics_content)
+        if not cal:
+            return events
         for component in cal.walk():
-            evs = _process_component(component)
-            if evs:
-                events.extend(evs)
-
+            events.extend(_process_vevent(component, source_id, window_start, window_end))
         return events
 
     @staticmethod
