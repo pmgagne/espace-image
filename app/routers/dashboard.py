@@ -2,11 +2,18 @@ import random
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
-from app.db.models import AlarmEvent, AppSettings, CalendarEventCache, Photo
+from app.db.models import (
+    AlarmEvent,
+    AppSettings,
+    CalendarEventCache,
+    CalendarSource,
+    CalendarSyncStatusEntry,
+    Photo,
+)
 from app.db.session import get_session
 from app.services.weather_service import WeatherService
 
@@ -114,10 +121,11 @@ async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None
     window_start = utc_now - timedelta(days=7)
     window_end = utc_now + timedelta(days=7)
 
+    # Select events that overlap the window (start <= window_end AND end >= window_start)
     cached_events = session.exec(
         select(CalendarEventCache).where(
-            (CalendarEventCache.event_start >= window_start)
-            & (CalendarEventCache.event_start <= window_end)
+            (CalendarEventCache.event_start <= window_end)
+            & (CalendarEventCache.event_end >= window_start)
         )
     ).all()
 
@@ -191,13 +199,13 @@ def _render_alarms_html(
     if not active_alarms:
         return ""
 
-    # Sort alarms by UID to ensure consistent HTML output for change detection
-    active_alarms.sort(key=lambda x: x["uid"])
+    from datetime import datetime as _datetime
+
+    active_alarms.sort(key=lambda x: x.get("start") or _datetime.min, reverse=True)
 
     tz_query = f"&tz_offset={tz_offset}" if tz_offset is not None else ""
     alarms_html = ""
     for alarm in active_alarms:
-        # Provide ISO strings for start/end, and all_day flag
         start_iso = ""
         end_iso = ""
         all_day = False
@@ -211,26 +219,100 @@ def _render_alarms_html(
         except Exception:
             pass
 
-        alarms_html += f"""
-        <div class="alarm-item">
-            <div class="alarm-header">
-                <span class="alarm-icon">📅</span>
-                <span class="alarm-title">{alarm["name"]}</span>
-            </div>
-            <div class="alarm-body">
-                <span class="alarm-time alarm-time-small" data-start="{start_iso}" data-end="{end_iso}" data-allday="{str(all_day).lower()}"></span>
-            </div>
-            <button hx-post="/api/alarms/{alarm["uid"]}/dismiss?mock={"true" if mock else "false"}{tz_query}"
-                    hx-target="#alarm-poller"
-                    hx-swap="innerHTML"
-                    class="dismiss-btn-small">Dismiss</button>
-        </div>
-        """
+        fallback_text = _format_fallback_datetime(alarm.get("start"), alarm.get("end"), all_day, start_iso)
+
+        alarms_html += _render_alarm_item(alarm, fallback_text, start_iso, end_iso, all_day, mock, tz_query)
+
     return f"""
     <div id="alarm-box" class="alarm-box-container">
         {alarms_html}
     </div>
     """
+
+
+def _format_fallback_datetime(dt_obj, end_obj, all_day_flag: bool, start_iso_str: str) -> str:
+    """Format a human-readable fallback string for an alarm datetime (French)."""
+    try:
+        if not dt_obj:
+            return ""
+        now_local = datetime.now(UTC)
+        today = datetime(now_local.year, now_local.month, now_local.day, tzinfo=UTC)
+        start_dt = dt_obj if dt_obj.tzinfo is not None else dt_obj.replace(tzinfo=UTC)
+        start_day = datetime(start_dt.year, start_dt.month, start_dt.day, tzinfo=UTC)
+        diff_days = (start_day - today).days
+
+        if diff_days == 0:
+            day_text = "Aujourd'hui"
+        elif diff_days == 1:
+            day_text = "Demain"
+        else:
+            days = [
+                "Dimanche",
+                "Lundi",
+                "Mardi",
+                "Mercredi",
+                "Jeudi",
+                "Vendredi",
+                "Samedi",
+            ]
+            idx = start_dt.weekday() + 1 if start_dt.weekday() < 6 else 0
+            month_names = [
+                "janvier",
+                "février",
+                "mars",
+                "avril",
+                "mai",
+                "juin",
+                "juillet",
+                "août",
+                "septembre",
+                "octobre",
+                "novembre",
+                "décembre",
+            ]
+            month = month_names[start_dt.month - 1]
+            day_num = start_dt.day
+            year_part = "" if start_dt.year == now_local.year else f" {start_dt.year}"
+            day_text = f"{days[idx]}, {day_num} {month}{year_part}"
+
+        if all_day_flag:
+            return day_text
+
+        def pad(n: int) -> str:
+            return str(n).zfill(2)
+
+        t1 = f"{pad(start_dt.hour)}:{pad(start_dt.minute)}"
+        if end_obj:
+            end_dt = end_obj if end_obj.tzinfo is not None else end_obj.replace(tzinfo=UTC)
+            t2 = f"{pad(end_dt.hour)}:{pad(end_dt.minute)}"
+            time_text = f"{t1}-{t2}" if t1 != t2 else t1
+        else:
+            time_text = t1
+
+        return f"{day_text} {time_text}"
+    except Exception:
+        return start_iso_str or ""
+
+
+def _render_alarm_item(alarm: dict, fallback_text: str, start_iso: str, end_iso: str, all_day: bool, mock: bool, tz_query: str) -> str:
+    """Render a single alarm item HTML snippet."""
+    uid = alarm.get("uid")
+    name = alarm.get("name", "")
+    return f"""
+        <div class="alarm-item">
+            <div class="alarm-header">
+                <span class="alarm-icon">📅</span>
+                <span class="alarm-title">{name}</span>
+            </div>
+            <div class="alarm-body">
+                <span class="alarm-time alarm-time-small" data-start="{start_iso}" data-end="{end_iso}" data-allday="{str(all_day).lower()}">{fallback_text}</span>
+            </div>
+            <button hx-post="/api/alarms/{uid}/dismiss?mock={"true" if mock else "false"}{tz_query}"
+                    hx-target="#alarm-poller"
+                    hx-swap="innerHTML"
+                    class="dismiss-btn-small">Dismiss</button>
+        </div>
+        """
 
 
 @router.get("/components/alarm", response_class=HTMLResponse)
@@ -277,6 +359,58 @@ async def check_alarm(
         active_alarms = calendar_alarms + simulated_alarms
 
     return _render_alarms_html(active_alarms, mock, tz_offset)
+
+
+@router.get("/debug/calendar-events", response_class=JSONResponse)
+async def debug_calendar_events(session: Session = Depends(get_session)) -> JSONResponse:
+    """Return cached calendar events and dismissed alarms for debugging."""
+    cached = session.exec(select(CalendarEventCache)).all()
+    alarms = session.exec(select(AlarmEvent)).all()
+
+    events_out = [
+        {
+            "calendar_source_id": ev.calendar_source_id,
+            "uid": ev.uid,
+            "start": ev.event_start.isoformat(),
+            "end": ev.event_end.isoformat(),
+            "summary": ev.summary,
+        }
+        for ev in cached
+    ]
+
+    alarms_out = [
+        {
+            "uid": a.uid,
+            "trigger_time": a.trigger_time.isoformat(),
+            "dismissed_at": a.dismissed_at.isoformat() if a.dismissed_at else None,
+        }
+        for a in alarms
+    ]
+
+    return JSONResponse({"cached_events": events_out, "alarm_events": alarms_out})
+
+
+@router.get("/debug/calendars", response_class=JSONResponse)
+async def debug_calendars(session: Session = Depends(get_session)) -> JSONResponse:
+    """Return configured calendar sources and their sync status for debugging."""
+    sources = session.exec(select(CalendarSource)).all()
+    statuses = session.exec(select(CalendarSyncStatusEntry)).all()
+
+    src_out = [{"id": s.id, "label": s.label, "url": s.url} for s in sources]
+
+    status_out = [
+        {
+            "calendar_source_id": st.calendar_source_id,
+            "last_synced_at": st.last_synced_at.isoformat() if st.last_synced_at else None,
+            "next_sync_at": st.next_sync_at.isoformat() if st.next_sync_at else None,
+            "sync_status": st.sync_status,
+            "error_message": st.error_message,
+            "error_count": st.error_count,
+        }
+        for st in statuses
+    ]
+
+    return JSONResponse({"sources": src_out, "statuses": status_out})
 
 
 @router.post("/api/alarms/{uid}/dismiss", response_class=HTMLResponse)

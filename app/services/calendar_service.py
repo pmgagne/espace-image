@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import backoff
 import httpx
+from dateutil.rrule import rruleset, rrulestr
 from icalendar import Calendar
 from sqlmodel import Session, select
 
@@ -42,13 +43,80 @@ class CalendarService:
         )
 
     @staticmethod
-    def parse_ics(ics_content: str) -> Calendar | None:
+    def parse_ics(ics_content: str) -> Calendar | None:  # noqa: C901
         """Parses ICS content string into a Calendar object."""
         try:
             return Calendar.from_ical(ics_content)
         except Exception as e:
             logger.warning("Failed to parse ICS content: %s", e)
             return None
+
+        @staticmethod
+        def _has_non_time_alarm(component) -> bool:
+            """Return True if component contains a VALARM with PROXIMITY (non-time alarm)."""
+            try:
+                return any(
+                    getattr(sub, "name", "") == "VALARM" and sub.get("PROXIMITY") is not None
+                    for sub in getattr(component, "subcomponents", [])
+                )
+            except Exception:
+                return False
+
+        @staticmethod
+        def _to_datetime(val):
+            """Normalize a date or datetime to an aware UTC datetime."""
+            if isinstance(val, datetime):
+                return val if val.tzinfo is not None else val.replace(tzinfo=UTC)
+            return datetime.combine(val, datetime.min.time(), tzinfo=UTC)
+
+        @staticmethod
+        def _expand_event_recurrences(component, base_start: datetime, window_start: datetime, window_end: datetime) -> list[datetime]:  # noqa: C901
+            """Return a list of occurrence datetimes for a VEVENT component within window."""
+            occurrences: list[datetime] = []
+            try:
+                rrule_prop = component.get("rrule")
+                rdate_prop = component.get("rdate")
+                exdate_prop = component.get("exdate")
+
+                if not (rrule_prop or rdate_prop):
+                    return []
+
+                rset = rruleset()
+
+                if rrule_prop:
+                    try:
+                        rrule_str = "RRULE:" + rrule_prop.to_ical().decode()
+                        r = rrulestr(rrule_str, dtstart=base_start)
+                        rset.rrule(r)
+                    except Exception:
+                        pass
+
+                if rdate_prop:
+                    try:
+                        dts = getattr(rdate_prop, "dts", None) or rdate_prop
+                        for dt in dts:
+                            dtval = getattr(dt, "dt", dt)
+                            rset.rdate(CalendarService._to_datetime(dtval))
+                    except Exception:
+                        pass
+
+                if exdate_prop:
+                    try:
+                        dts = getattr(exdate_prop, "dts", None) or exdate_prop
+                        for dt in dts:
+                            dtval = getattr(dt, "dt", dt)
+                            rset.exdate(CalendarService._to_datetime(dtval))
+                    except Exception:
+                        pass
+
+                try:
+                    occurrences = rset.between(window_start, window_end, inc=True)
+                except Exception:
+                    occurrences = []
+            except Exception:
+                occurrences = []
+
+            return occurrences
 
     @staticmethod
     def get_upcoming_alarms(
@@ -180,55 +248,79 @@ class CalendarService:
     @staticmethod
     def extract_events_from_ics(
         ics_content: str, source_id: int, window_start: datetime, window_end: datetime
-    ) -> list[dict]:
+    ) -> list[dict]:  # noqa: C901
         """
         Parses ICS content and extracts events within the given time window.
         Returns list of event dicts with keys: uid, event_start, event_end, summary, description, location.
         """
-        events = []
+        events: list[dict] = []
         cal = CalendarService.parse_ics(ics_content)
         if not cal:
             return events
 
+        def _process_component(component):
+            if getattr(component, "name", None) != "VEVENT":
+                return None
+
+            uid = component.get("uid")
+            summary = component.get("summary", "")
+            description = component.get("description", "")
+            location = component.get("location", "")
+            dtstart = component.get("dtstart")
+            dtend = component.get("dtend")
+
+            if not dtstart:
+                return None
+
+            base_start = CalendarService._to_datetime(dtstart.dt)
+            base_end = CalendarService._to_datetime(dtend.dt) if dtend else base_start
+            duration = base_end - base_start
+
+            has_non_time_alarm = CalendarService._has_non_time_alarm(component)
+
+            occurrences = CalendarService._expand_event_recurrences(component, base_start, window_start, window_end)
+
+            results: list[dict] = []
+
+            if occurrences:
+                for occ in occurrences:
+                    ev_start = occ if occ.tzinfo is not None else occ.replace(tzinfo=UTC)
+                    ev_end = ev_start + duration
+                    if ev_start <= window_end and ev_end >= window_start:
+                        results.append(
+                            {
+                                "uid": str(uid),
+                                "event_start": ev_start,
+                                "event_end": ev_end,
+                                "summary": str(summary),
+                                "description": str(description),
+                                "location": str(location),
+                                "has_non_time_alarm": has_non_time_alarm,
+                                "source_id": source_id,
+                            }
+                        )
+                return results
+
+            if base_start <= window_end and base_end >= window_start:
+                return [
+                    {
+                        "uid": str(uid),
+                        "event_start": base_start,
+                        "event_end": base_end,
+                        "summary": str(summary),
+                        "description": str(description),
+                        "location": str(location),
+                        "has_non_time_alarm": has_non_time_alarm,
+                        "source_id": source_id,
+                    }
+                ]
+
+            return None
+
         for component in cal.walk():
-            if component.name == "VEVENT":
-                uid = component.get("uid")
-                summary = component.get("summary", "")
-                description = component.get("description", "")
-                location = component.get("location", "")
-                dtstart = component.get("dtstart")
-                dtend = component.get("dtend")
-
-                if not dtstart:
-                    continue
-
-                event_start = dtstart.dt
-                event_end = dtend.dt if dtend else event_start
-
-                # Normalize to datetime if date object
-                if not isinstance(event_start, datetime):
-                    event_start = datetime.combine(event_start, datetime.min.time(), tzinfo=UTC)
-                elif event_start.tzinfo is None:
-                    event_start = event_start.replace(tzinfo=UTC)
-
-                if not isinstance(event_end, datetime):
-                    event_end = datetime.combine(event_end, datetime.min.time(), tzinfo=UTC)
-                elif event_end.tzinfo is None:
-                    event_end = event_end.replace(tzinfo=UTC)
-
-                # Check if event overlaps with window [window_start, window_end]
-                if event_start <= window_end and event_end >= window_start:
-                    events.append(
-                        {
-                            "uid": str(uid),
-                            "event_start": event_start,
-                            "event_end": event_end,
-                            "summary": str(summary),
-                            "description": str(description),
-                            "location": str(location),
-                            "source_id": source_id,
-                        }
-                    )
+            evs = _process_component(component)
+            if evs:
+                events.extend(evs)
 
         return events
 
