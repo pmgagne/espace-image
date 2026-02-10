@@ -18,7 +18,6 @@ Organized tasks from code review & refactoring work. Tasks tracked by status and
 
 ### Low Priority
 
-- [TASK009] Fix HTML/CSS linter issues in templates
 - [TASK010] Add rate limiting to geocoding endpoint
 
 ## Completed
@@ -30,6 +29,7 @@ Organized tasks from code review & refactoring work. Tasks tracked by status and
 - [TASK005] Add file extension validation to image uploads
 - [TASK006] Refactor alarm formatting logic to service layer
 - [TASK008] Add API response models and docstrings
+- [TASK009] Fix HTML/CSS linter issues in templates
 
 ## Abandoned
 
@@ -42,5 +42,5 @@ Organized tasks from code review & refactoring work. Tasks tracked by status and
 | Status | Count |
 |--------|-------|
 | In Progress | 0 |
-| Pending | 3 |
-| Completed | 7 |
+| Pending | 2 |
+| Completed | 8 |
