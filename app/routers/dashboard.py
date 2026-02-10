@@ -16,6 +16,7 @@ from app.db.models import (
     Photo,
 )
 from app.db.session import get_session
+from app.schemas import SlideResponse, WeatherResponse
 from app.services.alarm_service import AlarmService
 from app.services.weather_service import WeatherService
 
@@ -50,9 +51,15 @@ async def read_legacy(request: Request, session: Session = Depends(get_session))
     )
 
 
-@router.get("/components/weather", response_class=HTMLResponse)
+@router.get("/components/weather", response_class=HTMLResponse, response_model=WeatherResponse)
 async def get_weather(request: Request, session: Session = Depends(get_session)):
-    """Returns HTML fragment for weather widget."""
+    """
+    Returns HTML fragment for weather widget.
+
+    Renders the `partials/weather.html` template. The `WeatherResponse` model
+    documents the structured weather data used by API consumers; the route
+    itself renders HTML for the UI.
+    """
     settings = session.exec(select(AppSettings)).first()
 
     if not settings or settings.weather_latitude is None or settings.weather_longitude is None:
@@ -72,11 +79,16 @@ async def get_weather(request: Request, session: Session = Depends(get_session))
     )
 
 
-@router.get("/components/slide", response_class=HTMLResponse)
+@router.get("/components/slide", response_class=HTMLResponse, response_model=SlideResponse)
 async def get_next_slide(
     request: Request, mode: str = "modern", session: Session = Depends(get_session)
 ):
-    """Returns HTML fragment for the next slide."""
+    """
+    Returns HTML fragment for the next slide.
+
+    Renders `partials/slide.html` with `img_url` in the template context. The
+    `SlideResponse` model documents the available fields for API consumers.
+    """
     settings = session.exec(select(AppSettings)).first()
     if not settings or not settings.active_preset_id:
         return templates.TemplateResponse(
