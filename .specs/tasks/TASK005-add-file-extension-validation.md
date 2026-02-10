@@ -1,6 +1,6 @@
 # TASK005 - Add file extension validation to image uploads
 
-**Status:** Pending
+**Status:** Completed
 **Priority:** Medium
 **Added:** February 10, 2026
 **Updated:** February 10, 2026
@@ -36,20 +36,28 @@ Validation should be done early in the upload handler, providing clear feedback.
 
 ## Progress Tracking
 
-**Overall Status:** Not Started - 0%
+**Overall Status:** Completed - 100%
 
 ### Subtasks
 
 | ID | Description | Status | Updated | Notes |
 |----|-------------|--------|---------|-------|
-| 5.1 | Define ALLOWED_EXTENSIONS constant | Not Started | - | At module level |
-| 5.2 | Add validation to save_upload() | Not Started | - | Before Image.open() |
-| 5.3 | Raise ValueError with clear message | Not Started | - | e.g., "File type .pdf not allowed" |
-| 5.4 | Update admin upload_file() error handling | Not Started | - | Catch ValueError |
-| 5.5 | Return user-friendly HTML error | Not Started | - | In upload response |
-| 5.6 | Test valid extension .jpg | Not Started | - | Should succeed |
-| 5.7 | Test invalid extension .pdf | Not Started | - | Should return error |
-| 5.8 | Test case sensitivity .JPG | Not Started | - | Should be case-insensitive |
+| 5.1 | Define ALLOWED_EXTENSIONS constant | Completed | February 10, 2026 | Added to app/services/image_service.py |
+| 5.2 | Add validation to save_upload() | Completed | February 10, 2026 | Validates extension before processing |
+| 5.3 | Raise ValueError with clear message | Completed | February 10, 2026 | Error contains allowed extensions |
+| 5.4 | Update admin upload_file() error handling | Completed | February 10, 2026 | Returns gallery partial with error message |
+| 5.5 | Return user-friendly HTML error | Completed | February 10, 2026 | Displayed in gallery partial via `error_message` |
+| 5.6 | Test valid extension .jpg | Completed | February 10, 2026 | Covered in tests/test_image_service.py |
+| 5.7 | Test invalid extension .pdf | Completed | February 10, 2026 | Added test to assert ValueError raised |
+| 5.8 | Test case sensitivity .JPG | Completed | February 10, 2026 | Added test for uppercase extension acceptance |
+
+## Progress Log
+
+### February 10, 2026
+
+- Added `ALLOWED_EXTENSIONS` and early extension validation to `GalleryManager.save_upload()`.
+- Updated `admin.upload_photos` to catch `ValueError` and render `partials/gallery.html` with a friendly error message.
+- Added tests for invalid and uppercase extensions and ran the suite; all tests pass.
 
 ## Verification Criteria
 

@@ -259,10 +259,27 @@ async def upload_photos(
     for file in files:
         if not file.filename:
             continue
-        content = await file.read()
-        _path, stored_filename = gallery_manager.save_upload(content, file.filename, preset.name)
-        photo = Photo(filename=stored_filename, preset_id=preset.id)
-        session.add(photo)
+        try:
+            content = await file.read()
+            _path, stored_filename = gallery_manager.save_upload(
+                content, file.filename, preset.name
+            )
+            photo = Photo(filename=stored_filename, preset_id=preset.id)
+            session.add(photo)
+        except ValueError as ve:
+            # Build gallery context and show user-friendly error message
+            presets = session.exec(select(Preset)).all()
+            photos = preset.photos if preset else []
+            return templates.TemplateResponse(
+                request,
+                "partials/gallery.html",
+                {
+                    "presets": presets,
+                    "selected_preset": preset,
+                    "photos": photos,
+                    "error_message": str(ve),
+                },
+            )
 
     session.commit()
     return await get_gallery_partial(request, preset_id, session)

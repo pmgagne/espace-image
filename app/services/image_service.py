@@ -14,6 +14,10 @@ DEFAULT_JPEG_QUALITY = 82
 DEFAULT_JPEG_MIN_QUALITY = 60
 
 
+# Allowed upload file extensions (lowercase, include leading dot)
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".heic", ".heif"}
+
+
 def _get_env_int(name: str, default: int) -> int:
     value = os.getenv(name)
     if value is None or value == "":
@@ -101,6 +105,13 @@ class GalleryManager:
         """
         preset_dir = self.upload_dir / preset_name
         preset_dir.mkdir(parents=True, exist_ok=True)
+
+        # Validate file extension before any processing
+        ext = Path(filename).suffix.lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            raise ValueError(
+                f"File type {ext or '(no extension)'} not allowed. Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+            )
 
         optimized_content, stored_filename = ImageOptimizer.optimize_upload(file_content, filename)
         file_path = preset_dir / stored_filename
