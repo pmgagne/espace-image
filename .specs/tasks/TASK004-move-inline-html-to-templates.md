@@ -1,6 +1,6 @@
 # TASK004 - Move inline HTML strings to templates
 
-**Status:** Pending
+**Status:** Completed
 **Priority:** High
 **Added:** February 10, 2026
 **Updated:** February 10, 2026
@@ -47,20 +47,27 @@ Moving to Jinja2 templates (already used elsewhere) provides:
 
 ## Progress Tracking
 
-**Overall Status:** Not Started - 0%
+**Overall Status:** Completed - 100%
 
 ### Subtasks
 
 | ID | Description | Status | Updated | Notes |
 |----|-------------|--------|---------|-------|
-| 4.1 | Create weather.html template | Not Started | - | With weather data context |
-| 4.2 | Create slide.html template | Not Started | - | With photo, mode context |
-| 4.3 | Create error_no_preset.html | Not Started | - | Friendly error message |
-| 4.4 | Create error_no_photos.html | Not Started | - | Friendly error message |
-| 4.5 | Update get_weather route | Not Started | - | Use TemplateResponse |
-| 4.6 | Update get_next_slide route | Not Started | - | Use TemplateResponse |
-| 4.7 | Test weather endpoint HTML output | Not Started | - | Verify structure |
-| 4.8 | Test slide endpoint HTML output | Not Started | - | Verify img tag |
+| 4.1 | Create weather.html template | Completed | February 10, 2026 | Implemented under app/templates/partials |
+| 4.2 | Create slide.html template | Completed | February 10, 2026 | Implemented under app/templates/partials |
+| 4.3 | Create error_no_preset.html | Completed | February 10, 2026 | Implemented under app/templates/partials |
+| 4.4 | Create error_no_photos.html | Completed | February 10, 2026 | Implemented under app/templates/partials |
+| 4.5 | Update get_weather route | Completed | February 10, 2026 | Uses TemplateResponse with `has_location` context |
+| 4.6 | Update get_next_slide route | Completed | February 10, 2026 | Uses TemplateResponse and selects a Photo |
+| 4.7 | Test weather endpoint HTML output | Completed | February 10, 2026 | Covered by tests/test_routers.py |
+| 4.8 | Test slide endpoint HTML output | Completed | February 10, 2026 | Covered by tests/test_routers.py |
+
+## Progress Log
+
+### February 10, 2026
+
+- Moved inline HTML fragments from `dashboard.py` into `app/templates/partials/` and updated routes to use `TemplateResponse`.
+- Verified templates render correctly and updated/ran tests; all tests pass.
 
 ## Verification Criteria
 

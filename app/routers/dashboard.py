@@ -50,50 +50,54 @@ async def read_legacy(request: Request, session: Session = Depends(get_session))
 
 
 @router.get("/components/weather", response_class=HTMLResponse)
-async def get_weather(session: Session = Depends(get_session)):
+async def get_weather(request: Request, session: Session = Depends(get_session)):
     """Returns HTML fragment for weather widget."""
     settings = session.exec(select(AppSettings)).first()
 
     if not settings or settings.weather_latitude is None or settings.weather_longitude is None:
-        return """
-        <div id="weather-display" class="weather-info">
-            <span class="condition" style="font-size: 0.8em; opacity: 0.8;">No location defined</span>
-        </div>
-        """
+        return templates.TemplateResponse(
+            "partials/weather.html",
+            {"request": request, "has_location": False},
+        )
 
     lat = settings.weather_latitude
     lon = settings.weather_longitude
 
     weather = await WeatherService.get_current_weather(lat, lon)
 
-    return f"""
-    <div id="weather-display" class="weather-info">
-        <span class="temp">{weather["temp"]}°C</span>
-        <span class="condition">{weather["condition"]}</span>
-    </div>
-    """
+    return templates.TemplateResponse(
+        "partials/weather.html",
+        {"request": request, "has_location": True, "weather": weather},
+    )
 
 
 @router.get("/components/slide", response_class=HTMLResponse)
-async def get_next_slide(mode: str = "modern", session: Session = Depends(get_session)):
+async def get_next_slide(
+    request: Request, mode: str = "modern", session: Session = Depends(get_session)
+):
     """Returns HTML fragment for the next slide."""
     settings = session.exec(select(AppSettings)).first()
     if not settings or not settings.active_preset_id:
-        return "<div class='error-msg'>No Preset Active. Please configure in Admin.</div>"
+        return templates.TemplateResponse(
+            "partials/slide.html",
+            {"request": request, "error_msg": "No Preset Active. Please configure in Admin."},
+        )
 
     photos = session.exec(select(Photo).where(Photo.preset_id == settings.active_preset_id)).all()
 
     if not photos:
-        return "<div class='error-msg'>No Photos found in the active preset.</div>"
+        return templates.TemplateResponse(
+            "partials/slide.html",
+            {"request": request, "error_msg": "No Photos found in the active preset."},
+        )
 
     photo = random.choice(photos)
     img_url = f"/images/{photo.id}?mode={mode}"
 
-    return f"""
-    <div class="slide-container fade-in">
-        <img src="{img_url}" class="full-slide" alt="Slide">
-    </div>
-    """
+    return templates.TemplateResponse(
+        "partials/slide.html",
+        {"request": request, "img_url": img_url},
+    )
 
 
 def _purge_old_dismissed_alarms(session: Session) -> None:
@@ -217,10 +221,57 @@ def _fetch_simulated_alarms(session: Session) -> list[dict]:
     return alarms
 
 
+def _alarms_to_context(
+    active_alarms: list[dict], mock: bool = False, tz_offset: int | None = None
+) -> list[dict]:
+    """Convert alarms into template-friendly context list."""
+    from datetime import datetime as _datetime
+
+    if not active_alarms:
+        return []
+
+    active_alarms.sort(key=lambda x: x.get("start") or _datetime.min, reverse=True)
+
+    tz_query = f"&tz_offset={tz_offset}" if tz_offset is not None else ""
+    contexts: list[dict] = []
+    for alarm in active_alarms:
+        start_iso = ""
+        end_iso = ""
+        all_day = False
+        try:
+            if "start" in alarm and hasattr(alarm["start"], "isoformat"):
+                start_iso = alarm["start"].isoformat()
+            if "end" in alarm and hasattr(alarm["end"], "isoformat"):
+                end_iso = alarm["end"].isoformat()
+            if "all_day" in alarm:
+                all_day = alarm["all_day"]
+        except Exception:
+            pass
+
+        fallback_text = _format_fallback_datetime(
+            alarm.get("start"), alarm.get("end"), all_day, start_iso
+        )
+
+        contexts.append(
+            {
+                "uid": alarm.get("uid"),
+                "name": alarm.get("name", ""),
+                "fallback_text": fallback_text,
+                "start_iso": start_iso,
+                "end_iso": end_iso,
+                "all_day": "true" if all_day else "false",
+                "mock": mock,
+                "tz_query": tz_query,
+            }
+        )
+
+    return contexts
+
+
 def _render_alarms_html(
     active_alarms: list[dict], mock: bool = False, tz_offset: int | None = None
 ) -> str:
-    """Generate HTML for alarm list."""
+    """Generate HTML for alarm list (backwards-compatible helper used in tests)."""
     if not active_alarms:
         return ""
 
@@ -354,6 +405,7 @@ def _render_alarm_item(
 
 @router.get("/components/alarm", response_class=HTMLResponse)
 async def check_alarm(
+    request: Request,
     mock: bool = False,
     tz_offset: int | None = None,
     session: Session = Depends(get_session),
@@ -395,7 +447,16 @@ async def check_alarm(
         simulated_alarms = _fetch_simulated_alarms(session)
         active_alarms = calendar_alarms + simulated_alarms
 
-    return _render_alarms_html(active_alarms, mock, tz_offset)
+    # Convert to template context and render partial
+    alarm_contexts = _alarms_to_context(active_alarms, mock, tz_offset)
+    if not alarm_contexts:
+        return HTMLResponse("")
+
+    return templates.TemplateResponse(
+        request,
+        "partials/alarms.html",
+        {"alarms": alarm_contexts},
+    )
 
 
 @router.get("/debug/calendar-events", response_class=JSONResponse)
@@ -452,6 +513,7 @@ async def debug_calendars(session: Session = Depends(get_session)) -> JSONRespon
 
 @router.post("/api/alarms/{uid}/dismiss", response_class=HTMLResponse)
 async def dismiss_alarm(
+    request: Request,
     uid: str,
     mock: bool = False,
     tz_offset: int | None = None,
@@ -498,4 +560,4 @@ async def dismiss_alarm(
         session.expunge_all()
 
     # Return the updated list immediately
-    return await check_alarm(mock=mock, tz_offset=tz_offset, session=session)
+    return await check_alarm(request, mock=mock, tz_offset=tz_offset, session=session)
