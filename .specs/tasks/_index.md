@@ -10,7 +10,6 @@ Organized tasks from code review & refactoring work. Tasks tracked by status and
 
 ### High Priority
 
-- [TASK003] Add coordinate validation to settings
 - [TASK004] Move inline HTML strings to templates
 
 ### Medium Priority
@@ -29,6 +28,7 @@ Organized tasks from code review & refactoring work. Tasks tracked by status and
 
 - [TASK001] Replace print() with logging module
 - [TASK002] Fix media route lazy-loading with eager-load
+- [TASK003] Add coordinate validation to settings
 
 ## Abandoned
 
@@ -41,5 +41,5 @@ Organized tasks from code review & refactoring work. Tasks tracked by status and
 | Status | Count |
 |--------|-------|
 | In Progress | 0 |
-| Pending | 8 |
-| Completed | 2 |
+| Pending | 7 |
+| Completed | 3 |

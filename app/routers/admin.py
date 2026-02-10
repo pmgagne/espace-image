@@ -113,9 +113,23 @@ async def update_settings(
     duration: int | None = Form(None),
     session: Session = Depends(get_session),
 ):
+    # Basic validation for form inputs
+    if latitude is not None and not (-90.0 <= latitude <= 90.0):
+        raise HTTPException(status_code=422, detail="Latitude must be between -90 and 90")
+    if longitude is not None and not (-180.0 <= longitude <= 180.0):
+        raise HTTPException(status_code=422, detail="Longitude must be between -180 and 180")
+    if duration is not None and duration <= 0:
+        raise HTTPException(status_code=422, detail="Duration must be a positive integer")
+
     settings = session.exec(select(AppSettings)).first()
     if not settings:
         settings = AppSettings()
+
+    # Validate active_preset_id if provided
+    if active_preset_id is not None:
+        preset = session.get(Preset, active_preset_id)
+        if not preset:
+            raise HTTPException(status_code=422, detail="Active preset not found")
 
     settings.active_preset_id = active_preset_id
     settings.weather_latitude = latitude

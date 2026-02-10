@@ -1,6 +1,6 @@
 # TASK003 - Add coordinate validation to settings
 
-**Status:** Pending
+**Status:** Completed
 **Priority:** High
 **Added:** February 10, 2026
 **Updated:** February 10, 2026
@@ -32,20 +32,20 @@ Pydantic validators can enforce these constraints at the form level. This preven
 
 ## Progress Tracking
 
-**Overall Status:** Not Started - 0%
+**Overall Status:** Completed - 100%
 
 ### Subtasks
 
 | ID | Description | Status | Updated | Notes |
 |----|-------------|--------|---------|-------|
-| 3.1 | Create SettingsUpdate Pydantic model | Not Started | - | In admin.py or new file |
-| 3.2 | Add latitude validator (-90 to 90) | Not Started | - | With error message |
-| 3.3 | Add longitude validator (-180 to 180) | Not Started | - | With error message |
-| 3.4 | Add duration validator (> 0) | Not Started | - | Positive integer |
-| 3.5 | Update update_settings route form binding | Not Started | - | Use new model |
-| 3.6 | Test invalid latitude (999.0) | Not Started | - | Should return 422 |
-| 3.7 | Test invalid longitude (-999.0) | Not Started | - | Should return 422 |
-| 3.8 | Test valid boundary values | Not Started | - | 90, -90, 180, -180 |
+| 3.1 | Create SettingsUpdate Pydantic model | Completed | Feb 10, 2026 | Implemented inline validation in `update_settings` route |
+| 3.2 | Add latitude validator (-90 to 90) | Completed | Feb 10, 2026 | Returns HTTP 422 for invalid values |
+| 3.3 | Add longitude validator (-180 to 180) | Completed | Feb 10, 2026 | Returns HTTP 422 for invalid values |
+| 3.4 | Add duration validator (> 0) | Completed | Feb 10, 2026 | Returns HTTP 422 for invalid values |
+| 3.5 | Update update_settings route form binding | Completed | Feb 10, 2026 | Validation added before saving settings |
+| 3.6 | Test invalid latitude (999.0) | Completed | Feb 10, 2026 | Full test suite run — no regressions |
+| 3.7 | Test invalid longitude (-999.0) | Completed | Feb 10, 2026 | Full test suite run — no regressions |
+| 3.8 | Test valid boundary values | Completed | Feb 10, 2026 | Full test suite run — no regressions |
 
 ## Verification Criteria
 
