@@ -1,6 +1,9 @@
+import logging
 from typing import ClassVar
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 class WeatherService:
@@ -56,8 +59,8 @@ class WeatherService:
                     "condition": condition,
                     "location": f"{lat:.2f}, {lon:.2f}",  # Placeholder until reverse geocoding
                 }
-        except Exception as e:
-            print(f"Weather API Error: {e}")
+        except Exception:
+            logger.exception("Weather API error while fetching current weather")
             return {
                 "temp": "--",
                 "condition": "Service Error",
@@ -87,6 +90,6 @@ class WeatherService:
                     "lon": result["longitude"],
                     "name": f"{result['name']}, {result.get('country', '')}",
                 }
-        except Exception as e:
-            print(f"Geocoding Error: {e}")
+        except Exception:
+            logger.exception("Geocoding error in geocode_location")
             return None

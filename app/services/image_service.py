@@ -1,3 +1,4 @@
+import logging
 import os
 from io import BytesIO
 from pathlib import Path
@@ -21,6 +22,9 @@ def _get_env_int(name: str, default: int) -> int:
         return int(value)
     except ValueError:
         return default
+
+
+logger = logging.getLogger(__name__)
 
 
 class ImageOptimizer:
@@ -62,9 +66,9 @@ class ImageOptimizer:
                     optimized = output.getvalue()
 
                 return optimized
-        except Exception as e:
-            print(f"Error optimizing image bytes: {e}")
-            raise e
+        except Exception:
+            logger.exception("Error optimizing image bytes")
+            raise
 
     @staticmethod
     def optimize_upload(file_content: bytes, filename: str) -> tuple[bytes, str]:

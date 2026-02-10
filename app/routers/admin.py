@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -22,6 +23,7 @@ from app.services.weather_service import WeatherService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
+logger = logging.getLogger(__name__)
 gallery_manager = GalleryManager()
 
 
@@ -59,8 +61,8 @@ async def get_settings_partial(request: Request, session: Session = Depends(get_
                     )
                     state = address.get("state") or address.get("region") or ""
                     location_name = f"{city}, {state}" if state else city
-        except Exception as e:
-            print(f"Geocoding error: {e}")
+        except Exception:
+            logger.exception("Geocoding error while reverse geocoding")
 
     return templates.TemplateResponse(
         request,

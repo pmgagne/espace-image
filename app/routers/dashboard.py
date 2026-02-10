@@ -1,3 +1,4 @@
+import logging
 import random
 from datetime import UTC, datetime, timedelta
 
@@ -19,13 +20,14 @@ from app.services.weather_service import WeatherService
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+logger = logging.getLogger(__name__)
 
 
 @router.get("/")
 async def read_root(request: Request, session: Session = Depends(get_session)):
     """Modern Slideshow View"""
     user_agent = request.headers.get("user-agent", "").lower()
-    print(f"DEBUG: Incoming User-Agent: {user_agent}")  # Debugging log
+    logger.debug("Incoming User-Agent: %s", user_agent)
 
     # Auto-redirect for iPad 2 (iOS 9)
     # Broader check: "ipad" and "os 9" (case-insensitive)
