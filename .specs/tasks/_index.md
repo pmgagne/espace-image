@@ -14,7 +14,6 @@ Organized tasks from code review & refactoring work. Tasks tracked by status and
 
 ### Medium Priority
 
-- [TASK006] Refactor alarm formatting logic to service layer
 - [TASK007] Standardize timezone handling and remove silent exceptions
 
 ### Low Priority
@@ -30,6 +29,7 @@ Organized tasks from code review & refactoring work. Tasks tracked by status and
 - [TASK003] Add coordinate validation to settings
 - [TASK004] Move inline HTML strings to templates
 - [TASK005] Add file extension validation to image uploads
+ - [TASK006] Refactor alarm formatting logic to service layer
 
 ## Abandoned
 
@@ -42,5 +42,5 @@ Organized tasks from code review & refactoring work. Tasks tracked by status and
 | Status | Count |
 |--------|-------|
 | In Progress | 0 |
-| Pending | 5 |
-| Completed | 5 |
+| Pending | 4 |
+| Completed | 6 |
