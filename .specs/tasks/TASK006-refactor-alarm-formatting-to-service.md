@@ -55,6 +55,7 @@ This is **domain logic** that should live in a service. Benefits:
 ## Progress Log
 
 ### February 10, 2026
+
 - Extracted alarm formatting and purge logic into `AlarmService` in `app/services/alarm_service.py`.
 - Updated `dashboard.py` to use `AlarmService` and added `tests/test_alarm_service.py` to verify behavior.
 - Ran full test suite; all tests pass.

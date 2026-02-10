@@ -15,6 +15,7 @@ from app.db.models import (
     CalendarSyncStatus,
     CalendarSyncStatusEntry,
 )
+from app.utils.timezone import normalize_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -54,53 +55,54 @@ class CalendarService:
     @staticmethod
     def _has_non_time_alarm(component) -> bool:
         """Return True if component contains a VALARM with PROXIMITY (non-time alarm)."""
-        try:
-            return any(
-                getattr(sub, "name", "") == "VALARM" and sub.get("PROXIMITY") is not None
-                for sub in getattr(component, "subcomponents", [])
-            )
-        except Exception:
-            return False
+        subs = getattr(component, "subcomponents", [])
+        for sub in subs:
+            try:
+                if getattr(sub, "name", "") == "VALARM" and sub.get("PROXIMITY") is not None:
+                    return True
+            except Exception as e:
+                logger.debug("Error inspecting subcomponent for non-time alarm: %s", e)
+        return False
 
     @staticmethod
     def _to_datetime(val):
-        """Normalize a date or datetime to an aware UTC datetime."""
-        if isinstance(val, datetime):
-            return val if val.tzinfo is not None else val.replace(tzinfo=UTC)
-        return datetime.combine(val, datetime.min.time(), tzinfo=UTC)
+        """Normalize a date or datetime to an aware UTC datetime using utilities."""
+        return normalize_datetime(val)
 
     @staticmethod
-    @staticmethod
     def _add_rrule(rset, rrule_prop, base_start):
-        if rrule_prop:
-            try:
-                rrule_str = "RRULE:" + rrule_prop.to_ical().decode()
-                r = rrulestr(rrule_str, dtstart=base_start)
-                rset.rrule(r)
-            except Exception:
-                pass
+        if not rrule_prop:
+            return
+        try:
+            rrule_str = "RRULE:" + rrule_prop.to_ical().decode()
+            r = rrulestr(rrule_str, dtstart=base_start)
+            rset.rrule(r)
+        except Exception as e:
+            logger.debug("Failed to add RRULE: %s", e)
 
     @staticmethod
     def _add_rdate(rset, rdate_prop):
-        if rdate_prop:
-            try:
-                dts = getattr(rdate_prop, "dts", None) or rdate_prop
-                for dt in dts:
-                    dtval = getattr(dt, "dt", dt)
-                    rset.rdate(CalendarService._to_datetime(dtval))
-            except Exception:
-                pass
+        if not rdate_prop:
+            return
+        try:
+            dts = getattr(rdate_prop, "dts", None) or rdate_prop
+            for dt in dts:
+                dtval = getattr(dt, "dt", dt)
+                rset.rdate(CalendarService._to_datetime(dtval))
+        except Exception as e:
+            logger.debug("Failed to add RDATE: %s", e)
 
     @staticmethod
     def _add_exdate(rset, exdate_prop):
-        if exdate_prop:
-            try:
-                dts = getattr(exdate_prop, "dts", None) or exdate_prop
-                for dt in dts:
-                    dtval = getattr(dt, "dt", dt)
-                    rset.exdate(CalendarService._to_datetime(dtval))
-            except Exception:
-                pass
+        if not exdate_prop:
+            return
+        try:
+            dts = getattr(exdate_prop, "dts", None) or exdate_prop
+            for dt in dts:
+                dtval = getattr(dt, "dt", dt)
+                rset.exdate(CalendarService._to_datetime(dtval))
+        except Exception as e:
+            logger.debug("Failed to add EXDATE: %s", e)
 
     @staticmethod
     def _expand_event_recurrences(
@@ -118,7 +120,8 @@ class CalendarService:
         CalendarService._add_exdate(rset, exdate_prop)
         try:
             return rset.between(window_start, window_end, inc=True)
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed expanding recurrences: %s", e)
             return []
 
     @staticmethod

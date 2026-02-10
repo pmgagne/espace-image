@@ -16,8 +16,8 @@ from app.db.models import (
     Photo,
 )
 from app.db.session import get_session
-from app.services.weather_service import WeatherService
 from app.services.alarm_service import AlarmService
+from app.services.weather_service import WeatherService
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -174,15 +174,18 @@ def _alarms_to_context(
         start_iso = ""
         end_iso = ""
         all_day = False
-        try:
-            if "start" in alarm and hasattr(alarm["start"], "isoformat"):
+        if "start" in alarm and hasattr(alarm["start"], "isoformat"):
+            try:
                 start_iso = alarm["start"].isoformat()
-            if "end" in alarm and hasattr(alarm["end"], "isoformat"):
+            except Exception as e:
+                logger.debug("Failed to isoformat start: %s", e)
+        if "end" in alarm and hasattr(alarm["end"], "isoformat"):
+            try:
                 end_iso = alarm["end"].isoformat()
-            if "all_day" in alarm:
-                all_day = alarm["all_day"]
-        except Exception:
-            pass
+            except Exception as e:
+                logger.debug("Failed to isoformat end: %s", e)
+        if "all_day" in alarm:
+            all_day = alarm["all_day"]
 
         fallback_text = _format_fallback_datetime(
             alarm.get("start"), alarm.get("end"), all_day, start_iso
@@ -221,15 +224,18 @@ def _render_alarms_html(
         start_iso = ""
         end_iso = ""
         all_day = False
-        try:
-            if "start" in alarm and hasattr(alarm["start"], "isoformat"):
+        if "start" in alarm and hasattr(alarm["start"], "isoformat"):
+            try:
                 start_iso = alarm["start"].isoformat()
-            if "end" in alarm and hasattr(alarm["end"], "isoformat"):
+            except Exception as e:
+                logger.debug("Failed to isoformat start: %s", e)
+        if "end" in alarm and hasattr(alarm["end"], "isoformat"):
+            try:
                 end_iso = alarm["end"].isoformat()
-            if "all_day" in alarm:
-                all_day = alarm["all_day"]
-        except Exception:
-            pass
+            except Exception as e:
+                logger.debug("Failed to isoformat end: %s", e)
+        if "all_day" in alarm:
+            all_day = alarm["all_day"]
 
         fallback_text = _format_fallback_datetime(
             alarm.get("start"), alarm.get("end"), all_day, start_iso
@@ -253,7 +259,10 @@ def _format_fallback_datetime(dt_obj, end_obj, all_day_flag: bool, start_iso_str
             return ""
         now_local = datetime.now(UTC)
         today = datetime(now_local.year, now_local.month, now_local.day, tzinfo=UTC)
-        start_dt = dt_obj if dt_obj.tzinfo is not None else dt_obj.replace(tzinfo=UTC)
+        # Ensure start_dt is UTC-aware
+        start_dt = (
+            dt_obj if getattr(dt_obj, "tzinfo", None) is not None else dt_obj.replace(tzinfo=UTC)
+        )
         start_day = datetime(start_dt.year, start_dt.month, start_dt.day, tzinfo=UTC)
         diff_days = (start_day - today).days
 
@@ -306,7 +315,8 @@ def _format_fallback_datetime(dt_obj, end_obj, all_day_flag: bool, start_iso_str
             time_text = t1
 
         return f"{day_text} {time_text}"
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to format fallback datetime: %s", e)
         return start_iso_str or ""
 
 
@@ -483,7 +493,10 @@ async def dismiss_alarm(
 
                 if cached:
                     trigger_time = cached.event_start
-            except Exception:
+            except Exception as e:
+                logger.exception(
+                    "DB lookup error while finding cached event for uid %s: %s", uid, e
+                )
                 # Fall back to now on any DB lookup error
                 trigger_time = datetime.now()
 

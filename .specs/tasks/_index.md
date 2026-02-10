@@ -29,7 +29,7 @@ Organized tasks from code review & refactoring work. Tasks tracked by status and
 - [TASK003] Add coordinate validation to settings
 - [TASK004] Move inline HTML strings to templates
 - [TASK005] Add file extension validation to image uploads
- - [TASK006] Refactor alarm formatting logic to service layer
+- [TASK006] Refactor alarm formatting logic to service layer
 
 ## Abandoned
 
