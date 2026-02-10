@@ -3,7 +3,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
-from sqlmodel import Session
+from sqlalchemy.orm import selectinload
+from sqlmodel import Session, select
 
 from app.db.models import Photo
 from app.db.session import get_session
@@ -20,21 +21,13 @@ async def get_image(photo_id: int, mode: str = "modern", session: Session = Depe
     Serves the image file.
     If mode='legacy', resizes it on the fly.
     """
-    photo = session.get(Photo, photo_id)
+    # Eager-load the preset relationship to avoid N+1 queries
+    statement = select(Photo).where(Photo.id == photo_id).options(selectinload(Photo.preset))
+    photo = session.exec(statement).first()
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
 
-    # We need to know the path.
-    # The Photo model stores 'filename' and 'preset_id'.
-    # We need to look up the preset to get the folder name.
-
-    # Eager load preset or fetch it
-    if not photo.preset:
-        # Should be eager loaded or we fetch
-        pass
-
     # Construct path: data/uploads/{preset_name}/{filename}
-    # For now assuming "Default" or looking up preset name
     preset_name = photo.preset.name if photo.preset else "Default"
     file_path = UPLOAD_DIR / preset_name / photo.filename
 
