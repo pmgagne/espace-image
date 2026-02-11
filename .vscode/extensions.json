@@ -6,7 +6,6 @@
     "ms-python.debugpy",
     "charliermarsh.ruff",
     // Copilot & AI
-    "GitHub.copilot",
     "GitHub.copilot-chat",
     // Web Development
     "bradlc.vscode-tailwindcss",
@@ -14,7 +13,6 @@
     // Docker
     "ms-azuretools.vscode-docker",
     // Git & Version Control
-    "eamodio.gitlens",
     "GitHub.vscode-github-actions",
     // Utilities
     "DavidAnson.vscode-markdownlint",
