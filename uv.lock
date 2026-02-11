@@ -248,7 +248,7 @@ dependencies = [
     { name = "backoff" },
     { name = "fastapi" },
     { name = "httpx" },
-    { name = "icalendar" },
+    { name = "icalevents" },
     { name = "jinja2" },
     { name = "pillow" },
     { name = "pillow-heif" },
@@ -272,7 +272,7 @@ requires-dist = [
     { name = "backoff", specifier = ">=2.2.1" },
     { name = "fastapi", specifier = ">=0.123.10" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "icalendar", specifier = ">=6.1.0" },
+    { name = "icalevents", specifier = ">=0.1.29" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "pillow", specifier = ">=11.3.0" },
     { name = "pillow-heif", specifier = ">=1.2.0" },
@@ -384,6 +384,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5d/70/458092b3e7c15783423fe64d07e63ea3311a597e723be6a1060513e3db93/icalendar-6.3.2.tar.gz", hash = "sha256:e0c10ecbfcebe958d33af7d491f6e6b7580d11d475f2eeb29532d0424f9110a1", size = 178422, upload-time = "2025-11-05T12:49:32.286Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/06/ee/2ff96bb5bd88fe03ab90aedf5180f96dc0f3ae4648ca264b473055bcaaff/icalendar-6.3.2-py3-none-any.whl", hash = "sha256:d400e9c9bb8c025e5a3c77c236941bb690494be52528a0b43cc7e8b7c9505064", size = 242403, upload-time = "2025-11-05T12:49:30.691Z" },
+]
+
+[[package]]
+name = "icalevents"
+version = "0.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "icalendar" },
+    { name = "python-dateutil" },
+    { name = "pytz" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e8/f0/9c8cc458d10a3136ae6714cb48fa340c47a9d0423c5a86110c9ff90adbbb/icalevents-0.3.1.tar.gz", hash = "sha256:6263b914bf6836647ea4eec4a908cd59d2c1fe0a5b1cd1c533840056bf5d17cd", size = 9535, upload-time = "2025-09-26T18:46:09.532Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/45/bf5f498979804e296a2c9df22b95d70b30129b41cfbc8a7998df5b462860/icalevents-0.3.1-py3-none-any.whl", hash = "sha256:e4aba09f552fab28ff4f96224fdf297e79c7c290887fb8d7ef06ea4889e1eb48", size = 10758, upload-time = "2025-09-26T18:46:19.314Z" },
 ]
 
 [[package]]
@@ -862,6 +877,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8b/2e/c14812d3d4d9cd1773c6be938f89e5735a1f11a9f184ac3639b93cef35d5/tzlocal-5.3.1.tar.gz", hash = "sha256:cceffc7edecefea1f595541dbd6e990cb1ea3d19bf01b2809f362a03dd7921fd", size = 30761, upload-time = "2025-03-05T21:17:41.549Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c2/14/e2a54fabd4f08cd7af1c07030603c3356b74da07f7cc056e600436edfa17/tzlocal-5.3.1-py3-none-any.whl", hash = "sha256:eb1a66c3ef5847adf7a834f1be0800581b683b5608e74f86ecbcef8ab91bb85d", size = 18026, upload-time = "2025-03-05T21:17:39.857Z" },
+]
+
+[[package]]
+name = "urllib3"
+version = "2.6.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c7/24/5f1b3bdffd70275f6661c76461e25f024d5a38a46f04aaca912426a2b1d3/urllib3-2.6.3.tar.gz", hash = "sha256:1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed", size = 435556, upload-time = "2026-01-07T16:24:43.925Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4", size = 131584, upload-time = "2026-01-07T16:24:42.685Z" },
 ]
 
 [[package]]

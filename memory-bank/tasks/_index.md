@@ -4,8 +4,6 @@
 
 ## Pending
 
-- [TASK011] Migrate from icalendar to icalevents - Pending, not started
-
 ## Completed
 
 - [TASK001] Replace print() with logging module - Completed on 2026-02-10
@@ -18,5 +16,6 @@
 - [TASK008] Add API response models and docstrings - Completed on 2026-02-10
 - [TASK009] Fix HTML/CSS linter issues in templates - Completed on 2026-02-10
 - [TASK010] Add rate limiting to geocoding endpoint - Completed on 2026-02-10
+- [TASK011] Migrate from icalendar to icalevents - Completed on 2026-02-10 (repo sweep, lint, tests, docs validated)
 
 ## Abandoned

@@ -48,5 +48,5 @@ def normalize_datetime(val):
     try:
         # create a datetime at midnight of that date in UTC
         return datetime.combine(val, time.min, tzinfo=UTC)
-    except Exception as e:
-        raise TypeError(f"Cannot normalize value of type {type(val)} to datetime") from e
+    except Exception:
+        raise TypeError(f"Cannot normalize value of type {type(val)} to datetime")

@@ -3,9 +3,9 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 import backoff
-import httpx
-from dateutil.rrule import rruleset, rrulestr
-from icalendar import Calendar
+from icalevents.icaldownload import ICalDownload
+from icalevents.icalevents import events as icalevents_events
+from icalevents.icalparser import Event as ICalEvent
 from sqlmodel import Session, select
 
 from app.db.models import (
@@ -44,24 +44,21 @@ class CalendarService:
         )
 
     @staticmethod
-    def parse_ics(ics_content: str) -> Calendar | None:
-        """Parses ICS content string into a Calendar object."""
+    def parse_ics_events(
+        ics_content: str, start: datetime, end: datetime, tzinfo=None
+    ) -> list[ICalEvent]:
+        """Parse ICS content string into a list of ICalEvent objects using icalevents."""
         try:
-            return Calendar.from_ical(ics_content)
+            return icalevents_events(
+                string_content=ics_content, start=start, end=end, tzinfo=tzinfo
+            )
         except Exception as e:
             logger.warning("Failed to parse ICS content: %s", e)
-            return None
+            return []
 
     @staticmethod
-    def _has_non_time_alarm(component) -> bool:
-        """Return True if component contains a VALARM with PROXIMITY (non-time alarm)."""
-        subs = getattr(component, "subcomponents", [])
-        for sub in subs:
-            try:
-                if getattr(sub, "name", "") == "VALARM" and sub.get("PROXIMITY") is not None:
-                    return True
-            except Exception as e:
-                logger.debug("Error inspecting subcomponent for non-time alarm: %s", e)
+    def _has_non_time_alarm(_component) -> bool:
+        """Legacy: kept for compatibility. Use `_detect_proximity_uids` on raw ICS instead."""
         return False
 
     @staticmethod
@@ -70,120 +67,59 @@ class CalendarService:
         return normalize_datetime(val)
 
     @staticmethod
-    def _add_rrule(rset, rrule_prop, base_start):
-        if not rrule_prop:
-            return
-        try:
-            rrule_str = "RRULE:" + rrule_prop.to_ical().decode()
-            r = rrulestr(rrule_str, dtstart=base_start)
-            rset.rrule(r)
-        except Exception as e:
-            logger.debug("Failed to add RRULE: %s", e)
+    # Recurrence helpers removed: icalevents provides recurrence expansion.
 
     @staticmethod
-    def _add_rdate(rset, rdate_prop):
-        if not rdate_prop:
-            return
+    def _detect_proximity_uids(ics_content: str) -> set:
+        """Scan raw ICS content and return a set of UIDs for VEVENTs that contain
+        a VALARM with a PROXIMITY property.
+        This is a lightweight heuristic (string-based) to preserve previous behavior.
+        """
+        uids: set[str] = set()
         try:
-            dts = getattr(rdate_prop, "dts", None) or rdate_prop
-            for dt in dts:
-                dtval = getattr(dt, "dt", dt)
-                rset.rdate(CalendarService._to_datetime(dtval))
-        except Exception as e:
-            logger.debug("Failed to add RDATE: %s", e)
-
-    @staticmethod
-    def _add_exdate(rset, exdate_prop):
-        if not exdate_prop:
-            return
-        try:
-            dts = getattr(exdate_prop, "dts", None) or exdate_prop
-            for dt in dts:
-                dtval = getattr(dt, "dt", dt)
-                rset.exdate(CalendarService._to_datetime(dtval))
-        except Exception as e:
-            logger.debug("Failed to add EXDATE: %s", e)
-
-    @staticmethod
-    def _expand_event_recurrences(
-        component, base_start: datetime, window_start: datetime, window_end: datetime
-    ) -> list[datetime]:
-        """Return a list of occurrence datetimes for a VEVENT component within window."""
-        rrule_prop = component.get("rrule")
-        rdate_prop = component.get("rdate")
-        exdate_prop = component.get("exdate")
-        if not (rrule_prop or rdate_prop):
-            return []
-        rset = rruleset()
-        CalendarService._add_rrule(rset, rrule_prop, base_start)
-        CalendarService._add_rdate(rset, rdate_prop)
-        CalendarService._add_exdate(rset, exdate_prop)
-        try:
-            return rset.between(window_start, window_end, inc=True)
-        except Exception as e:
-            logger.debug("Failed expanding recurrences: %s", e)
-            return []
+            parts = ics_content.split("BEGIN:VEVENT")
+            for part in parts[1:]:
+                # Is there a VALARM with PROXIMITY in this VEVENT block?
+                if "BEGIN:VALARM" in part and "PROXIMITY" in part:
+                    # extract UID line
+                    for line in part.splitlines():
+                        if line.strip().upper().startswith("UID:"):
+                            uid = line.split(":", 1)[1].strip()
+                            uids.add(uid)
+                            break
+        except Exception:
+            logger.debug("Failed to detect proximity VALARM from ICS content")
+        return uids
 
     @staticmethod
     def get_upcoming_alarms(
-        calendar: Calendar,
+        ics_content: str,
         check_time: datetime,
         lookahead_minutes: int = 0,
         lookback_minutes: int = 60 * 12,
-        tz_offset_minutes: int | None = None,
+        tzinfo=None,
     ) -> list[dict]:
         """
         Returns a list of events starting within the next `lookahead_minutes`
         OR that started in the last `lookback_minutes` (e.g. today).
         """
         alarms = []
-        if not calendar:
-            return alarms
-
-        # Ensure check_time is aware (UTC)
-        if check_time.tzinfo is None:
-            check_time = check_time.replace(tzinfo=UTC)
-
-        for component in calendar.walk():
-            if component.name == "VEVENT":
-                summary = component.get("summary")
-                description = component.get("description")
-                uid = component.get("uid")
-                dtstart = component.get("dtstart")
-
-                if not dtstart:
-                    continue
-
-                event_start = dtstart.dt
-
-                # Normalize event_start to datetime (handle date objects)
-                if not isinstance(event_start, datetime):
-                    event_start = datetime.combine(event_start, datetime.min.time())
-                if event_start.tzinfo is None:
-                    if tz_offset_minutes is not None:
-                        # Convert device-local time to UTC by adding the offset
-                        # (offset is negative when ahead of UTC, e.g., -120 for UTC+2,
-                        #  so adding it effectively subtracts the hours we're ahead)
-                        event_start = (event_start + timedelta(minutes=tz_offset_minutes)).replace(
-                            tzinfo=UTC
-                        )
-                    else:
-                        event_start = event_start.replace(tzinfo=UTC)
-
-                # Logic: Is event inside the window [now - lookback, now + lookahead]?
-                lower_bound = check_time - timedelta(minutes=lookback_minutes)
-                upper_bound = check_time + timedelta(minutes=lookahead_minutes)
-
-                if lower_bound <= event_start <= upper_bound:
-                    alarms.append(
-                        {
-                            "uid": str(uid),
-                            "name": str(summary),
-                            "begin": event_start,
-                            "description": str(description) if description else "",
-                        }
-                    )
-
+        lower_bound = check_time - timedelta(minutes=lookback_minutes)
+        upper_bound = check_time + timedelta(minutes=lookahead_minutes)
+        events = CalendarService.parse_ics_events(
+            ics_content, lower_bound, upper_bound, tzinfo=tzinfo
+        )
+        for event in events:
+            # event is an ICalEvent
+            if event.start and lower_bound <= event.start <= upper_bound:
+                alarms.append(
+                    {
+                        "uid": str(event.uid),
+                        "name": str(event.summary),
+                        "begin": event.start,
+                        "description": str(event.description) if event.description else "",
+                    }
+                )
         return alarms
 
     @staticmethod
@@ -200,15 +136,10 @@ class CalendarService:
         if url.startswith("webcal://"):
             url = url.replace("webcal://", "https://", 1)
 
-        headers = {
-            "User-Agent": "Espace-Image/1.0 (+https://github.com/pmgagne/espace-image)",
-            "Accept": "text/calendar,*/*;q=0.8",
-        }
-
-        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
-            response = await client.get(url, headers=headers)
-            response.raise_for_status()
-            return response.text
+        # Use icalevents' ICalDownload to fetch and normalize iCal content.
+        downloader = ICalDownload()
+        content = await asyncio.to_thread(downloader.data_from_url, url, False)
+        return content
 
     @staticmethod
     async def get_all_alarms(
@@ -216,39 +147,30 @@ class CalendarService:
         check_time: datetime | None = None,
         lookback_minutes: int | None = None,
         lookahead_minutes: int = 0,
-        tz_offset_minutes: int | None = None,
+        tzinfo=None,
     ) -> list[dict]:
-        """Aggregates alarms from multiple URLs."""
+        """Aggregates alarms from multiple URLs using icalevents."""
         if check_time is None:
-            # Always use UTC aware datetime for comparison with ics/arrow
             check_time = datetime.now(UTC)
-
         if lookback_minutes is None:
             lookback_minutes = 60 * 12
-
         tasks = [CalendarService.fetch_ics(url) for _, url in sources]
         results = await asyncio.gather(*tasks)
-
         all_alarms = []
         for (source_id, _), content in zip(sources, results, strict=False):
             if content:
-                cal = CalendarService.parse_ics(content)
-                if not cal:
-                    logger.warning("Skipping calendar %s due to parse failure.", source_id)
-                    continue
                 alarms = CalendarService.get_upcoming_alarms(
-                    cal,
+                    content,
                     check_time,
                     lookahead_minutes=lookahead_minutes,
                     lookback_minutes=lookback_minutes,
-                    tz_offset_minutes=tz_offset_minutes,
+                    tzinfo=tzinfo,
                 )
                 for alarm in alarms:
                     alarm["uid"] = f"{source_id}:{alarm['uid']}"
                 all_alarms.extend(alarms)
             else:
                 logger.warning("Skipping calendar %s due to missing content.", source_id)
-
         return all_alarms
 
     @staticmethod
@@ -256,67 +178,25 @@ class CalendarService:
         ics_content: str, source_id: int, window_start: datetime, window_end: datetime
     ) -> list[dict]:
         """
-        Parses ICS content and extracts events within the given time window.
+        Parses ICS content and extracts events within the given time window using icalevents.
         Returns list of event dicts with keys: uid, event_start, event_end, summary, description, location.
         """
-
-        def _process_vevent(component, source_id, window_start, window_end):
-            if getattr(component, "name", None) != "VEVENT":
-                return []
-            uid = component.get("uid")
-            summary = component.get("summary", "")
-            description = component.get("description", "")
-            location = component.get("location", "")
-            dtstart = component.get("dtstart")
-            dtend = component.get("dtend")
-            if not dtstart:
-                return []
-            base_start = CalendarService._to_datetime(dtstart.dt)
-            base_end = CalendarService._to_datetime(dtend.dt) if dtend else base_start
-            duration = base_end - base_start
-            has_non_time_alarm = CalendarService._has_non_time_alarm(component)
-            occurrences = CalendarService._expand_event_recurrences(
-                component, base_start, window_start, window_end
-            )
-            results: list[dict] = []
-            if occurrences:
-                for occ in occurrences:
-                    ev_start = occ if occ.tzinfo is not None else occ.replace(tzinfo=UTC)
-                    ev_end = ev_start + duration
-                    if ev_start <= window_end and ev_end >= window_start:
-                        results.append(
-                            {
-                                "uid": str(uid),
-                                "event_start": ev_start,
-                                "event_end": ev_end,
-                                "summary": str(summary),
-                                "description": str(description),
-                                "location": str(location),
-                                "has_non_time_alarm": has_non_time_alarm,
-                                "source_id": source_id,
-                            }
-                        )
-            elif base_start <= window_end and base_end >= window_start:
-                results.append(
-                    {
-                        "uid": str(uid),
-                        "event_start": base_start,
-                        "event_end": base_end,
-                        "summary": str(summary),
-                        "description": str(description),
-                        "location": str(location),
-                        "has_non_time_alarm": has_non_time_alarm,
-                        "source_id": source_id,
-                    }
-                )
-            return results
-
         events: list[dict] = []
-        cal = CalendarService.parse_ics(ics_content)
-        if not cal:
-            return events
-        for component in cal.walk():
-            events.extend(_process_vevent(component, source_id, window_start, window_end))
+        ical_events = CalendarService.parse_ics_events(ics_content, window_start, window_end)
+        proximity_uids = CalendarService._detect_proximity_uids(ics_content)
+        for event in ical_events:
+            events.append(
+                {
+                    "uid": str(event.uid),
+                    "event_start": event.start,
+                    "event_end": event.end,
+                    "summary": str(event.summary),
+                    "description": str(event.description),
+                    "location": str(event.location),
+                    "has_non_time_alarm": str(event.uid) in proximity_uids,
+                    "source_id": source_id,
+                }
+            )
         return events
 
     @staticmethod

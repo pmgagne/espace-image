@@ -88,14 +88,16 @@ The Espace-Image app uses SQLModel (SQLAlchemy ORM) for its database layer. The 
 ### Calendar Event Caching
 
 - Events are fetched from ICS sources and cached in `CalendarEventCache` for a rolling 1-week window.
-- Recurring events are expanded using RRULE/RDATE/EXDATE logic.
+- Recurring events are expanded using RRULE/RDATE/EXDATE logic via the `icalevents` library (replacing legacy `icalendar`).
 - Only events overlapping the window are cached.
+- VALARM/PROXIMITY alarms are detected by scanning raw ICS blocks for matching VEVENTs.
 
 ### Alarm Management
 
 - Alarms are shown when their event start time (or start-of-day for all-day) is reached.
 - Alarms persist until dismissed (recorded in `AlarmEvent`).
 - Dismissal is tracked by UID (composite: source_id:uid).
+- VALARM/PROXIMITY alarms are flagged for events whose UID matches a VEVENT containing a VALARM with PROXIMITY.
 - Old dismissed alarms (>30 days) are purged.
 
 ### Photo Gallery
