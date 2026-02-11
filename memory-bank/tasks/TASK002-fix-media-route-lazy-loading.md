@@ -56,9 +56,3 @@ if not photo.preset:
 ✅ Image serving works correctly for all presets
 ✅ Test covers image retrieval with preset relationship
 ✅ Fallback logic for missing preset removed
-
-## Related Files
-
-- `app/routers/media.py::get_image()` (lines 13-43)
-- `app/db/models.py::Photo` (relationship definition)
-- `tests/test_routers.py` (add test coverage)
