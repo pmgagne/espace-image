@@ -318,8 +318,10 @@ async def simulate_alarm(
     from datetime import datetime, timedelta
     from uuid import uuid4
 
-    # Calculate trigger time
-    trigger_time = datetime.now() + timedelta(seconds=delay_seconds)
+    # Calculate trigger time (UTC-aware)
+    from app.utils.timezone import ensure_utc_aware
+
+    trigger_time = ensure_utc_aware(datetime.now() + timedelta(seconds=delay_seconds))
 
     # Create alarm event with unique UID
     alarm = AlarmEvent(

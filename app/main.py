@@ -1,7 +1,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
@@ -44,7 +44,7 @@ async def lifespan(_app: FastAPI):
         minutes=10,
         id="calendar_sync",
         name="Sync calendar events every 10 minutes",
-        next_run_time=datetime.now(),
+        next_run_time=datetime.now(UTC),
     )
     scheduler.start()
 

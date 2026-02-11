@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import os
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import backoff
 from icalevents.icaldownload import ICalDownload
@@ -15,12 +17,31 @@ from app.db.models import (
     CalendarSyncStatus,
     CalendarSyncStatusEntry,
 )
-from app.utils.timezone import normalize_datetime
+from app.utils.timezone import ensure_utc_aware, normalize_datetime
 
 logger = logging.getLogger(__name__)
 
 
 class CalendarService:
+    @staticmethod
+    def _get_local_tz() -> ZoneInfo | None:
+        """Return the local timezone to use for naive datetimes.
+
+        Prefers the `TZ` environment variable (ZoneInfo name). Falls back to
+        the system local timezone if available.
+        """
+        tzname = os.environ.get("TZ")
+        if tzname:
+            try:
+                return ZoneInfo(tzname)
+            except Exception:
+                logger.debug("Invalid TZ environment value: %s", tzname)
+        # Last-resort: use system local tzinfo from an aware datetime
+        try:
+            return datetime.now().astimezone().tzinfo
+        except Exception:
+            return None
+
     @staticmethod
     def _on_backoff(details):
         """Callback for backoff retry attempts."""
@@ -109,6 +130,20 @@ class CalendarService:
         events = CalendarService.parse_ics_events(
             ics_content, lower_bound, upper_bound, tzinfo=tzinfo
         )
+        # Ensure events have timezone info; if naive, apply local tz fallback
+        local_tz = CalendarService._get_local_tz()
+        for event in events:
+            try:
+                if event.start is not None and event.start.tzinfo is None and local_tz is not None:
+                    event.start = event.start.replace(tzinfo=local_tz)
+                if (
+                    getattr(event, "end", None) is not None
+                    and event.end.tzinfo is None
+                    and local_tz is not None
+                ):
+                    event.end = event.end.replace(tzinfo=local_tz)
+            except Exception:
+                logger.debug("Failed to apply local tz to event: %s", getattr(event, "uid", "?"))
         for event in events:
             # event is an ICalEvent
             if event.start and lower_bound <= event.start <= upper_bound:
@@ -183,6 +218,23 @@ class CalendarService:
         """
         events: list[dict] = []
         ical_events = CalendarService.parse_ics_events(ics_content, window_start, window_end)
+        # Apply local tz fallback for naive datetimes returned by parser
+        local_tz = CalendarService._get_local_tz()
+        for event in ical_events:
+            try:
+                if event.start is not None and event.start.tzinfo is None and local_tz is not None:
+                    event.start = event.start.replace(tzinfo=local_tz)
+                if (
+                    getattr(event, "end", None) is not None
+                    and event.end.tzinfo is None
+                    and local_tz is not None
+                ):
+                    event.end = event.end.replace(tzinfo=local_tz)
+            except Exception:
+                logger.debug(
+                    "Failed to apply local tz to event during extract: %s",
+                    getattr(event, "uid", "?"),
+                )
         proximity_uids = CalendarService._detect_proximity_uids(ics_content)
         for event in ical_events:
             events.append(
@@ -269,11 +321,29 @@ class CalendarService:
                     latest_by_uid[uid] = event
 
             for uid, event in latest_by_uid.items():
+                # Normalize event datetimes to UTC-aware before storing
+                try:
+                    start_utc = (
+                        ensure_utc_aware(event["event_start"])
+                        if event["event_start"] is not None
+                        else None
+                    )
+                except Exception:
+                    start_utc = event["event_start"]
+                try:
+                    end_utc = (
+                        ensure_utc_aware(event["event_end"])
+                        if event["event_end"] is not None
+                        else None
+                    )
+                except Exception:
+                    end_utc = event["event_end"]
+
                 cache_entry = CalendarEventCache(
                     calendar_source_id=source_id,
                     uid=uid,
-                    event_start=event["event_start"],
-                    event_end=event["event_end"],
+                    event_start=start_utc,
+                    event_end=end_utc,
                     summary=event["summary"],
                     description=event["description"],
                     location=event["location"],

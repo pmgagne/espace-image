@@ -13,7 +13,7 @@ class AlarmService:
     @staticmethod
     def purge_old_dismissed_alarms(session) -> None:
         """Delete dismissed alarms older than 30 days."""
-        now = datetime.now()
+        now = ensure_utc_aware(datetime.now())
         purge_before = now - timedelta(days=30)
         dismissed_alarms = session.exec(
             select(AlarmEvent).where(

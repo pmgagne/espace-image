@@ -5,6 +5,9 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
+      - TZ=${TZ:-America/Montreal}

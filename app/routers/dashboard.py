@@ -19,6 +19,7 @@ from app.db.session import get_session
 from app.schemas import SlideResponse, WeatherResponse
 from app.services.alarm_service import AlarmService
 from app.services.weather_service import WeatherService
+from app.utils.timezone import ensure_utc_aware
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -146,7 +147,7 @@ async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None
 
 def _fetch_simulated_alarms(session: Session) -> list[dict]:
     """Fetch test/simulated alarms from database."""
-    now = datetime.now()
+    now = ensure_utc_aware(datetime.now())
     simulated_alarms = session.exec(
         select(AlarmEvent).where(
             (AlarmEvent.uid.like("test-%"))
@@ -157,12 +158,23 @@ def _fetch_simulated_alarms(session: Session) -> list[dict]:
 
     alarms = []
     for alarm_event in simulated_alarms:
+        # Ensure trigger_time is timezone-aware (DB may contain legacy naive datetimes)
+        try:
+            start_dt = ensure_utc_aware(alarm_event.trigger_time)
+        except Exception:
+            start_dt = alarm_event.trigger_time
+
+        try:
+            end_dt = ensure_utc_aware(alarm_event.trigger_time + timedelta(hours=1))
+        except Exception:
+            end_dt = alarm_event.trigger_time + timedelta(hours=1)
+
         alarms.append(
             {
                 "uid": alarm_event.uid,
                 "name": "Simulated Event",
-                "start": alarm_event.trigger_time,
-                "end": alarm_event.trigger_time + timedelta(hours=1),
+                "start": start_dt,
+                "end": end_dt,
                 "all_day": False,
             }
         )
@@ -178,7 +190,9 @@ def _alarms_to_context(
     if not active_alarms:
         return []
 
-    active_alarms.sort(key=lambda x: x.get("start") or _datetime.min, reverse=True)
+    # Use a timezone-aware minimum datetime for sorting to avoid mixing naive/aware
+    min_dt = _datetime.min.replace(tzinfo=UTC)
+    active_alarms.sort(key=lambda x: x.get("start") or min_dt, reverse=True)
 
     tz_query = f"&tz_offset={tz_offset}" if tz_offset is not None else ""
     contexts: list[dict] = []
@@ -228,7 +242,9 @@ def _render_alarms_html(
 
     from datetime import datetime as _datetime
 
-    active_alarms.sort(key=lambda x: x.get("start") or _datetime.min, reverse=True)
+    # Use timezone-aware minimum datetime for sorting
+    min_dt = _datetime.min.replace(tzinfo=UTC)
+    active_alarms.sort(key=lambda x: x.get("start") or min_dt, reverse=True)
 
     tz_query = f"&tz_offset={tz_offset}" if tz_offset is not None else ""
     alarms_html = ""
@@ -373,7 +389,7 @@ async def check_alarm(
 
     if mock:
         # Provide ISO datetimes so client-side can format using browser locale
-        now = datetime.now()
+        now = ensure_utc_aware(datetime.now())
         dt1 = now.replace(hour=14, minute=0, second=0, microsecond=0)
         dt2 = now.replace(hour=16, minute=30, second=0, microsecond=0)
         active_alarms = [
@@ -483,13 +499,13 @@ async def dismiss_alarm(
         # Check if alarm already exists
         existing = session.exec(select(AlarmEvent).where(AlarmEvent.uid == uid)).first()
         if existing:
-            # Update existing alarm record with dismissal time
-            existing.dismissed_at = datetime.now()
+            # Update existing alarm record with dismissal time (UTC-aware)
+            existing.dismissed_at = ensure_utc_aware(datetime.now())
             session.add(existing)
         else:
             # Create new alarm record (for alarms from calendar that haven't been seen yet)
             # Try to find a matching cached calendar event to preserve the event's start time
-            trigger_time = datetime.now()
+            trigger_time = ensure_utc_aware(datetime.now())
             try:
                 # CalendarEventCache stores events with calendar_source_id + uid as composite in the UI
                 # Try both composite and raw uid lookups
@@ -510,10 +526,12 @@ async def dismiss_alarm(
                     "DB lookup error while finding cached event for uid %s: %s", uid, e
                 )
                 # Fall back to now on any DB lookup error
-                trigger_time = datetime.now()
+                trigger_time = ensure_utc_aware(datetime.now())
 
             alarm_event = AlarmEvent(
-                uid=uid, trigger_time=trigger_time, dismissed_at=datetime.now()
+                uid=uid,
+                trigger_time=trigger_time,
+                dismissed_at=ensure_utc_aware(datetime.now()),
             )
             session.add(alarm_event)
         session.commit()
