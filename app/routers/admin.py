@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -22,6 +23,7 @@ from app.services.weather_service import WeatherService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
+logger = logging.getLogger(__name__)
 gallery_manager = GalleryManager()
 
 
@@ -45,22 +47,29 @@ async def get_settings_partial(request: Request, session: Session = Depends(get_
             # Simple reverse geocode for Admin UI context
             import httpx
 
-            url = f"https://nominatim.openstreetmap.org/reverse?lat={settings.weather_latitude}&lon={settings.weather_longitude}&format=json"
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(url, headers={"User-Agent": "Espace-Image/1.0"})
-                if resp.status_code == 200:
-                    data = resp.json()
-                    address = data.get("address", {})
-                    city = (
-                        address.get("city")
-                        or address.get("town")
-                        or address.get("village")
-                        or "Unknown"
-                    )
-                    state = address.get("state") or address.get("region") or ""
-                    location_name = f"{city}, {state}" if state else city
-        except Exception as e:
-            print(f"Geocoding error: {e}")
+            from app.services.rate_limiter import rate_limiter
+
+            allowed = await rate_limiter.acquire("geocoding:nominatim", max_calls=3, period=60)
+            if not allowed:
+                logger.warning("Nominatim reverse geocode rate-limited for admin settings")
+                location_name = "Rate limited"
+            else:
+                url = f"https://nominatim.openstreetmap.org/reverse?lat={settings.weather_latitude}&lon={settings.weather_longitude}&format=json"
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get(url, headers={"User-Agent": "Espace-Image/1.0"})
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        address = data.get("address", {})
+                        city = (
+                            address.get("city")
+                            or address.get("town")
+                            or address.get("village")
+                            or "Unknown"
+                        )
+                        state = address.get("state") or address.get("region") or ""
+                        location_name = f"{city}, {state}" if state else city
+        except Exception:
+            logger.exception("Geocoding error while reverse geocoding")
 
     return templates.TemplateResponse(
         request,
@@ -111,9 +120,23 @@ async def update_settings(
     duration: int | None = Form(None),
     session: Session = Depends(get_session),
 ):
+    # Basic validation for form inputs
+    if latitude is not None and not (-90.0 <= latitude <= 90.0):
+        raise HTTPException(status_code=422, detail="Latitude must be between -90 and 90")
+    if longitude is not None and not (-180.0 <= longitude <= 180.0):
+        raise HTTPException(status_code=422, detail="Longitude must be between -180 and 180")
+    if duration is not None and duration <= 0:
+        raise HTTPException(status_code=422, detail="Duration must be a positive integer")
+
     settings = session.exec(select(AppSettings)).first()
     if not settings:
         settings = AppSettings()
+
+    # Validate active_preset_id if provided
+    if active_preset_id is not None:
+        preset = session.get(Preset, active_preset_id)
+        if not preset:
+            raise HTTPException(status_code=422, detail="Active preset not found")
 
     settings.active_preset_id = active_preset_id
     settings.weather_latitude = latitude
@@ -243,10 +266,27 @@ async def upload_photos(
     for file in files:
         if not file.filename:
             continue
-        content = await file.read()
-        _path, stored_filename = gallery_manager.save_upload(content, file.filename, preset.name)
-        photo = Photo(filename=stored_filename, preset_id=preset.id)
-        session.add(photo)
+        try:
+            content = await file.read()
+            _path, stored_filename = gallery_manager.save_upload(
+                content, file.filename, preset.name
+            )
+            photo = Photo(filename=stored_filename, preset_id=preset.id)
+            session.add(photo)
+        except ValueError as ve:
+            # Build gallery context and show user-friendly error message
+            presets = session.exec(select(Preset)).all()
+            photos = preset.photos if preset else []
+            return templates.TemplateResponse(
+                request,
+                "partials/gallery.html",
+                {
+                    "presets": presets,
+                    "selected_preset": preset,
+                    "photos": photos,
+                    "error_message": str(ve),
+                },
+            )
 
     session.commit()
     return await get_gallery_partial(request, preset_id, session)

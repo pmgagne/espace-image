@@ -108,6 +108,26 @@ The Espace-Image app uses SQLModel (SQLAlchemy ORM) for its database layer. The 
 - Each calendar source has a sync status entry, updated on every sync.
 - Sync errors and retry logic are tracked per source.
 
+### API Rate Limiting
+
+**Purpose:** Protect against accidental abuse of free external APIs (Open-Meteo, Nominatim) and maintain good standing with service providers.
+
+**Implementation:**
+
+- Simple async in-memory sliding-window limiter: `app/services/rate_limiter.py`
+- Per-process, resets on app restart
+- Non-blocking async acquire with per-key timestamp deques
+
+**Limits:**
+
+- **Open-Meteo Geocoding:** 6 requests per minute (used in `WeatherService.geocode_location()`)
+- **Nominatim Reverse Geocoding:** 3 requests per minute (used in admin settings partial)
+
+**Behavior:**
+
+- If limit exceeded: service returns `None`/logs warning, UI shows friendly "Rate limited" message
+- Safe for single-worker deployments; for multi-worker, use Redis-backed limiter
+
 ---
 
 ## Usage Patterns

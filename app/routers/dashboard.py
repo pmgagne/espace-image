@@ -1,3 +1,4 @@
+import logging
 import random
 from datetime import UTC, datetime, timedelta
 
@@ -15,17 +16,20 @@ from app.db.models import (
     Photo,
 )
 from app.db.session import get_session
+from app.schemas import SlideResponse, WeatherResponse
+from app.services.alarm_service import AlarmService
 from app.services.weather_service import WeatherService
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+logger = logging.getLogger(__name__)
 
 
 @router.get("/")
 async def read_root(request: Request, session: Session = Depends(get_session)):
     """Modern Slideshow View"""
     user_agent = request.headers.get("user-agent", "").lower()
-    print(f"DEBUG: Incoming User-Agent: {user_agent}")  # Debugging log
+    logger.debug("Incoming User-Agent: %s", user_agent)
 
     # Auto-redirect for iPad 2 (iOS 9)
     # Broader check: "ipad" and "os 9" (case-insensitive)
@@ -47,119 +51,69 @@ async def read_legacy(request: Request, session: Session = Depends(get_session))
     )
 
 
-@router.get("/components/weather", response_class=HTMLResponse)
-async def get_weather(session: Session = Depends(get_session)):
-    """Returns HTML fragment for weather widget."""
+@router.get("/components/weather", response_class=HTMLResponse, response_model=WeatherResponse)
+async def get_weather(request: Request, session: Session = Depends(get_session)):
+    """
+    Returns HTML fragment for weather widget.
+
+    Renders the `partials/weather.html` template. The `WeatherResponse` model
+    documents the structured weather data used by API consumers; the route
+    itself renders HTML for the UI.
+    """
     settings = session.exec(select(AppSettings)).first()
 
     if not settings or settings.weather_latitude is None or settings.weather_longitude is None:
-        return """
-        <div id="weather-display" class="weather-info">
-            <span class="condition" style="font-size: 0.8em; opacity: 0.8;">No location defined</span>
-        </div>
-        """
+        return templates.TemplateResponse(
+            "partials/weather.html",
+            {"request": request, "has_location": False},
+        )
 
     lat = settings.weather_latitude
     lon = settings.weather_longitude
 
     weather = await WeatherService.get_current_weather(lat, lon)
 
-    return f"""
-    <div id="weather-display" class="weather-info">
-        <span class="temp">{weather["temp"]}°C</span>
-        <span class="condition">{weather["condition"]}</span>
-    </div>
+    return templates.TemplateResponse(
+        "partials/weather.html",
+        {"request": request, "has_location": True, "weather": weather},
+    )
+
+
+@router.get("/components/slide", response_class=HTMLResponse, response_model=SlideResponse)
+async def get_next_slide(
+    request: Request, mode: str = "modern", session: Session = Depends(get_session)
+):
     """
+    Returns HTML fragment for the next slide.
 
-
-@router.get("/components/slide", response_class=HTMLResponse)
-async def get_next_slide(mode: str = "modern", session: Session = Depends(get_session)):
-    """Returns HTML fragment for the next slide."""
+    Renders `partials/slide.html` with `img_url` in the template context. The
+    `SlideResponse` model documents the available fields for API consumers.
+    """
     settings = session.exec(select(AppSettings)).first()
     if not settings or not settings.active_preset_id:
-        return "<div class='error-msg'>No Preset Active. Please configure in Admin.</div>"
+        return templates.TemplateResponse(
+            "partials/slide.html",
+            {"request": request, "error_msg": "No Preset Active. Please configure in Admin."},
+        )
 
     photos = session.exec(select(Photo).where(Photo.preset_id == settings.active_preset_id)).all()
 
     if not photos:
-        return "<div class='error-msg'>No Photos found in the active preset.</div>"
+        return templates.TemplateResponse(
+            "partials/slide.html",
+            {"request": request, "error_msg": "No Photos found in the active preset."},
+        )
 
     photo = random.choice(photos)
     img_url = f"/images/{photo.id}?mode={mode}"
 
-    return f"""
-    <div class="slide-container fade-in">
-        <img src="{img_url}" class="full-slide" alt="Slide">
-    </div>
-    """
-
-
-def _purge_old_dismissed_alarms(session: Session) -> None:
-    """Delete dismissed alarms older than 30 days."""
-    now = datetime.now()
-    purge_before = now - timedelta(days=30)
-    dismissed_alarms = session.exec(
-        select(AlarmEvent).where(
-            (AlarmEvent.dismissed_at.is_not(None)) & (AlarmEvent.dismissed_at < purge_before)
-        )
-    ).all()
-    for alarm_event in dismissed_alarms:
-        session.delete(alarm_event)
-    if dismissed_alarms:
-        session.commit()
-
-
-def _format_alarm(event, composite_uid, utc_now):
-    # All-day event detection: if start is at 00:00 and duration >= 1 day
-    is_all_day = (
-        event.event_start.hour == 0
-        and event.event_start.minute == 0
-        and (event.event_end - event.event_start).days >= 1
+    return templates.TemplateResponse(
+        "partials/slide.html",
+        {"request": request, "img_url": img_url},
     )
-    # Determine the display time: event start, or start-of-day for all-day events
-    try:
-        if is_all_day:
-            display_time = event.event_start.replace(hour=0, minute=0, second=0, microsecond=0)
-        else:
-            display_time = event.event_start
-    except Exception:
-        display_time = event.event_start
-    # Normalize display_time and event_end to UTC-aware datetimes
-    try:
-        if getattr(display_time, "tzinfo", None) is None:
-            display_time = display_time.replace(tzinfo=UTC)
-    except Exception:
-        pass
-    try:
-        event_end = (
-            event.event_end
-            if getattr(event.event_end, "tzinfo", None) is not None
-            else event.event_end.replace(tzinfo=UTC)
-        )
-    except Exception:
-        event_end = event.event_end
-    # Show the alarm once its display time has arrived and keep it until dismissed.
-    if display_time <= utc_now:
-        try:
-            start_val = (
-                event.event_start
-                if getattr(event.event_start, "tzinfo", None) is not None
-                else event.event_start.replace(tzinfo=UTC)
-            )
-        except Exception:
-            start_val = event.event_start
-        try:
-            end_val = event_end
-        except Exception:
-            end_val = event.event_end
-        return {
-            "uid": composite_uid,
-            "name": event.summary,
-            "start": start_val,
-            "end": end_val,
-            "all_day": is_all_day,
-        }
-    return None
+
+
+# Alarm formatting and purge logic moved to AlarmService in app/services/alarm_service.py
 
 
 async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None) -> list[dict]:
@@ -184,7 +138,7 @@ async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None
         if not dismissed:
             dismissed = session.exec(select(AlarmEvent).where(AlarmEvent.uid == event.uid)).first()
         if not dismissed or dismissed.dismissed_at is None:
-            alarm = _format_alarm(event, composite_uid, utc_now)
+            alarm = AlarmService.format_alarm(event, composite_uid, utc_now)
             if alarm:
                 active_alarms.append(alarm)
     return active_alarms
@@ -215,10 +169,60 @@ def _fetch_simulated_alarms(session: Session) -> list[dict]:
     return alarms
 
 
+def _alarms_to_context(
+    active_alarms: list[dict], mock: bool = False, tz_offset: int | None = None
+) -> list[dict]:
+    """Convert alarms into template-friendly context list."""
+    from datetime import datetime as _datetime
+
+    if not active_alarms:
+        return []
+
+    active_alarms.sort(key=lambda x: x.get("start") or _datetime.min, reverse=True)
+
+    tz_query = f"&tz_offset={tz_offset}" if tz_offset is not None else ""
+    contexts: list[dict] = []
+    for alarm in active_alarms:
+        start_iso = ""
+        end_iso = ""
+        all_day = False
+        if "start" in alarm and hasattr(alarm["start"], "isoformat"):
+            try:
+                start_iso = alarm["start"].isoformat()
+            except Exception as e:
+                logger.debug("Failed to isoformat start: %s", e)
+        if "end" in alarm and hasattr(alarm["end"], "isoformat"):
+            try:
+                end_iso = alarm["end"].isoformat()
+            except Exception as e:
+                logger.debug("Failed to isoformat end: %s", e)
+        if "all_day" in alarm:
+            all_day = alarm["all_day"]
+
+        fallback_text = _format_fallback_datetime(
+            alarm.get("start"), alarm.get("end"), all_day, start_iso
+        )
+
+        contexts.append(
+            {
+                "uid": alarm.get("uid"),
+                "name": alarm.get("name", ""),
+                "fallback_text": fallback_text,
+                "start_iso": start_iso,
+                "end_iso": end_iso,
+                "all_day": "true" if all_day else "false",
+                "mock": mock,
+                "tz_query": tz_query,
+            }
+        )
+
+    return contexts
+
+
 def _render_alarms_html(
     active_alarms: list[dict], mock: bool = False, tz_offset: int | None = None
 ) -> str:
-    """Generate HTML for alarm list."""
+    """Generate HTML for alarm list (backwards-compatible helper used in tests)."""
     if not active_alarms:
         return ""
 
@@ -232,15 +236,18 @@ def _render_alarms_html(
         start_iso = ""
         end_iso = ""
         all_day = False
-        try:
-            if "start" in alarm and hasattr(alarm["start"], "isoformat"):
+        if "start" in alarm and hasattr(alarm["start"], "isoformat"):
+            try:
                 start_iso = alarm["start"].isoformat()
-            if "end" in alarm and hasattr(alarm["end"], "isoformat"):
+            except Exception as e:
+                logger.debug("Failed to isoformat start: %s", e)
+        if "end" in alarm and hasattr(alarm["end"], "isoformat"):
+            try:
                 end_iso = alarm["end"].isoformat()
-            if "all_day" in alarm:
-                all_day = alarm["all_day"]
-        except Exception:
-            pass
+            except Exception as e:
+                logger.debug("Failed to isoformat end: %s", e)
+        if "all_day" in alarm:
+            all_day = alarm["all_day"]
 
         fallback_text = _format_fallback_datetime(
             alarm.get("start"), alarm.get("end"), all_day, start_iso
@@ -264,7 +271,10 @@ def _format_fallback_datetime(dt_obj, end_obj, all_day_flag: bool, start_iso_str
             return ""
         now_local = datetime.now(UTC)
         today = datetime(now_local.year, now_local.month, now_local.day, tzinfo=UTC)
-        start_dt = dt_obj if dt_obj.tzinfo is not None else dt_obj.replace(tzinfo=UTC)
+        # Ensure start_dt is UTC-aware
+        start_dt = (
+            dt_obj if getattr(dt_obj, "tzinfo", None) is not None else dt_obj.replace(tzinfo=UTC)
+        )
         start_day = datetime(start_dt.year, start_dt.month, start_dt.day, tzinfo=UTC)
         diff_days = (start_day - today).days
 
@@ -317,7 +327,8 @@ def _format_fallback_datetime(dt_obj, end_obj, all_day_flag: bool, start_iso_str
             time_text = t1
 
         return f"{day_text} {time_text}"
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to format fallback datetime: %s", e)
         return start_iso_str or ""
 
 
@@ -352,12 +363,13 @@ def _render_alarm_item(
 
 @router.get("/components/alarm", response_class=HTMLResponse)
 async def check_alarm(
+    request: Request,
     mock: bool = False,
     tz_offset: int | None = None,
     session: Session = Depends(get_session),
 ):
     """Checks for active alarms and returns a list of them if any exist."""
-    _purge_old_dismissed_alarms(session)
+    AlarmService.purge_old_dismissed_alarms(session)
 
     if mock:
         # Provide ISO datetimes so client-side can format using browser locale
@@ -393,7 +405,16 @@ async def check_alarm(
         simulated_alarms = _fetch_simulated_alarms(session)
         active_alarms = calendar_alarms + simulated_alarms
 
-    return _render_alarms_html(active_alarms, mock, tz_offset)
+    # Convert to template context and render partial
+    alarm_contexts = _alarms_to_context(active_alarms, mock, tz_offset)
+    if not alarm_contexts:
+        return HTMLResponse("")
+
+    return templates.TemplateResponse(
+        request,
+        "partials/alarms.html",
+        {"alarms": alarm_contexts},
+    )
 
 
 @router.get("/debug/calendar-events", response_class=JSONResponse)
@@ -450,6 +471,7 @@ async def debug_calendars(session: Session = Depends(get_session)) -> JSONRespon
 
 @router.post("/api/alarms/{uid}/dismiss", response_class=HTMLResponse)
 async def dismiss_alarm(
+    request: Request,
     uid: str,
     mock: bool = False,
     tz_offset: int | None = None,
@@ -483,7 +505,10 @@ async def dismiss_alarm(
 
                 if cached:
                     trigger_time = cached.event_start
-            except Exception:
+            except Exception as e:
+                logger.exception(
+                    "DB lookup error while finding cached event for uid %s: %s", uid, e
+                )
                 # Fall back to now on any DB lookup error
                 trigger_time = datetime.now()
 
@@ -496,4 +521,4 @@ async def dismiss_alarm(
         session.expunge_all()
 
     # Return the updated list immediately
-    return await check_alarm(mock=mock, tz_offset=tz_offset, session=session)
+    return await check_alarm(request, mock=mock, tz_offset=tz_offset, session=session)

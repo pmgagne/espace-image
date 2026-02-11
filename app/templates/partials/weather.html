@@ -1,0 +1,10 @@
+{% if not has_location %}
+<div id="weather-display" class="weather-info">
+    <span class="condition" style="font-size:0.8em; opacity:0.8;">No location defined</span>
+</div>
+{% else %}
+<div id="weather-display" class="weather-info">
+    <span class="temp">{{ weather.temp }}°C</span>
+    <span class="condition">{{ weather.condition }}</span>
+</div>
+{% endif %}

@@ -40,15 +40,14 @@
         display: block;
     }
 
-    @keyframes fadeIn {
-        from {
-            opacity: 0;
-        }
-
-        to {
-            opacity: 1;
-        }
+    .slide-placeholder {
+        width: 100%;
+        height: 100%;
+        background: #111;
+        display: block;
     }
+
+    /* single fadeIn keyframes above used for slideshow animations */
 
     @keyframes fadeOut {
         from {
@@ -317,7 +316,7 @@
 <div class="slideshow-container" hx-get="/components/slide?mode=modern"
     hx-trigger="load, every {{ settings.slideshow_duration or 30 }}s" hx-swap="innerHTML swap:1s">
     <!-- Placeholder -->
-    <div style="width:100%; height:100%; background: #111;"></div>
+    <div class="slide-placeholder" aria-hidden="true"></div>
 </div>
 
 <!-- Top Center Info Box -->

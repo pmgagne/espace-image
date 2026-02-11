@@ -1,75 +1,69 @@
 <div>
     <h2>Gallery Management</h2>
-    
+
     <!-- Top Bar: Preset Selector & Creation -->
-    <div style="display: flex; gap: 20px; align-items: flex-end; margin-bottom: 20px; background: #222; padding: 20px; border-radius: 8px;">
-        <div style="flex: 1;">
-            <label>Select Preset</label>
-            <select name="preset_id" 
-                    hx-get="/admin/partials/gallery" 
-                    hx-target="#admin-content" 
-                    style="margin-bottom: 0;">
+    <div class="top-bar">
+        <div class="preset-select">
+            <label for="preset-select">Select Preset</label>
+            <select id="preset-select" name="preset_id" hx-get="/admin/partials/gallery" hx-target="#admin-content">
                 {% if not presets %}
-                    <option value="">No Presets Available</option>
+                <option value="">No Presets Available</option>
                 {% endif %}
                 {% for preset in presets %}
-                <option value="{{ preset.id }}" {% if selected_preset and selected_preset.id == preset.id %}selected{% endif %}>
+                <option value="{{ preset.id }}" {% if selected_preset and selected_preset.id==preset.id %}selected{%
+                    endif %}>
                     {{ preset.name }}
                 </option>
                 {% endfor %}
             </select>
         </div>
-        
-        <div style="border-left: 1px solid #444; padding-left: 20px;">
+        <div class="preset-create">
             <label>New Preset</label>
-            <form hx-post="/admin/presets" hx-target="#admin-content" style="display: flex; gap: 10px;">
-                <input type="text" name="name" placeholder="Name" required style="margin-bottom: 0;">
+            <form hx-post="/admin/presets" hx-target="#admin-content" class="preset-create-form">
+                <input type="text" name="name" placeholder="Name" required>
                 <button type="submit">Create</button>
             </form>
         </div>
     </div>
 
     {% if selected_preset %}
-        <!-- Upload Area -->
-        <div style="background: #222; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-            <h3>Upload to: <span style="color: #007bff;">{{ selected_preset.name }}</span></h3>
-            <form hx-post="/admin/upload" 
-                  hx-target="#admin-content" 
-                  hx-encoding="multipart/form-data"
-                  style="display: flex; gap: 10px; align-items: center;">
-                <input type="hidden" name="preset_id" value="{{ selected_preset.id }}">
-                
-                <label class="file-input-wrapper btn" data-placeholder="Choose Photos" style="margin-bottom: 0;">
-                    <span class="btn-text">Choose Photos</span>
-                    <input type="file" name="files" multiple accept="image/*">
-                </label>
-                
-                <button type="submit" style="margin-bottom: 0;">Upload Photos</button>
-            </form>
-        </div>
+    <!-- Upload Area -->
+    {% if error_message %}
+    <div style="background: #3a1f1f; color: #ffdede; padding: 10px; border-radius: 6px; margin-bottom: 12px;">
+        <strong>Error:</strong> {{ error_message }}
+    </div>
+    {% endif %}
+    <div class="upload-area">
+        <h3>Upload to: <span style="color: #007bff;">{{ selected_preset.name }}</span></h3>
+        <form hx-post="/admin/upload" hx-target="#admin-content" hx-encoding="multipart/form-data" class="upload-form">
+            <input type="hidden" name="preset_id" value="{{ selected_preset.id }}">
 
-        <!-- Photo Grid -->
-        <h3>Photos ({{ photos|length }})</h3>
-        
-        {% if not photos %}
-            <p style="color: #666; font-style: italic;">No photos in this preset yet.</p>
-        {% else %}
-            <div class="gallery-grid">
-                {% for photo in photos %}
-                <div class="photo-card">
-                    <img src="/images/{{ photo.id }}?mode=modern" loading="lazy" alt="{{ photo.filename }}">
-                    <div class="photo-actions">
-                        <button class="delete-btn" 
-                                style="padding: 5px 10px; font-size: 0.8em;"
-                                hx-delete="/admin/photos/{{ photo.id }}" 
-                                hx-target="#admin-content"
-                                hx-confirm="Delete this photo?">
-                            Delete
-                        </button>
-                    </div>
-                </div>
-                {% endfor %}
+            <label class="file-input-wrapper btn" data-placeholder="Choose Photos" style="margin-bottom: 0;">
+                <span class="btn-text">Choose Photos</span>
+                <input type="file" name="files" multiple accept="image/*">
+            </label>
+
+            <button type="submit" style="margin-bottom: 0;">Upload Photos</button>
+        </form>
+    </div>
+
+    <!-- Photo Grid -->
+    <h3>Photos ({{ photos|length }})</h3>
+
+    {% if not photos %}
+    <p style="color: #666; font-style: italic;">No photos in this preset yet.</p>
+    {% else %}
+    <div class="gallery-grid">
+        {% for photo in photos %}
+        <div class="photo-card">
+            <img src="/images/{{ photo.id }}?mode=modern" loading="lazy" alt="{{ photo.filename }}">
+            <div class="photo-actions">
+                <button type="button" class="delete-btn" hx-delete="/admin/photos/{{ photo.id }}"
+                    hx-target="#admin-content" hx-confirm="Delete this photo?">Delete</button>
             </div>
-        {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
     {% endif %}
 </div>

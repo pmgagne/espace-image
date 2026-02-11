@@ -1,0 +1,20 @@
+{% if alarms %}
+<div id="alarm-box" class="alarm-box-container">
+    {% for alarm in alarms %}
+    <div class="alarm-item">
+        <div class="alarm-header">
+            <span class="alarm-icon">📅</span>
+            <span class="alarm-title">{{ alarm.name }}</span>
+        </div>
+        <div class="alarm-body">
+            <span class="alarm-time alarm-time-small" data-start="{{ alarm.start_iso }}" data-end="{{ alarm.end_iso }}"
+                data-allday="{{ alarm.all_day }}">{{ alarm.fallback_text }}</span>
+        </div>
+        <button type="button"
+            hx-post="/api/alarms/{{ alarm.uid }}/dismiss?mock={{ 'true' if alarm.mock else 'false' }}{{ alarm.tz_query }}"
+            hx-target="#alarm-poller" hx-swap="innerHTML" class="dismiss-btn-small"
+            aria-label="Dismiss alarm">Dismiss</button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

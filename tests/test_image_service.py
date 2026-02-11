@@ -106,3 +106,29 @@ def test_gallery_manager_delete(tmp_path, monkeypatch, jpeg_bytes):
     # Try deleting again (should return False)
     result = manager.delete_photo(filename, preset_name)
     assert result is False
+
+
+def test_gallery_manager_rejects_invalid_extension(tmp_path, monkeypatch, jpeg_bytes):
+    """Test that uploads with unsupported extensions are rejected early."""
+    upload_dir = tmp_path / "uploads"
+    manager = GalleryManager(upload_dir=str(upload_dir))
+    filename = "malicious.pdf"
+
+    monkeypatch.setenv("IMAGE_OPTIMIZE_MIN_BYTES", "10000000")
+    with pytest.raises(ValueError) as exc:
+        manager.save_upload(jpeg_bytes, filename)
+
+    assert "not allowed" in str(exc.value)
+
+
+def test_gallery_manager_accepts_uppercase_extension(tmp_path, monkeypatch, jpeg_bytes):
+    """Test that extension check is case-insensitive."""
+    upload_dir = tmp_path / "uploads"
+    manager = GalleryManager(upload_dir=str(upload_dir))
+    filename = "test.JPG"
+
+    monkeypatch.setenv("IMAGE_OPTIMIZE_MIN_BYTES", "10000000")
+    saved_path, stored_filename = manager.save_upload(jpeg_bytes, filename)
+
+    assert saved_path.exists()
+    assert stored_filename.lower().endswith(".jpg")

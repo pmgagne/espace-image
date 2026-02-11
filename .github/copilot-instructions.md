@@ -22,6 +22,7 @@
 ## Integration points & config
 - Calendar sources: iCloud/ICS URLs stored in CalendarSource; background sync every 10 minutes.
 - Weather: WeatherService hits Open-Meteo; admin geocoding uses Nominatim (see app/routers/admin.py).
+- **Rate limiting**: Geocoding endpoints are rate-limited to comply with upstream API policies. See `app/services/rate_limiter.py` (6 req/min for Open-Meteo, 3 req/min for Nominatim). Limits are per-process in-memory; use Redis for multi-worker deployments.
 - Env flags: LOG_LEVEL (logging), WEBAPP_DEBUG (template debug flag), DATABASE_URL (SQLite by default).
 
 ## Documentation Maintenance
