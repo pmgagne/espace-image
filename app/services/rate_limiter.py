@@ -9,6 +9,12 @@ class RateLimiter:
     Usage:
         await rate_limiter.acquire("geocoding", max_calls=5, period=60)
 
+    Example:
+        allowed = await rate_limiter.acquire("geocoding:open-meteo", max_calls=6, period=60)
+        if not allowed:
+            logger.warning("Rate limit exceeded for geocoding: %s", query)
+            return None
+
     This is intentionally lightweight and not suitable for multi-process
     deployments. It prevents bursts during local dev and reduces accidental
     abuse of upstream geocoding services.
