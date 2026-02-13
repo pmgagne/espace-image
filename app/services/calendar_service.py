@@ -88,9 +88,6 @@ class CalendarService:
         return normalize_datetime(val)
 
     @staticmethod
-    # Recurrence helpers removed: icalevents provides recurrence expansion.
-
-    @staticmethod
     def _detect_proximity_uids(ics_content: str) -> set:
         """Scan raw ICS content and return a set of UIDs for VEVENTs that contain
         a VALARM with a PROXIMITY property.

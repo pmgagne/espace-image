@@ -297,13 +297,7 @@
 <link rel="icon" type="image/png" sizes="512x512" href="/static/espaceimage-512.png">
 <link rel="icon" href="/static/espaceimage-512.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/espaceimage-192.png">
-<script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function () {
-            navigator.serviceWorker.register('/static/sw.js');
-        });
-    }
-</script>
+<script src="/static/js/main.js"></script>
 
 {% endblock %}
 
