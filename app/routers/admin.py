@@ -21,6 +21,7 @@ from app.db.session import get_session
 from app.services.calendar_service import CalendarService
 from app.services.image_service import GalleryManager
 from app.services.weather_service import WeatherService
+from app.utils.timezone import get_local_timezone_name
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
@@ -63,10 +64,17 @@ async def get_settings_partial(request: Request, session: Session = Depends(get_
         except Exception:
             logger.exception("Geocoding error while reverse geocoding")
 
+    backend_timezone = get_local_timezone_name()
+
     return templates.TemplateResponse(
         request,
         "partials/settings.html",
-        {"settings": settings, "presets": presets, "location_name": location_name},
+        {
+            "settings": settings,
+            "presets": presets,
+            "location_name": location_name,
+            "backend_timezone": backend_timezone,
+        },
     )
 
 
@@ -99,7 +107,12 @@ async def search_location(
     return templates.TemplateResponse(
         request,
         "partials/settings.html",
-        {"settings": settings, "presets": presets, "location_name": location_name},
+        {
+            "settings": settings,
+            "presets": presets,
+            "location_name": location_name,
+            "backend_timezone": get_local_timezone_name(),
+        },
     )
 
 

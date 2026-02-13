@@ -21,8 +21,6 @@ Espace-Image manages events, alarms, and calendar data across multiple time zone
 
 **References:**
 
-- [docs/db/DB.md](docs/db/DB.md)
-- [app/db/models.py](app/db/models.py)
-- [app/services/calendar_service.py](app/services/calendar_service.py)
-- [memory-bank/instructions](memory-bank/)
-- [ISO 8601 standard](https://www.iso.org/iso-8601-date-and-time-format.html)
+---
+**iCalendar Parsing Clarification:**
+When parsing iCalendar (ICS) data, event and alarm times may not always specify a timezone (no TZID or UTC "Z" suffix). In such cases, the backend must treat the datetime as "floating" and interpret it in the backend's local timezone before converting to UTC for storage and API responses.

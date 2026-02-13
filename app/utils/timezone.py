@@ -50,3 +50,49 @@ def normalize_datetime(val):
         return datetime.combine(val, time.min, tzinfo=UTC)
     except Exception:
         raise TypeError(f"Cannot normalize value of type {type(val)} to datetime")
+
+
+def get_local_timezone_name() -> str:
+    """Return a human-friendly name for the system's local timezone.
+
+    Tries to return an IANA/ZoneInfo key if available, otherwise falls back
+    to the tzname abbreviation.
+    """
+    try:
+        tz = datetime.now().astimezone().tzinfo
+        # ZoneInfo has attribute 'key' on Python 3.9+ when created via ZoneInfo
+        name = getattr(tz, "key", None) or getattr(tz, "zone", None)
+        if name:
+            return str(name)
+        return tz.tzname(None) or "UTC"
+    except Exception:
+        logger.exception("Unable to determine local timezone name")
+        return "UTC"
+
+
+def format_datetime_in_local(dt, fmt: str | None = None) -> str:
+    """Format a datetime in the system local timezone.
+
+    If `dt` is naive it will be treated as UTC. Returns a human-friendly
+    representation including the timezone abbreviation.
+    """
+    if dt is None:
+        return ""
+    try:
+        if fmt is None:
+            fmt = "%Y-%m-%d %H:%M:%S %Z"
+        # If naive, assume UTC (stored values are UTC)
+        if getattr(dt, "tzinfo", None) is None:
+            from datetime import UTC
+
+            dt = dt.replace(tzinfo=UTC)
+
+        local_tz = datetime.now().astimezone().tzinfo
+        local_dt = dt.astimezone(local_tz)
+        return local_dt.strftime(fmt)
+    except Exception:
+        logger.exception("Failed to format datetime in local timezone")
+        try:
+            return str(dt)
+        except Exception:
+            return ""
