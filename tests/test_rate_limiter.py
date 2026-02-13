@@ -7,11 +7,11 @@ def test_rate_limiter_allows_and_blocks():
     rl = RateLimiter()
     loop = asyncio.new_event_loop()
     try:
-    # allow one call per second
-    allowed = loop.run_until_complete(rl.acquire("testkey", max_calls=1, period=1))
-    assert allowed is True
+        # allow one call per second
+        allowed = loop.run_until_complete(rl.acquire("testkey", max_calls=1, period=1))
+        assert allowed is True
 
-    # immediate second call should be blocked
+        # immediate second call should be blocked
         allowed2 = loop.run_until_complete(rl.acquire("testkey", max_calls=1, period=1))
         assert allowed2 is False
     finally:
