@@ -1,7 +1,10 @@
 /* Shared Admin Form Styles */
 
 /* Inputs & Selects */
-.form-control, input[type="text"], input[type="number"], select {
+.form-control,
+input[type="text"],
+input[type="number"],
+select {
     width: 100%;
     height: 40px;
     padding: 6px 12px;
@@ -16,7 +19,8 @@
 }
 
 /* Buttons */
-.btn, button {
+.btn,
+button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -34,9 +38,21 @@
     text-decoration: none;
     white-space: nowrap;
 }
-button:hover, .btn:hover { background: #0056b3; }
-button.delete-btn, .btn-danger { background: #dc3545; }
-button.delete-btn:hover, .btn-danger:hover { background: #a71d2a; }
+
+button:hover,
+.btn:hover {
+    background: #0056b3;
+}
+
+button.delete-btn,
+.btn-danger {
+    background: #dc3545;
+}
+
+button.delete-btn:hover,
+.btn-danger:hover {
+    background: #a71d2a;
+}
 
 /* File Input Wrapper */
 .file-input-wrapper {
@@ -61,13 +77,31 @@ button.delete-btn:hover, .btn-danger:hover { background: #a71d2a; }
     display: block;
 }
 
-label { display: block; margin-bottom: 5px; color: #ccc; }
-h2 { border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 20px; }
+label {
+    display: block;
+    margin-bottom: 5px;
+    color: #ccc;
+}
+
+h2 {
+    border-bottom: 1px solid #444;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
 
 /* HTMX Indicator */
-.htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
-.htmx-request .htmx-indicator { opacity: 1 }
-.htmx-request.htmx-indicator { opacity: 1 }
+.htmx-indicator {
+    opacity: 0;
+    transition: opacity 200ms ease-in;
+}
+
+.htmx-request .htmx-indicator {
+    opacity: 1
+}
+
+.htmx-request.htmx-indicator {
+    opacity: 1
+}
 
 /* Gallery Grid (Common) */
 .gallery-grid {
@@ -75,7 +109,8 @@ h2 { border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 20px; }
     display: flex;
     flex-wrap: wrap;
     margin-top: 20px;
-    margin-left: -10px; margin-right: -10px;
+    margin-left: -10px;
+    margin-right: -10px;
 }
 
 .photo-card {
@@ -96,12 +131,42 @@ h2 { border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 20px; }
 
 .photo-actions {
     position: absolute;
-    bottom: 0; left: 0; right: 0;
-    background: rgba(0,0,0,0.7);
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.7);
     padding: 5px;
     text-align: right;
     opacity: 0;
     transition: opacity 0.2s;
 }
 
-.photo-card:hover .photo-actions { opacity: 1; }
+.photo-card:hover .photo-actions {
+    opacity: 1;
+}
+
+/* Admin page layout (moved from inline styles in admin.html) */
+.admin-page {
+    padding: 20px;
+    background: #222;
+    min-height: 100vh;
+    color: #fff;
+}
+
+.back-link {
+    color: #aaa;
+}
+
+.admin-flex {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.admin-panel {
+    background: #333;
+    padding: 20px;
+    border-radius: 8px;
+    flex: 1;
+    min-width: 300px;
+}
