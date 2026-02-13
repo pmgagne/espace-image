@@ -66,13 +66,32 @@ class CalendarService:
 
     @staticmethod
     def parse_ics_events(
-        ics_content: str, start: datetime, end: datetime, tzinfo=None
+        ics_content: str, start: datetime, end: datetime, tzinfo=None, fix_icloud: bool = False
     ) -> list[ICalEvent]:
-        """Parse ICS content string into a list of ICalEvent objects using icalevents."""
+        """Parse ICS content string into a list of ICalEvent objects using icalevents.
+
+        When `fix_icloud` is True, attempt to pass the library-specific workaround
+        flag(s) for known Apple/iCloud quirks. We try a small set of candidate
+        keyword names to remain compatible across versions; if none apply we
+        fall back to the default call.
+        """
+        base_kwargs = dict(string_content=ics_content, start=start, end=end, tzinfo=tzinfo)
+        if fix_icloud:
+            candidate_flags = ["fix_apple", "fix_icloud", "fix_apple_icloud"]
+            for flag in candidate_flags:
+                try:
+                    kwargs = base_kwargs.copy()
+                    kwargs[flag] = True
+                    logger.debug("Trying icalevents parser with flag: %s", flag)
+                    return icalevents_events(**kwargs)
+                except TypeError:
+                    # Unexpected kwarg for this icalevents version; try next
+                    continue
+                except Exception as e:
+                    logger.warning("icalevents failed with %s=True: %s", flag, e)
+                    return []
         try:
-            return icalevents_events(
-                string_content=ics_content, start=start, end=end, tzinfo=tzinfo
-            )
+            return icalevents_events(**base_kwargs)
         except Exception as e:
             logger.warning("Failed to parse ICS content: %s", e)
             return []
@@ -116,6 +135,7 @@ class CalendarService:
         lookahead_minutes: int = 0,
         lookback_minutes: int = 60 * 12,
         tzinfo=None,
+        fix_icloud: bool = False,
     ) -> list[dict]:
         """
         Returns a list of events starting within the next `lookahead_minutes`
@@ -125,7 +145,11 @@ class CalendarService:
         lower_bound = check_time - timedelta(minutes=lookback_minutes)
         upper_bound = check_time + timedelta(minutes=lookahead_minutes)
         events = CalendarService.parse_ics_events(
-            ics_content, lower_bound, upper_bound, tzinfo=tzinfo
+            ics_content,
+            lower_bound,
+            upper_bound,
+            tzinfo=tzinfo,
+            fix_icloud=fix_icloud,
         )
         # Ensure events have timezone info; if naive, apply local tz fallback
         local_tz = CalendarService._get_local_tz()
@@ -189,14 +213,16 @@ class CalendarService:
         tasks = [CalendarService.fetch_ics(url) for _, url in sources]
         results = await asyncio.gather(*tasks)
         all_alarms = []
-        for (source_id, _), content in zip(sources, results, strict=False):
+        for (source_id, url), content in zip(sources, results, strict=False):
             if content:
+                fix_icloud = isinstance(url, str) and "icloud.com" in url
                 alarms = CalendarService.get_upcoming_alarms(
                     content,
                     check_time,
                     lookahead_minutes=lookahead_minutes,
                     lookback_minutes=lookback_minutes,
                     tzinfo=tzinfo,
+                    fix_icloud=fix_icloud,
                 )
                 for alarm in alarms:
                     alarm["uid"] = f"{source_id}:{alarm['uid']}"
@@ -207,14 +233,20 @@ class CalendarService:
 
     @staticmethod
     def extract_events_from_ics(
-        ics_content: str, source_id: int, window_start: datetime, window_end: datetime
+        ics_content: str,
+        source_id: int,
+        window_start: datetime,
+        window_end: datetime,
+        fix_icloud: bool = False,
     ) -> list[dict]:
         """
         Parses ICS content and extracts events within the given time window using icalevents.
         Returns list of event dicts with keys: uid, event_start, event_end, summary, description, location.
         """
         events: list[dict] = []
-        ical_events = CalendarService.parse_ics_events(ics_content, window_start, window_end)
+        ical_events = CalendarService.parse_ics_events(
+            ics_content, window_start, window_end, fix_icloud=fix_icloud
+        )
         # Apply local tz fallback for naive datetimes returned by parser
         local_tz = CalendarService._get_local_tz()
         for event in ical_events:
@@ -290,8 +322,9 @@ class CalendarService:
                 logger.warning(f"Failed to sync calendar {source_id}: {source.label}")
                 return
 
+            fix_icloud = isinstance(source.url, str) and "icloud.com" in source.url
             events = CalendarService.extract_events_from_ics(
-                ics_content, source_id, window_start, window_end
+                ics_content, source_id, window_start, window_end, fix_icloud=fix_icloud
             )
 
             # Remove cached events for this source (we'll re-insert)

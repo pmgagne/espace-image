@@ -1,71 +1,71 @@
 {% extends "base.html" %}
 {% block content %}
-                <script src="/static/js/admin.js"></script>
-                        </form>
-                    </div>
-                </div>
+<script src="/static/js/admin.js"></script>
+</form>
+</div>
+</div>
 
-                <script>
-                    // Include file input logic for this page too
-                    document.body.addEventListener('change', function (e) {
-                        if (e.target && e.target.type === 'file') {
-                            var wrapper = e.target.parentNode;
-                            if (wrapper.classList.contains('file-input-wrapper')) {
-                                var labelSpan = wrapper.querySelector('.btn-text');
-                                if (labelSpan) {
-                                    var count = e.target.files ? e.target.files.length : 1;
-                                    if (count > 0) {
-                                        labelSpan.innerText = count + (count === 1 ? " File Selected" : " Files Selected");
-                                    } else {
-                                        labelSpan.innerText = wrapper.getAttribute('data-placeholder') || "Choose Files";
-                                    }
-                                }
-                            }
-                        }
-                    });
-                    
-                    // Format last synced UTC times to the user's local timezone
-                    function parseUtcStringToDate(utc) {
-                        if (!utc) return null;
-                        var s = String(utc).trim();
-                        // Normalize common variants: replace space separator with T
-                        if (s.indexOf('T') === -1 && s.indexOf(' ') !== -1) {
-                            s = s.replace(' ', 'T');
-                        }
-                        // If no timezone info present, assume UTC and append Z
-                        if (!(/[zZ]$/.test(s) || /[\+\-]\d{2}:?\d{2}$/.test(s))) {
-                            s = s + 'Z';
-                        }
-                        var d = new Date(s);
-                        if (isNaN(d.getTime())) return null;
-                        return d;
+<script>
+    // Include file input logic for this page too
+    document.body.addEventListener('change', function (e) {
+        if (e.target && e.target.type === 'file') {
+            var wrapper = e.target.parentNode;
+            if (wrapper.classList.contains('file-input-wrapper')) {
+                var labelSpan = wrapper.querySelector('.btn-text');
+                if (labelSpan) {
+                    var count = e.target.files ? e.target.files.length : 1;
+                    if (count > 0) {
+                        labelSpan.innerText = count + (count === 1 ? " File Selected" : " Files Selected");
+                    } else {
+                        labelSpan.innerText = wrapper.getAttribute('data-placeholder') || "Choose Files";
                     }
+                }
+            }
+        }
+    });
 
-                    function formatLastSyncedTimes() {
-                        var els = document.querySelectorAll('.last-synced');
-                        els.forEach(function (el) {
-                            var utc = el.getAttribute('data-utc') || el.textContent || '';
-                            utc = (typeof utc === 'string') ? utc.trim() : '';
-                            if (!utc) return;
-                            try {
-                                var d = parseUtcStringToDate(utc);
-                                if (!d) {
-                                    // try a looser parse from displayed text (space-separated)
-                                    var alt = utc.replace(' ', 'T') + 'Z';
-                                    d = parseUtcStringToDate(alt);
-                                }
-                                if (!d) return;
-                                // Use locale string for readability; keep default locale
-                                el.textContent = d.toLocaleString();
-                            } catch (e) {
-                                console.warn('Failed to parse last-synced time', e, utc);
-                            }
-                        });
-                    }
+    // Format last synced UTC times to the user's local timezone
+    function parseUtcStringToDate(utc) {
+        if (!utc) return null;
+        var s = String(utc).trim();
+        // Normalize common variants: replace space separator with T
+        if (s.indexOf('T') === -1 && s.indexOf(' ') !== -1) {
+            s = s.replace(' ', 'T');
+        }
+        // If no timezone info present, assume UTC and append Z
+        if (!(/[zZ]$/.test(s) || /[\+\-]\d{2}:?\d{2}$/.test(s))) {
+            s = s + 'Z';
+        }
+        var d = new Date(s);
+        if (isNaN(d.getTime())) return null;
+        return d;
+    }
 
-                    document.addEventListener('DOMContentLoaded', formatLastSyncedTimes);
-                    document.body.addEventListener('htmx:afterSwap', function (evt) {
-                        try { formatLastSyncedTimes(); } catch (e) { /* ignore */ }
-                    });
-                </script>
-                {% endblock %}
+    function formatLastSyncedTimes() {
+        var els = document.querySelectorAll('.last-synced');
+        els.forEach(function (el) {
+            var utc = el.getAttribute('data-utc') || el.textContent || '';
+            utc = (typeof utc === 'string') ? utc.trim() : '';
+            if (!utc) return;
+            try {
+                var d = parseUtcStringToDate(utc);
+                if (!d) {
+                    // try a looser parse from displayed text (space-separated)
+                    var alt = utc.replace(' ', 'T') + 'Z';
+                    d = parseUtcStringToDate(alt);
+                }
+                if (!d) return;
+                // Use locale string for readability; keep default locale
+                el.textContent = d.toLocaleString();
+            } catch (e) {
+                console.warn('Failed to parse last-synced time', e, utc);
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', formatLastSyncedTimes);
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+        try { formatLastSyncedTimes(); } catch (e) { /* ignore */ }
+    });
+</script>
+{% endblock %}
