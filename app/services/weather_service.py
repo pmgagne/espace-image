@@ -3,8 +3,6 @@ from typing import ClassVar
 
 import httpx
 
-from app.services.rate_limiter import rate_limiter
-
 logger = logging.getLogger(__name__)
 
 
@@ -76,11 +74,6 @@ class WeatherService:
         Returns: {'lat': float, 'lon': float, 'name': str} or None
         """
         try:
-            # Enforce local rate limit to avoid hammering the upstream service
-            allowed = await rate_limiter.acquire("geocoding:open-meteo", max_calls=6, period=60)
-            if not allowed:
-                logger.warning("Rate limit exceeded for geocoding: %s", query)
-                return None
             url = "https://geocoding-api.open-meteo.com/v1/search"
             params = {"name": query, "count": 1, "language": "fr", "format": "json"}
             async with httpx.AsyncClient() as client:

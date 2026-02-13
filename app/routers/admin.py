@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -45,29 +46,20 @@ async def get_settings_partial(request: Request, session: Session = Depends(get_
     if settings and settings.weather_latitude and settings.weather_longitude:
         try:
             # Simple reverse geocode for Admin UI context
-            import httpx
-
-            from app.services.rate_limiter import rate_limiter
-
-            allowed = await rate_limiter.acquire("geocoding:nominatim", max_calls=3, period=60)
-            if not allowed:
-                logger.warning("Nominatim reverse geocode rate-limited for admin settings")
-                location_name = "Rate limited"
-            else:
-                url = f"https://nominatim.openstreetmap.org/reverse?lat={settings.weather_latitude}&lon={settings.weather_longitude}&format=json"
-                async with httpx.AsyncClient() as client:
-                    resp = await client.get(url, headers={"User-Agent": "Espace-Image/1.0"})
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        address = data.get("address", {})
-                        city = (
-                            address.get("city")
-                            or address.get("town")
-                            or address.get("village")
-                            or "Unknown"
-                        )
-                        state = address.get("state") or address.get("region") or ""
-                        location_name = f"{city}, {state}" if state else city
+            url = f"https://nominatim.openstreetmap.org/reverse?lat={settings.weather_latitude}&lon={settings.weather_longitude}&format=json"
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, headers={"User-Agent": "Espace-Image/1.0"})
+                if resp.status_code == 200:
+                    data = resp.json()
+                    address = data.get("address", {})
+                    city = (
+                        address.get("city")
+                        or address.get("town")
+                        or address.get("village")
+                        or "Unknown"
+                    )
+                    state = address.get("state") or address.get("region") or ""
+                    location_name = f"{city}, {state}" if state else city
         except Exception:
             logger.exception("Geocoding error while reverse geocoding")
 
