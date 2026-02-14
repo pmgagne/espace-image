@@ -21,7 +21,11 @@ class AlarmService:
             )
         ).all()
         if dismissed_alarms:
-            logger.info("Purging %d dismissed alarms older than %s", len(dismissed_alarms), purge_before.isoformat())
+            logger.info(
+                "Purging %d dismissed alarms older than %s",
+                len(dismissed_alarms),
+                purge_before.isoformat(),
+            )
             for alarm_event in dismissed_alarms:
                 session.delete(alarm_event)
             session.commit()
