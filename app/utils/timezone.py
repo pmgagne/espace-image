@@ -5,16 +5,17 @@ logger = logging.getLogger(__name__)
 
 
 def ensure_utc_aware(dt: datetime) -> datetime:
-    """Ensure a datetime is timezone-aware and in UTC.
+    """
+    Ensure a datetime is timezone-aware and in UTC.
 
     Args:
-        dt: datetime instance (naive or aware)
+        dt (datetime): Datetime instance (naive or aware).
 
     Returns:
-        datetime: timezone-aware datetime in UTC
+        datetime: Timezone-aware datetime in UTC.
 
     Raises:
-        TypeError: if dt is not a datetime instance
+        TypeError: If dt is not a datetime instance or is None.
     """
     if dt is None:
         raise TypeError("dt must be a datetime, got None")
@@ -32,11 +33,20 @@ def ensure_utc_aware(dt: datetime) -> datetime:
         return dt.replace(tzinfo=UTC)
 
 
-def normalize_datetime(val):
-    """Normalize a date or datetime-like value to an aware UTC datetime.
+def normalize_datetime(val) -> datetime | None:
+    """
+    Normalize a date or datetime-like value to an aware UTC datetime.
 
     Accepts datetime or date objects. Returns UTC-aware datetime.
-    Raises TypeError for unsupported types.
+
+    Args:
+        val: A datetime or date-like object.
+
+    Returns:
+        datetime | None: UTC-aware datetime, or None if input is None.
+
+    Raises:
+        TypeError: For unsupported types.
     """
     if val is None:
         return None
@@ -53,10 +63,14 @@ def normalize_datetime(val):
 
 
 def get_local_timezone_name() -> str:
-    """Return a human-friendly name for the system's local timezone.
+    """
+    Return a human-friendly name for the system's local timezone.
 
     Tries to return an IANA/ZoneInfo key if available, otherwise falls back
     to the tzname abbreviation.
+
+    Returns:
+        str: The local timezone name or abbreviation.
     """
     try:
         tz = datetime.now().astimezone().tzinfo
@@ -70,11 +84,19 @@ def get_local_timezone_name() -> str:
         return "UTC"
 
 
-def format_datetime_in_local(dt, fmt: str | None = None) -> str:
-    """Format a datetime in the system local timezone.
+def format_datetime_in_local(dt: datetime, fmt: str | None = None) -> str:
+    """
+    Format a datetime in the system local timezone.
 
     If `dt` is naive it will be treated as UTC. Returns a human-friendly
     representation including the timezone abbreviation.
+
+    Args:
+        dt (datetime): The datetime to format.
+        fmt (str | None): Optional format string.
+
+    Returns:
+        str: Formatted datetime string in local timezone.
     """
     if dt is None:
         return ""

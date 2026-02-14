@@ -56,8 +56,12 @@ flowchart TD
     style Frontend fill:#bbf,stroke:#333,stroke-width:1px
 ```
 
+
 ## Rationale
 
+- **icalevents migration:** The switch to icalevents (see [TASK011](../../memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md)) enables robust, maintainable handling of recurring events and alarms, replacing legacy icalendar code and simplifying recurrence logic.
+- **Backend-driven logic:** All alarm/event logic is centralized in the backend, ensuring correctness, testability, and separation of concerns (see [DB.md](../db/DB.md)).
+- **UTC normalization:** All event and alarm times are normalized to UTC in the backend (see [ADR-2026-02-12-backend-utc-time-storage.md](ADR-2026-02-12-backend-utc-time-storage.md)), with the frontend responsible for local conversion.
 - **Separation of concerns:** Backend handles all alarm logic; frontend is a pure display layer.
 - **Performance:** Only relevant events are cached; no heavy parsing at request time.
 - **Security/Correctness:** Centralized alarm logic avoids client-side bugs or drift.
@@ -75,9 +79,11 @@ flowchart TD
     - If event volume grows dramatically, further caching or async job processing may be needed.
 
 
+
 ## Related Decisions
 
-- See ADR-2026-02-12-backend-utc-time-storage.md for time handling rationale.
-- See [TASK011-migrate-icalendar-to-icalevents.md](../../memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md) for migration details and rationale.
+- [ADR-2026-02-12-backend-utc-time-storage.md](ADR-2026-02-12-backend-utc-time-storage.md): Time handling rationale and UTC normalization
+- [TASK011-migrate-icalendar-to-icalevents.md](../../memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md): Migration details and rationale for icalevents
+- [DB.md](../db/DB.md): Database schema, alarm/event caching, and usage patterns
 
 ---

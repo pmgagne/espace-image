@@ -10,9 +10,18 @@ logger = logging.getLogger(__name__)
 
 
 class AlarmService:
+    """
+    Service for alarm-related operations, including purging old dismissed alarms and formatting alarm events for display.
+    """
+
     @staticmethod
     def purge_old_dismissed_alarms(session) -> None:
-        """Delete dismissed alarms older than 30 days."""
+        """
+        Delete dismissed alarms older than 30 days.
+
+        Args:
+            session: SQLModel session for database operations.
+        """
         now = ensure_utc_aware(datetime.now())
         purge_before = now - timedelta(days=30)
         dismissed_alarms = session.exec(
@@ -31,11 +40,19 @@ class AlarmService:
             session.commit()
 
     @staticmethod
-    def format_alarm(event, composite_uid, utc_now):
-        """Format calendar event for alarm display.
+    def format_alarm(event, composite_uid: str, utc_now: datetime) -> dict | None:
+        """
+        Format calendar event for alarm display.
 
-        Preserves the logic moved from the router to determine all-day events,
-        normalize timezone info, and determine visibility relative to utc_now.
+        Determines all-day events, normalizes timezone info, and determines visibility relative to utc_now.
+
+        Args:
+            event: An event object with event_start, event_end, summary attributes.
+            composite_uid (str): Composite unique identifier for the alarm.
+            utc_now (datetime): The current UTC time for visibility logic.
+
+        Returns:
+            dict | None: Alarm dictionary if visible, else None.
         """
         # All-day event detection: if start is at 00:00 and duration >= 1 day
         is_all_day = (

@@ -7,6 +7,10 @@ logger = logging.getLogger(__name__)
 
 
 class WeatherService:
+    """
+    Service for fetching current weather and geocoding locations using Open-Meteo APIs.
+    """
+
     # WMO Weather interpretation codes (WW)
     # https://open-meteo.com/en/docs
     WMO_CODES: ClassVar[dict[int, str]] = {
@@ -39,7 +43,14 @@ class WeatherService:
     @staticmethod
     async def get_current_weather(lat: float, lon: float) -> dict:
         """
-        Fetches current weather from Open-Meteo.
+        Fetch current weather from Open-Meteo.
+
+        Args:
+            lat (float): Latitude.
+            lon (float): Longitude.
+
+        Returns:
+            dict: Weather data with keys 'temp', 'condition', and 'location'.
         """
         try:
             url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
@@ -70,8 +81,13 @@ class WeatherService:
     @staticmethod
     async def geocode_location(query: str) -> dict | None:
         """
-        Searches for a location name using Open-Meteo Geocoding API.
-        Returns: {'lat': float, 'lon': float, 'name': str} or None
+        Search for a location name using Open-Meteo Geocoding API.
+
+        Args:
+            query (str): Location name to search for.
+
+        Returns:
+            dict | None: {'lat': float, 'lon': float, 'name': str} or None if not found.
         """
         try:
             url = "https://geocoding-api.open-meteo.com/v1/search"

@@ -4,7 +4,8 @@ from collections import deque
 
 
 class RateLimiter:
-    """Simple async in-memory sliding-window rate limiter.
+    """
+    Simple async in-memory sliding-window rate limiter.
 
     Usage:
         await rate_limiter.acquire("geocoding", max_calls=5, period=60)
@@ -21,18 +22,37 @@ class RateLimiter:
     """
 
     def __init__(self) -> None:
+        """
+        Initialize the RateLimiter with empty buckets and locks.
+        """
         self._buckets: dict[str, deque[float]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
 
     def _get_lock(self, key: str) -> asyncio.Lock:
+        """
+        Get or create an asyncio.Lock for a given key.
+
+        Args:
+            key (str): The rate limit key.
+
+        Returns:
+            asyncio.Lock: The lock for the key.
+        """
         if key not in self._locks:
             self._locks[key] = asyncio.Lock()
         return self._locks[key]
 
     async def acquire(self, key: str, max_calls: int = 5, period: int = 60) -> bool:
-        """Attempt to acquire a slot for `key`.
+        """
+        Attempt to acquire a slot for `key`.
 
-        Returns True if within rate limits, False otherwise.
+        Args:
+            key (str): The rate limit key.
+            max_calls (int): Maximum allowed calls in the period.
+            period (int): Time window in seconds.
+
+        Returns:
+            bool: True if within rate limits, False otherwise.
         """
         now = time.monotonic()
         lock = self._get_lock(key)

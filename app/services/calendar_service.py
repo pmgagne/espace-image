@@ -23,12 +23,25 @@ logger = logging.getLogger(__name__)
 
 
 class CalendarService:
+    """
+    Service for fetching, parsing, and caching calendar events from ICS feeds.
+
+    Provides static and async methods to:
+    - Download and parse iCalendar (ICS) feeds from configured sources
+    - Cache and update calendar events
+    - Extract alarms and event data for use in the dashboard and other consumers
+    """
+
     @staticmethod
     def _get_local_tz() -> ZoneInfo | None:
-        """Return the local timezone to use for naive datetimes.
+        """
+        Return the local timezone to use for naive datetimes.
 
         Prefers the `TZ` environment variable (ZoneInfo name). Falls back to
         the system local timezone if available.
+
+        Returns:
+            ZoneInfo | None: The detected local timezone, or None if unavailable.
         """
         tzname = os.environ.get("TZ")
         if tzname:
@@ -43,8 +56,13 @@ class CalendarService:
             return None
 
     @staticmethod
-    def _on_backoff(details):
-        """Callback for backoff retry attempts."""
+    def _on_backoff(details: dict) -> None:
+        """
+        Callback for backoff retry attempts.
+
+        Args:
+            details (dict): Details about the backoff attempt.
+        """
         tries = details.get("tries", 0)
         exception = details.get("exception")
         wait = details.get("wait", 0)
@@ -55,8 +73,13 @@ class CalendarService:
         )
 
     @staticmethod
-    def _on_giveup(details):
-        """Callback when backoff gives up after max retries."""
+    def _on_giveup(details: dict) -> None:
+        """
+        Callback when backoff gives up after max retries.
+
+        Args:
+            details (dict): Details about the giveup event.
+        """
         tries = details.get("tries", 0)
         exception = details.get("exception")
         logger.warning(
@@ -66,14 +89,24 @@ class CalendarService:
 
     @staticmethod
     def parse_ics_events(
-        ics_content: str, start: datetime, end: datetime, tzinfo=None, fix_icloud: bool = False
+        ics_content: str,
+        start: datetime,
+        end: datetime,
+        tzinfo: ZoneInfo | None = None,
+        fix_icloud: bool = False,
     ) -> list[ICalEvent]:
-        """Parse ICS content string into a list of ICalEvent objects using icalevents.
+        """
+        Parse ICS content string into a list of ICalEvent objects using icalevents.
 
-        When `fix_icloud` is True, attempt to pass the library-specific workaround
-        flag(s) for known Apple/iCloud quirks. We try a small set of candidate
-        keyword names to remain compatible across versions; if none apply we
-        fall back to the default call.
+        Args:
+            ics_content (str): The raw ICS data as a string.
+            start (datetime): Start of the window for event extraction.
+            end (datetime): End of the window for event extraction.
+            tzinfo (ZoneInfo | None): Timezone to use for parsing, if any.
+            fix_icloud (bool): Whether to apply iCloud/Apple-specific parsing workarounds.
+
+        Returns:
+            list[ICalEvent]: List of parsed calendar events.
         """
         base_kwargs = {"string_content": ics_content, "start": start, "end": end, "tzinfo": tzinfo}
         if fix_icloud:
@@ -97,20 +130,43 @@ class CalendarService:
             return []
 
     @staticmethod
-    def _has_non_time_alarm(_component) -> bool:
-        """Legacy: kept for compatibility. Use `_detect_proximity_uids` on raw ICS instead."""
+    def _has_non_time_alarm(_component: object) -> bool:
+        """
+        Legacy: kept for compatibility. Use `_detect_proximity_uids` on raw ICS instead.
+
+        Args:
+            _component (object): Unused; kept for interface compatibility.
+
+        Returns:
+            bool: Always False in this implementation.
+        """
         return False
 
     @staticmethod
-    def _to_datetime(val):
-        """Normalize a date or datetime to an aware UTC datetime using utilities."""
+    def _to_datetime(val: datetime | str) -> datetime:
+        """
+        Normalize a date or datetime to an aware UTC datetime using utilities.
+
+        Args:
+            val (datetime | str): The value to normalize.
+
+        Returns:
+            datetime: A UTC-aware datetime object.
+        """
         return normalize_datetime(val)
 
     @staticmethod
-    def _detect_proximity_uids(ics_content: str) -> set:
-        """Scan raw ICS content and return a set of UIDs for VEVENTs that contain
+    def _detect_proximity_uids(ics_content: str) -> set[str]:
+        """
+        Scan raw ICS content and return a set of UIDs for VEVENTs that contain
         a VALARM with a PROXIMITY property.
         This is a lightweight heuristic (string-based) to preserve previous behavior.
+
+        Args:
+            ics_content (str): The raw ICS data as a string.
+
+        Returns:
+            set[str]: Set of UIDs for events with proximity alarms.
         """
         uids: set[str] = set()
         try:
@@ -134,12 +190,23 @@ class CalendarService:
         check_time: datetime,
         lookahead_minutes: int = 0,
         lookback_minutes: int = 60 * 12,
-        tzinfo=None,
+        tzinfo: ZoneInfo | None = None,
         fix_icloud: bool = False,
     ) -> list[dict]:
         """
         Returns a list of events starting within the next `lookahead_minutes`
         OR that started in the last `lookback_minutes` (e.g. today).
+
+        Args:
+            ics_content (str): The raw ICS data as a string.
+            check_time (datetime): The reference time for alarm calculation.
+            lookahead_minutes (int): Minutes ahead to include events.
+            lookback_minutes (int): Minutes back to include events.
+            tzinfo (ZoneInfo | None): Timezone to use for parsing, if any.
+            fix_icloud (bool): Whether to apply iCloud/Apple-specific parsing workarounds.
+
+        Returns:
+            list[dict]: List of alarm event dictionaries.
         """
         alarms = []
         lower_bound = check_time - timedelta(minutes=lookback_minutes)
@@ -188,7 +255,15 @@ class CalendarService:
         on_giveup=lambda details: CalendarService._on_giveup(details),
     )
     async def fetch_ics(url: str) -> str | None:
-        """Fetches ICS content from a URL with exponential backoff retry."""
+        """
+        Fetches ICS content from a URL with exponential backoff retry.
+
+        Args:
+            url (str): The ICS feed URL.
+
+        Returns:
+            str | None: The ICS content as a string, or None if fetch fails.
+        """
         if url.startswith("webcal://"):
             url = url.replace("webcal://", "https://", 1)
 
@@ -203,9 +278,21 @@ class CalendarService:
         check_time: datetime | None = None,
         lookback_minutes: int | None = None,
         lookahead_minutes: int = 0,
-        tzinfo=None,
+        tzinfo: ZoneInfo | None = None,
     ) -> list[dict]:
-        """Aggregates alarms from multiple URLs using icalevents."""
+        """
+        Aggregates alarms from multiple URLs using icalevents.
+
+        Args:
+            sources (list[tuple[int, str]]): List of (source_id, url) tuples.
+            check_time (datetime | None): Reference time for alarm calculation. Defaults to now.
+            lookback_minutes (int | None): Minutes back to include events. Defaults to 12 hours.
+            lookahead_minutes (int): Minutes ahead to include events.
+            tzinfo (ZoneInfo | None): Timezone to use for parsing, if any.
+
+        Returns:
+            list[dict]: Aggregated list of alarm event dictionaries.
+        """
         if check_time is None:
             check_time = datetime.now(UTC)
         if lookback_minutes is None:
@@ -248,7 +335,16 @@ class CalendarService:
     ) -> list[dict]:
         """
         Parses ICS content and extracts events within the given time window using icalevents.
-        Returns list of event dicts with keys: uid, event_start, event_end, summary, description, location.
+
+        Args:
+            ics_content (str): The raw ICS data as a string.
+            source_id (int): The calendar source ID.
+            window_start (datetime): Start of the window for event extraction.
+            window_end (datetime): End of the window for event extraction.
+            fix_icloud (bool): Whether to apply iCloud/Apple-specific parsing workarounds.
+
+        Returns:
+            list[dict]: List of event dicts with keys: uid, event_start, event_end, summary, description, location, has_non_time_alarm, source_id.
         """
         events: list[dict] = []
         ical_events = CalendarService.parse_ics_events(

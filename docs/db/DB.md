@@ -1,6 +1,11 @@
+
 # Espace-Image Database Documentation
 
-**See also:** [ADR-2026-02-14-alarm-dataflow.md](../ADR/ADR-2026-02-14-alarm-dataflow.md) for architectural rationale and dataflow diagrams for alarm display.
+**See also:**
+
+- [ADR-2026-02-14-alarm-dataflow.md](../ADR/ADR-2026-02-14-alarm-dataflow.md) — architectural rationale and dataflow diagrams for alarm display
+- [ADR-2026-02-12-backend-utc-time-storage.md](../ADR/ADR-2026-02-12-backend-utc-time-storage.md) — time storage and normalization
+- [TASK011-migrate-icalendar-to-icalevents.md](../../memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md) — migration details and rationale
 
 ## Overview
 
@@ -87,21 +92,23 @@ The Espace-Image app uses SQLModel (SQLAlchemy ORM) for its database layer. The 
 
 ## Principles & Algorithms
 
-### Calendar Event Caching
+### Calendar Event Caching & Recurrence (icalevents)
 
 - Events are fetched from ICS sources and cached in `CalendarEventCache` for a rolling 1-week window.
-- Recurring events are expanded using RRULE/RDATE/EXDATE logic via the `icalevents` library (replacing legacy `icalendar`).
+- **Recurring events are expanded using RRULE/RDATE/EXDATE logic via the [`icalevents`](https://icalevents.readthedocs.io/en/latest/) library (see [TASK011](../../memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md)).**
 - Only events overlapping the window are cached.
 - VALARM/PROXIMITY alarms are detected by scanning raw ICS blocks for matching VEVENTs.
+- All event and alarm times are normalized to UTC before storage (see [ADR-2026-02-12](../ADR/ADR-2026-02-12-backend-utc-time-storage.md)).
 
 ### Alarm Management & Dataflow
 
-- **Backend-driven:** All alarm logic is performed server-side. The frontend only displays rendered HTML fragments.
+- **Backend-driven:** All alarm logic is performed server-side (see [ADR-2026-02-14-alarm-dataflow.md](../ADR/ADR-2026-02-14-alarm-dataflow.md)). The frontend only displays rendered HTML fragments.
 - **Display logic:** Alarms are shown when their event start time (or start-of-day for all-day) is reached, and persist until dismissed (recorded in `AlarmEvent`).
 - **Dismissal:** Dismissal is tracked by UID (composite: source_id:uid).
 - **Alarm extraction:** On each frontend request, the backend queries the cached events, applies alarm logic, and renders the alarm list as a Jinja2 HTML fragment (see ADR for diagram).
 - **VALARM/PROXIMITY:** Alarms are flagged for events whose UID matches a VEVENT containing a VALARM with PROXIMITY.
 - **Cleanup:** Old dismissed alarms (>30 days) are purged.
+- **Note:** All alarm and recurrence logic is now handled via icalevents; see [TASK011](../../memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md) for migration details.
 
 ### Photo Gallery
 
@@ -144,14 +151,15 @@ The Espace-Image app uses SQLModel (SQLAlchemy ORM) for its database layer. The 
 
 ---
 
-## For LLM Agents
+## For LLM Agents & Developers
 
 - When creating or dismissing alarms, always use the composite UID format.
 - When querying events, filter by the 1-week window and check for dismissal status.
-- For recurring events, expand using RRULE/RDATE/EXDATE before caching.
+- For recurring events, **expand using RRULE/RDATE/EXDATE via icalevents before caching** (see [TASK011](../../memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md)).
 - Use relationships to efficiently fetch photos by preset or events by source.
 - Purge old dismissed alarms to keep the DB lean.
 - **Alarm display:** The frontend never computes alarm logic; always use the backend endpoints to fetch the current alarm list. See ADR for full dataflow.
+- **Timezone:** All event and alarm times are stored and served in UTC; frontend is responsible for local conversion (see [ADR-2026-02-12](../ADR/ADR-2026-02-12-backend-utc-time-storage.md)).
 
 ---
 

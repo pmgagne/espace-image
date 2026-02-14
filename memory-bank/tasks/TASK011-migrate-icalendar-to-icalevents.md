@@ -56,3 +56,7 @@ Replace the use of the icalendar library with the icalevents library (<https://i
 - Lint (ruff) run and all issues fixed.
 - Test suite (pytest) run: 47/47 tests passed, minor warnings only.
 - Migration and cleanup fully validated; task marked complete.
+
+### 2026-02-14
+
+- All documentation and ADRs (DB.md, ADR-2026-02-14-alarm-dataflow.md, ADR-2026-02-12-backend-utc-time-storage.md, ADR-2026-02-14-db-cleanup-lifecycle.md) updated to reflect icalevents migration, backend-driven alarm/event logic, and UTC normalization. Cross-references and usage patterns clarified for LLM agents and developers.

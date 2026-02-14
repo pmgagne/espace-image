@@ -23,4 +23,7 @@ Espace-Image manages events, alarms, and calendar data across multiple time zone
 
 ---
 **iCalendar Parsing Clarification:**
-When parsing iCalendar (ICS) data, event and alarm times may not always specify a timezone (no TZID or UTC "Z" suffix). In such cases, the backend must treat the datetime as "floating" and interpret it in the backend's local timezone before converting to UTC for storage and API responses.
+
+- As of 2026-02-10, all calendar event and alarm parsing uses the [`icalevents`](https://icalevents.readthedocs.io/en/latest/) library (see [TASK011-migrate-icalendar-to-icalevents.md](../../memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md)).
+- All event and alarm times are normalized to UTC before storage, regardless of original timezone or floating status.
+- When parsing iCalendar (ICS) data, if event/alarm times lack a timezone (no TZID or UTC "Z" suffix), the backend treats the datetime as "floating" and interprets it in the backend's local timezone before converting to UTC for storage and API responses.

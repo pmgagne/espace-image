@@ -19,6 +19,16 @@ ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".heic", ".heif"}
 
 
 def _get_env_int(name: str, default: int) -> int:
+    """
+    Get an integer value from the environment, or return a default if unset or invalid.
+
+    Args:
+        name (str): Environment variable name.
+        default (int): Default value if not set or invalid.
+
+    Returns:
+        int: The integer value from the environment or the default.
+    """
     value = os.getenv(name)
     if value is None or value == "":
         return default
@@ -32,11 +42,21 @@ logger = logging.getLogger(__name__)
 
 
 class ImageOptimizer:
+    """
+    Static utility class for optimizing image bytes and uploads for storage and display.
+    """
+
     @staticmethod
     def optimize_bytes(file_content: bytes) -> bytes:
         """
         Re-encode to JPEG if the content exceeds the configured size threshold.
         Pixel dimensions are preserved.
+
+        Args:
+            file_content (bytes): The image file content.
+
+        Returns:
+            bytes: Optimized image bytes (possibly re-encoded as JPEG).
         """
         optimize_min_bytes = _get_env_int("IMAGE_OPTIMIZE_MIN_BYTES", DEFAULT_OPTIMIZE_MIN_BYTES)
         jpeg_quality = _get_env_int("IMAGE_JPEG_QUALITY", DEFAULT_JPEG_QUALITY)
@@ -76,6 +96,16 @@ class ImageOptimizer:
 
     @staticmethod
     def optimize_upload(file_content: bytes, filename: str) -> tuple[bytes, str]:
+        """
+        Optimize an uploaded image and return the new content and filename.
+
+        Args:
+            file_content (bytes): The image file content.
+            filename (str): The original filename.
+
+        Returns:
+            tuple[bytes, str]: (optimized content, possibly new filename)
+        """
         optimized_content = ImageOptimizer.optimize_bytes(file_content)
 
         if optimized_content is file_content:
@@ -89,11 +119,30 @@ class ImageOptimizer:
 
     @staticmethod
     def optimize_path(image_path: str | Path) -> bytes:
+        """
+        Optimize an image file at the given path and return the optimized bytes.
+
+        Args:
+            image_path (str | Path): Path to the image file.
+
+        Returns:
+            bytes: Optimized image bytes.
+        """
         return ImageOptimizer.optimize_bytes(Path(image_path).read_bytes())
 
 
 class GalleryManager:
+    """
+    Manages gallery uploads and deletions, storing files in preset-specific folders.
+    """
+
     def __init__(self, upload_dir: str = "data/uploads"):
+        """
+        Initialize the GalleryManager.
+
+        Args:
+            upload_dir (str): Directory to store uploads.
+        """
         self.upload_dir = Path(upload_dir)
         self.upload_dir.mkdir(parents=True, exist_ok=True)
 
@@ -101,7 +150,15 @@ class GalleryManager:
         self, file_content: bytes, filename: str, preset_name: str = "Default"
     ) -> tuple[Path, str]:
         """
-        Saves an uploaded file to the specific preset folder.
+        Save an uploaded file to the specific preset folder.
+
+        Args:
+            file_content (bytes): The image file content.
+            filename (str): The original filename.
+            preset_name (str): The preset folder name.
+
+        Returns:
+            tuple[Path, str]: (file path, stored filename)
         """
         preset_dir = self.upload_dir / preset_name
         preset_dir.mkdir(parents=True, exist_ok=True)
@@ -121,6 +178,16 @@ class GalleryManager:
         return file_path, stored_filename
 
     def delete_photo(self, filename: str, preset_name: str = "Default") -> bool:
+        """
+        Delete a photo file from the specific preset folder.
+
+        Args:
+            filename (str): The filename to delete.
+            preset_name (str): The preset folder name.
+
+        Returns:
+            bool: True if the file was deleted, False if it didn't exist.
+        """
         """
         Deletes a photo file from the specific preset folder.
         Returns True if the file was deleted, False if it didn't exist.
