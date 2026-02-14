@@ -75,7 +75,7 @@ class CalendarService:
         keyword names to remain compatible across versions; if none apply we
         fall back to the default call.
         """
-        base_kwargs = dict(string_content=ics_content, start=start, end=end, tzinfo=tzinfo)
+        base_kwargs = {"string_content": ics_content, "start": start, "end": end, "tzinfo": tzinfo}
         if fix_icloud:
             candidate_flags = ["fix_apple", "fix_icloud", "fix_apple_icloud"]
             for flag in candidate_flags:
@@ -294,17 +294,7 @@ class CalendarService:
         return events
 
     @staticmethod
-    async def _sync_single_source(
-        session: Session,
-        source: CalendarSource,
-        utc_now: datetime,
-        window_start: datetime,
-        window_end: datetime,
-    ) -> None:
-        """Sync a single calendar source: fetch, parse, upsert cache, update status."""
-        source_id = source.id
-
-        # Get or create sync status
+    def _get_or_create_sync_status(session: Session, source_id: int) -> CalendarSyncStatusEntry:
         sync_status = session.exec(
             select(CalendarSyncStatusEntry).where(
                 CalendarSyncStatusEntry.calendar_source_id == source_id
@@ -317,22 +307,142 @@ class CalendarService:
             session.commit()
             session.refresh(sync_status)
 
-        # Mark as syncing
+        return sync_status
+
+    @staticmethod
+    def _mark_syncing(session: Session, sync_status: CalendarSyncStatusEntry) -> None:
         sync_status.sync_status = CalendarSyncStatus.SYNCING
         session.add(sync_status)
         session.commit()
+
+    @staticmethod
+    def _handle_fetch_failure(
+        session: Session,
+        sync_status: CalendarSyncStatusEntry,
+        utc_now: datetime,
+        source_id: int,
+        label: str,
+    ) -> None:
+        sync_status.sync_status = CalendarSyncStatus.FAILED
+        sync_status.error_count += 1
+        sync_status.last_error_at = utc_now
+        sync_status.error_message = "Failed to fetch ICS after 5 attempts"
+        session.add(sync_status)
+        session.commit()
+        logger.warning(f"Failed to sync calendar {source_id}: {label}")
+
+    @staticmethod
+    def _clear_existing_cache(session: Session, source_id: int) -> None:
+        existing = session.exec(
+            select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == source_id)
+        ).all()
+        for existing_event in existing:
+            session.delete(existing_event)
+        session.flush()
+
+    @staticmethod
+    def _select_latest_by_uid(events: list[dict]) -> dict[str, dict]:
+        latest_by_uid: dict[str, dict] = {}
+        for event in events:
+            uid = event["uid"]
+            if uid not in latest_by_uid:
+                latest_by_uid[uid] = event
+                continue
+            existing = latest_by_uid[uid]
+            if event["event_end"] > existing["event_end"] or (
+                event["event_end"] == existing["event_end"]
+                and event["event_start"] > existing["event_start"]
+            ):
+                latest_by_uid[uid] = event
+        return latest_by_uid
+
+    @staticmethod
+    def _add_cache_entries(
+        session: Session, latest_by_uid: dict[str, dict], source_id: int
+    ) -> None:
+        for uid, event in latest_by_uid.items():
+            try:
+                start_utc = (
+                    ensure_utc_aware(event["event_start"])
+                    if event["event_start"] is not None
+                    else None
+                )
+            except Exception:
+                start_utc = event["event_start"]
+            try:
+                end_utc = (
+                    ensure_utc_aware(event["event_end"]) if event["event_end"] is not None else None
+                )
+            except Exception:
+                end_utc = event["event_end"]
+
+            cache_entry = CalendarEventCache(
+                calendar_source_id=source_id,
+                uid=uid,
+                event_start=start_utc,
+                event_end=end_utc,
+                summary=event["summary"],
+                description=event["description"],
+                location=event["location"],
+            )
+            session.add(cache_entry)
+
+    @staticmethod
+    def _finalize_success(
+        session: Session,
+        sync_status: CalendarSyncStatusEntry,
+        utc_now: datetime,
+        events: list[dict],
+        source: CalendarSource,
+    ) -> None:
+        sync_status.sync_status = CalendarSyncStatus.SUCCESS
+        sync_status.last_synced_at = utc_now
+        sync_status.next_sync_at = utc_now + timedelta(minutes=10)
+        sync_status.error_count = 0
+        sync_status.error_message = ""
+        session.add(sync_status)
+        session.commit()
+        logger.info(
+            f"Successfully synced calendar {source.id} ({source.label}): {len(events)} events"
+        )
+
+    @staticmethod
+    def _finalize_failure(
+        session: Session,
+        sync_status: CalendarSyncStatusEntry,
+        utc_now: datetime,
+        e: Exception,
+        source_id: int,
+    ) -> None:
+        logger.error(f"Error syncing calendar {source_id}: {e}")
+        sync_status.sync_status = CalendarSyncStatus.FAILED
+        sync_status.error_count += 1
+        sync_status.last_error_at = utc_now
+        sync_status.error_message = str(e)
+        session.add(sync_status)
+        session.commit()
+
+    @staticmethod
+    async def _sync_single_source(
+        session: Session,
+        source: CalendarSource,
+        utc_now: datetime,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> None:
+        """Sync a single calendar source: fetch, parse, upsert cache, update status."""
+        source_id = source.id
+
+        sync_status = CalendarService._get_or_create_sync_status(session, source_id)
+        CalendarService._mark_syncing(session, sync_status)
 
         try:
             ics_content = await CalendarService.fetch_ics(source.url)
 
             if ics_content is None:
-                sync_status.sync_status = CalendarSyncStatus.FAILED
-                sync_status.error_count += 1
-                sync_status.last_error_at = utc_now
-                sync_status.error_message = "Failed to fetch ICS after 5 attempts"
-                session.add(sync_status)
-                session.commit()
-                logger.warning(f"Failed to sync calendar {source_id}: {source.label}")
+                CalendarService._handle_fetch_failure(
+                    session, sync_status, utc_now, source_id, source.label
+                )
                 return
 
             fix_icloud = isinstance(source.url, str) and "icloud.com" in source.url
@@ -341,80 +451,17 @@ class CalendarService:
             )
 
             # Remove cached events for this source (we'll re-insert)
-            existing = session.exec(
-                select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == source_id)
-            ).all()
+            CalendarService._clear_existing_cache(session, source_id)
 
-            for existing_event in existing:
-                session.delete(existing_event)
-
-            session.flush()
-
-            latest_by_uid: dict[str, dict] = {}
-            for event in events:
-                uid = event["uid"]
-                if uid not in latest_by_uid:
-                    latest_by_uid[uid] = event
-                    continue
-                existing = latest_by_uid[uid]
-                if event["event_end"] > existing["event_end"] or (
-                    event["event_end"] == existing["event_end"]
-                    and event["event_start"] > existing["event_start"]
-                ):
-                    latest_by_uid[uid] = event
-
-            for uid, event in latest_by_uid.items():
-                # Normalize event datetimes to UTC-aware before storing
-                try:
-                    start_utc = (
-                        ensure_utc_aware(event["event_start"])
-                        if event["event_start"] is not None
-                        else None
-                    )
-                except Exception:
-                    start_utc = event["event_start"]
-                try:
-                    end_utc = (
-                        ensure_utc_aware(event["event_end"])
-                        if event["event_end"] is not None
-                        else None
-                    )
-                except Exception:
-                    end_utc = event["event_end"]
-
-                cache_entry = CalendarEventCache(
-                    calendar_source_id=source_id,
-                    uid=uid,
-                    event_start=start_utc,
-                    event_end=end_utc,
-                    summary=event["summary"],
-                    description=event["description"],
-                    location=event["location"],
-                )
-                session.add(cache_entry)
+            latest_by_uid = CalendarService._select_latest_by_uid(events)
+            CalendarService._add_cache_entries(session, latest_by_uid, source_id)
 
             session.commit()
 
-            sync_status.sync_status = CalendarSyncStatus.SUCCESS
-            sync_status.last_synced_at = utc_now
-            sync_status.next_sync_at = utc_now + timedelta(minutes=10)
-            sync_status.error_count = 0
-            sync_status.error_message = ""
-            session.add(sync_status)
-            session.commit()
-
-            logger.info(
-                f"Successfully synced calendar {source_id} ({source.label}): {len(events)} events"
-            )
+            CalendarService._finalize_success(session, sync_status, utc_now, events, source)
 
         except Exception as e:
-            logger.error(f"Error syncing calendar {source_id}: {e}")
-            sync_status.sync_status = CalendarSyncStatus.FAILED
-            sync_status.error_count += 1
-            sync_status.last_error_at = utc_now
-            sync_status.error_message = str(e)
-            session.add(sync_status)
-            session.commit()
+            CalendarService._finalize_failure(session, sync_status, utc_now, e, source_id)
 
     @staticmethod
     async def sync_calendar_events(session: Session) -> None:

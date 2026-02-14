@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import os
 
@@ -209,11 +210,9 @@ async def sync_calendars_now(
 
     # Run sync inline so the HTMX request only returns when sync completes.
     # This gives users visible feedback (loading indicator) matching actual work.
-    try:
+    # Run sync but suppress exceptions to avoid bubbling errors to the admin UI
+    with contextlib.suppress(Exception):
         await CalendarService.sync_calendar_events(session)
-    except Exception:
-        # Let the sync handler log errors; continue to render the updated partial
-        pass
 
     return await get_calendars_partial(request, session)
 

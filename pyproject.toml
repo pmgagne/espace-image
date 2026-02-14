@@ -61,6 +61,11 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore:.*asyncio.iscoroutinefunction.*:DeprecationWarning",
+    "ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning",
+    "ignore:The `name` is not the first parameter anymore.*:DeprecationWarning",
+]
 
 [tool.pyright]
 pythonVersion = "3.13"
