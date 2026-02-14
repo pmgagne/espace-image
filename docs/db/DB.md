@@ -1,5 +1,7 @@
 # Espace-Image Database Documentation
 
+**See also:** [ADR-2026-02-14-alarm-dataflow.md](../ADR/ADR-2026-02-14-alarm-dataflow.md) for architectural rationale and dataflow diagrams for alarm display.
+
 ## Overview
 
 The Espace-Image app uses SQLModel (SQLAlchemy ORM) for its database layer. The schema is designed to support calendar event caching, alarm management, photo galleries, and admin settings. This document provides a reference for LLM agents and developers.
@@ -92,13 +94,14 @@ The Espace-Image app uses SQLModel (SQLAlchemy ORM) for its database layer. The 
 - Only events overlapping the window are cached.
 - VALARM/PROXIMITY alarms are detected by scanning raw ICS blocks for matching VEVENTs.
 
-### Alarm Management
+### Alarm Management & Dataflow
 
-- Alarms are shown when their event start time (or start-of-day for all-day) is reached.
-- Alarms persist until dismissed (recorded in `AlarmEvent`).
-- Dismissal is tracked by UID (composite: source_id:uid).
-- VALARM/PROXIMITY alarms are flagged for events whose UID matches a VEVENT containing a VALARM with PROXIMITY.
-- Old dismissed alarms (>30 days) are purged.
+- **Backend-driven:** All alarm logic is performed server-side. The frontend only displays rendered HTML fragments.
+- **Display logic:** Alarms are shown when their event start time (or start-of-day for all-day) is reached, and persist until dismissed (recorded in `AlarmEvent`).
+- **Dismissal:** Dismissal is tracked by UID (composite: source_id:uid).
+- **Alarm extraction:** On each frontend request, the backend queries the cached events, applies alarm logic, and renders the alarm list as a Jinja2 HTML fragment (see ADR for diagram).
+- **VALARM/PROXIMITY:** Alarms are flagged for events whose UID matches a VEVENT containing a VALARM with PROXIMITY.
+- **Cleanup:** Old dismissed alarms (>30 days) are purged.
 
 ### Photo Gallery
 
@@ -148,6 +151,7 @@ The Espace-Image app uses SQLModel (SQLAlchemy ORM) for its database layer. The 
 - For recurring events, expand using RRULE/RDATE/EXDATE before caching.
 - Use relationships to efficiently fetch photos by preset or events by source.
 - Purge old dismissed alarms to keep the DB lean.
+- **Alarm display:** The frontend never computes alarm logic; always use the backend endpoints to fetch the current alarm list. See ADR for full dataflow.
 
 ---
 

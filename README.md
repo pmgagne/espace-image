@@ -6,7 +6,7 @@ A FastAPI-based slideshow that serves a modern UI and a **Legacy UI** optimized 
 
 - **Photo Slideshow:** Rotates through user-uploaded images.
 - **Legacy Mode:** Specialized frontend for iPad 2 (1024x768, no CSS Grid, resized images).
-- **Calendar Alarms:** Integrates with iCloud Calendar to display pop-up alarms for events.
+- **Calendar Alarms:** Integrates with iCloud Calendar to display pop-up alarms for events. All alarm logic is handled server-side; the frontend displays rendered HTML fragments. See [ADR-2026-02-14-alarm-dataflow.md](docs/ADR/ADR-2026-02-14-alarm-dataflow.md) for architecture.
 - **Weather:** Real-time weather widget.
 
 ## Quick Start (Local)
