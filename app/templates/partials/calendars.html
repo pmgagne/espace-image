@@ -1,9 +1,13 @@
 <div>
     <div style="display: flex; justify-content: space-between; align-items: center;">
         <h2>Calendar Sources</h2>
-        <button hx-post="/admin/calendars/sync-now" hx-target="#admin-content" style="margin-bottom: 0;">
-            Sync Now
-        </button>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <div id="cal-sync-msg" style="display:none; color:#9ae6b4; font-size:0.9em;"></div>
+            <button id="btn-sync-calendars" hx-post="/admin/calendars/sync-now" hx-target="#admin-content"
+                style="margin-bottom: 0;">
+                <span class="btn-text">Sync Now</span>
+            </button>
+        </div>
     </div>
 
     <div style="margin-bottom: 30px;">

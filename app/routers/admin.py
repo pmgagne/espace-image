@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 
@@ -8,7 +7,6 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
-from app.db.engine import engine
 from app.db.models import (
     AlarmEvent,
     AppSettings,
@@ -209,13 +207,14 @@ async def sync_calendars_now(
 ):
     """Manually trigger calendar synchronization."""
 
-    async def _run_sync() -> None:
-        with Session(engine) as sync_session:
-            await CalendarService.sync_calendar_events(sync_session)
+    # Run sync inline so the HTMX request only returns when sync completes.
+    # This gives users visible feedback (loading indicator) matching actual work.
+    try:
+        await CalendarService.sync_calendar_events(session)
+    except Exception:
+        # Let the sync handler log errors; continue to render the updated partial
+        pass
 
-    _task = asyncio.create_task(_run_sync())
-    # Ensure any exception is not swallowed silently
-    _task.add_done_callback(lambda fut: fut.exception())
     return await get_calendars_partial(request, session)
 
 

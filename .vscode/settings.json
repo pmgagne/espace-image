@@ -19,9 +19,10 @@
     "ruff.organizeImports": true,
     // Copilot & IntelliSense
     "github.copilot.enable": {
-        "*": true,
+        "*": false,
         "plaintext": true,
-        "markdown": true
+        "markdown": true,
+        "scminput": false
     },
     "python.analysis.typeCheckingMode": "strict",
     "python.analysis.diagnosticSeverityOverrides": {

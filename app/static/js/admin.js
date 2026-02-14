@@ -71,4 +71,60 @@
     // Also run after HTMX swaps
     document.body.addEventListener('htmx:afterSwap', onHtmxAfterSwap);
 
+    // HTMX-driven calendar sync feedback
+    function isCalendarSyncElement(elt) {
+        if (!elt || !elt.getAttribute) return false;
+        var url = elt.getAttribute('hx-post') || elt.getAttribute('hx-get') || elt.getAttribute('hx-delete');
+        return url === '/admin/calendars/sync-now';
+    }
+
+    document.body.addEventListener('htmx:beforeRequest', function (evt) {
+        try {
+            var elt = evt.detail && evt.detail.elt;
+            if (!isCalendarSyncElement(elt)) return;
+            // show inline syncing message and disable button
+            var btn = elt;
+            btn.setAttribute('disabled', 'disabled');
+            btn.classList.add('loading');
+            var spinner = document.createElement('span');
+            spinner.className = 'sync-spinner';
+            spinner.style.marginLeft = '8px';
+            spinner.textContent = '⏳';
+            btn.appendChild(spinner);
+            var msg = document.getElementById('cal-sync-msg');
+            if (msg) { msg.style.display = 'inline-block'; msg.style.color = '#9ae6b4'; msg.textContent = 'Syncing…'; }
+        } catch (e) { /* ignore */ }
+    });
+
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+        try {
+            var elt = evt.detail && evt.detail.elt;
+            if (!isCalendarSyncElement(elt)) return;
+            // After successful swap the partial is refreshed; but ensure message shown briefly
+            var msg = document.getElementById('cal-sync-msg');
+            if (msg) { msg.style.display = 'inline-block'; msg.style.color = '#9ae6b4'; msg.textContent = 'Sync complete'; }
+            // cleanup button (if still present in DOM)
+            var btn = document.getElementById('btn-sync-calendars');
+            if (btn) {
+                btn.removeAttribute('disabled');
+                var spinner = btn.querySelector('.sync-spinner');
+                if (spinner) spinner.remove();
+            }
+            // hide message after a short delay
+            setTimeout(function () { try { if (msg) msg.style.display = 'none'; } catch (e) { } }, 2500);
+        } catch (e) { /* ignore */ }
+    });
+
+    document.body.addEventListener('htmx:responseError', function (evt) {
+        try {
+            var elt = evt.detail && evt.detail.elt;
+            if (!isCalendarSyncElement(elt)) return;
+            var msg = document.getElementById('cal-sync-msg');
+            if (msg) { msg.style.display = 'inline-block'; msg.style.color = '#f87171'; msg.textContent = 'Sync failed'; }
+            var btn = document.getElementById('btn-sync-calendars');
+            if (btn) { btn.removeAttribute('disabled'); var spinner = btn.querySelector('.sync-spinner'); if (spinner) spinner.remove(); }
+            setTimeout(function () { try { if (msg) msg.style.display = 'none'; } catch (e) { } }, 4000);
+        } catch (e) { /* ignore */ }
+    });
+
 })();
