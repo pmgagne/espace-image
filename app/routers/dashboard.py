@@ -385,6 +385,7 @@ async def check_alarm(
     session: Session = Depends(get_session),
 ):
     """Checks for active alarms and returns a list of them if any exist."""
+    logger.info("Alarm refresh requested (mock=%s, tz_offset=%s)", mock, tz_offset)
     AlarmService.purge_old_dismissed_alarms(session)
 
     if mock:
@@ -539,4 +540,5 @@ async def dismiss_alarm(
         session.expunge_all()
 
     # Return the updated list immediately
+    logger.info("Alarm dismissed uid=%s (mock=%s, tz_offset=%s)", uid, mock, tz_offset)
     return await check_alarm(request, mock=mock, tz_offset=tz_offset, session=session)

@@ -20,9 +20,10 @@ class AlarmService:
                 (AlarmEvent.dismissed_at.is_not(None)) & (AlarmEvent.dismissed_at < purge_before)
             )
         ).all()
-        for alarm_event in dismissed_alarms:
-            session.delete(alarm_event)
         if dismissed_alarms:
+            logger.info("Purging %d dismissed alarms older than %s", len(dismissed_alarms), purge_before.isoformat())
+            for alarm_event in dismissed_alarms:
+                session.delete(alarm_event)
             session.commit()
 
     @staticmethod
@@ -56,6 +57,14 @@ class AlarmService:
         except TypeError:
             logger.warning("Invalid event_end type: %r", getattr(event, "event_end", None))
             event_end = event.event_end
+        logger.debug(
+            "Formatting alarm uid=%s composite=%s display_time=%s all_day=%s",
+            getattr(event, "uid", "?"),
+            composite_uid,
+            getattr(display_time, "isoformat", lambda: "?")(),
+            is_all_day,
+        )
+
         # Show the alarm once its display time has arrived and keep it until dismissed.
         if display_time <= utc_now:
             try:

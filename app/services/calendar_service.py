@@ -211,6 +211,7 @@ class CalendarService:
         if lookback_minutes is None:
             lookback_minutes = 60 * 12
         tasks = [CalendarService.fetch_ics(url) for _, url in sources]
+        logger.info("Fetching ICS for %d sources", len(sources))
         results = await asyncio.gather(*tasks)
         all_alarms = []
         for (source_id, url), content in zip(sources, results, strict=False):
@@ -223,6 +224,12 @@ class CalendarService:
                     lookback_minutes=lookback_minutes,
                     tzinfo=tzinfo,
                     fix_icloud=fix_icloud,
+                )
+                logger.info(
+                    "Source %s returned %d upcoming alarms (fix_icloud=%s)",
+                    source_id,
+                    len(alarms),
+                    fix_icloud,
                 )
                 for alarm in alarms:
                     alarm["uid"] = f"{source_id}:{alarm['uid']}"
@@ -247,6 +254,11 @@ class CalendarService:
         ical_events = CalendarService.parse_ics_events(
             ics_content, window_start, window_end, fix_icloud=fix_icloud
         )
+        logger.debug(
+            "Extracting events from source %s: %d events parsed by icalevents",
+            source_id,
+            len(ical_events),
+        )
         # Apply local tz fallback for naive datetimes returned by parser
         local_tz = CalendarService._get_local_tz()
         for event in ical_events:
@@ -265,6 +277,7 @@ class CalendarService:
                     getattr(event, "uid", "?"),
                 )
         proximity_uids = CalendarService._detect_proximity_uids(ics_content)
+        logger.debug("Detected %d proximity UIDs in raw ICS", len(proximity_uids))
         for event in ical_events:
             events.append(
                 {

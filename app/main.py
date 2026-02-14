@@ -14,8 +14,12 @@ from app.routers import admin, dashboard, media
 from app.services.calendar_service import CalendarService
 
 # Configure logging
-LOG_LEVEL = os.getenv("LOG_LEVEL", "WARNING").upper()
-logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.WARNING))
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler()
@@ -36,6 +40,7 @@ async def background_sync_calendars():
 async def lifespan(_app: FastAPI):
     # Startup
     create_db_and_tables()
+    logger.info("Application startup (LOG_LEVEL=%s)", LOG_LEVEL)
 
     # Start the APScheduler
     scheduler.add_job(
@@ -47,12 +52,14 @@ async def lifespan(_app: FastAPI):
         next_run_time=datetime.now(UTC),
     )
     scheduler.start()
+    logger.info("Scheduler started (calendar sync every 10 minutes)")
 
     yield
 
     # Shutdown
     if scheduler.running:
         scheduler.shutdown()
+        logger.info("Scheduler shutdown complete")
 
 
 app = FastAPI(title="Espace-Image", lifespan=lifespan)
