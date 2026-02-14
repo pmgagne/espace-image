@@ -16,6 +16,7 @@ We adopt a backend-driven dataflow for alarm display, with the following steps:
 1. **Calendar Sync (Background)**
     - The backend's `CalendarService` periodically fetches ICS/webcal feeds (URLs stored in the database).
     - Events are parsed and filtered to retain only those within the configured attention window (e.g., next 24h).
+    - **As of 2026-02-10, all calendar event parsing uses the [`icalevents`](https://icalevents.readthedocs.io/en/latest/) library for robust iCalendar and recurrence support.**
     - These events are cached in the database for fast access.
 
 2. **Alarm Extraction (On Request)**
@@ -73,8 +74,10 @@ flowchart TD
     - Real-time push (e.g., instant alarm updates) would require additional mechanisms (WebSockets/SSE).
     - If event volume grows dramatically, further caching or async job processing may be needed.
 
+
 ## Related Decisions
 
 - See ADR-2026-02-12-backend-utc-time-storage.md for time handling rationale.
+- See [TASK011-migrate-icalendar-to-icalevents.md](../../memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md) for migration details and rationale.
 
 ---

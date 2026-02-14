@@ -6,7 +6,7 @@ A FastAPI-based slideshow that serves a modern UI and a **Legacy UI** optimized 
 
 - **Photo Slideshow:** Rotates through user-uploaded images.
 - **Legacy Mode:** Specialized frontend for iPad 2 (1024x768, no CSS Grid, resized images).
-- **Calendar Alarms:** Integrates with iCloud Calendar to display pop-up alarms for events. All alarm logic is handled server-side; the frontend displays rendered HTML fragments. See [ADR-2026-02-14-alarm-dataflow.md](docs/ADR/ADR-2026-02-14-alarm-dataflow.md) for architecture.
+- **Calendar Alarms:** Integrates with iCloud Calendar and other ICS feeds to display pop-up alarms for events. All alarm logic is handled server-side using the [`icalevents`](https://icalevents.readthedocs.io/en/latest/) library for robust iCalendar parsing and recurrence support. The frontend displays rendered HTML fragments. See [ADR-2026-02-14-alarm-dataflow.md](docs/ADR/ADR-2026-02-14-alarm-dataflow.md) for architecture.
 - **Weather:** Real-time weather widget.
 
 ## Agentic Workflow
@@ -18,6 +18,10 @@ We adopted the ask (if necessary)/plan (GPT 4-1)/Implement (GPT 5-mini) loop.
 
 The actual takeout is that GPT4.1 seems good for planing and explaining, but not so good for
 coding. GPT-5-mini (with the [4.1 Beast Mode](https://raw.githubusercontent.com/github/awesome-copilot/main/agents/4.1-Beast.agent.md)) agent prompt is convincing.
+
+## Calendar Parsing Migration
+
+**Note:** As of 2026-02-10, all calendar event parsing and recurrence logic uses the [`icalevents`](https://icalevents.readthedocs.io/en/latest/) library. The previous `icalendar` dependency has been fully removed. See [TASK011](memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md) for migration details.
 
 ## Quick Start (Local)
 
