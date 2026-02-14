@@ -1,6 +1,7 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlmodel import select
 
 from app.db.models import (
@@ -132,7 +133,6 @@ def test_sync_calendar_events_failure(session):
 
 
 # --- Additional Coverage for CalendarService ---
-import pytest
 
 
 def test_parse_ics_events_empty():
