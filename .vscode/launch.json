@@ -18,7 +18,8 @@
       "justMyCode": true,
       "env": {
         "PYTHONPATH": "${workspaceFolder}",
-        "WEBAPP_DEBUG": "true"
+        "WEBAPP_DEBUG": "true",
+        "LOG_LEVEL": "DEBUG"
       },
       "envFile": "${workspaceFolder}/.env"
     },

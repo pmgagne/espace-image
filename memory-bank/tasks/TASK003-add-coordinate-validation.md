@@ -56,28 +56,3 @@ Pydantic validators can enforce these constraints at the form level. This preven
 ✅ Valid boundary values (±90, ±180) accepted
 ✅ Tests cover all boundary conditions
 ✅ Database never receives invalid coordinates
-
-## Related Files
-
-- `app/routers/admin.py::update_settings()` (lines 101-120)
-- `app/routers/admin.py::search_location()` (lines 81-100)
-- `tests/test_admin_search.py` (add tests)
-
-## Code Example
-
-```python
-from pydantic import BaseModel, field_validator
-
-class SettingsUpdate(BaseModel):
-    active_preset_id: int | None = None
-    latitude: float | None = None
-    longitude: float | None = None
-    duration: int | None = None
-
-    @field_validator('latitude')
-    @classmethod
-    def validate_latitude(cls, v):
-        if v is not None and not (-90 <= v <= 90):
-            raise ValueError('Latitude must be between -90 and 90')
-        return v
-```

@@ -1,3 +1,4 @@
+import warnings
 from unittest.mock import patch
 
 import pytest
@@ -7,6 +8,23 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from app.db.session import get_session
 from app.main import app as fastapi_app
+
+# Suppress noisy third-party Deprecation/Runtime warnings during tests
+warnings.filterwarnings(
+    "ignore",
+    message=r".*asyncio.iscoroutinefunction.*",
+    category=DeprecationWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r".*TemplateResponse\(name, \{.*'request'.*\}\).*",
+    category=DeprecationWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r"coroutine 'AsyncMockMixin._execute_mock_call' was never awaited",
+    category=RuntimeWarning,
+)
 
 # Use in-memory SQLite for tests
 # check_same_thread=False is needed for SQLite with multiple threads (FastAPI)

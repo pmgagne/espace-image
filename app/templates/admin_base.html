@@ -48,10 +48,118 @@
             padding-left: 20px;
         }
 
+        .preset-select,
+        .preset-create {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }
+
         .preset-create-form {
             display: flex;
             gap: 10px;
             align-items: center;
+        }
+
+        /* Ensure all direct children center within the form row */
+        .preset-create-form>* {
+            align-self: center;
+        }
+
+        .preset-create-form input[type="text"] {
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid #444;
+            background: #111;
+            color: #fff;
+            font-size: 1rem;
+            min-width: 200px;
+        }
+
+        .preset-select select {
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid #444;
+            background: #111;
+            color: #fff;
+            font-size: 1rem;
+            min-width: 200px;
+        }
+
+        .preset-create label,
+        .preset-select label {
+            margin-bottom: 6px;
+            font-size: 0.9rem;
+            color: #ccc;
+        }
+
+        .preset-create-form input[type="text"],
+        .preset-select select,
+        .preset-create-form button {
+            box-sizing: border-box;
+        }
+
+        .preset-create-form button {
+            padding: 8px 12px;
+            border-radius: 6px;
+            background: #007bff;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        /* Force identical visual height and centering */
+        .preset-create-form input[type="text"],
+        .preset-create-form button {
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: inherit;
+            font-size: 1rem;
+            line-height: normal;
+        }
+
+        .preset-create-form input[type="text"] {
+            padding-top: 0;
+            padding-bottom: 0;
+            padding-left: 12px;
+            padding-right: 12px;
+            border: 1px solid #444;
+        }
+
+        .preset-create-form button {
+            padding-left: 12px;
+            padding-right: 12px;
+            border: 1px solid #007bff;
+            background: #007bff;
+            box-shadow: none;
+            vertical-align: middle;
+            /* Nudge up slightly to match input visual baseline */
+            transform: translateY(-1px);
+            -webkit-appearance: none;
+            appearance: none;
+            line-height: 1;
+            margin: 0;
+        }
+
+        .preset-create-form input[type="text"] {
+            -webkit-appearance: none;
+            appearance: none;
+            line-height: 1;
+            margin: 0;
+        }
+
+        /* Remove extra inner padding added by some browsers for buttons */
+        .preset-create-form button::-webkit-focus-inner {
+            border: 0;
+            padding: 0;
+        }
+
+        .preset-create-form button::-moz-focus-inner {
+            border: 0;
+            padding: 0;
         }
 
         .upload-area {
@@ -272,6 +380,7 @@
             });
         }
     </script>
+    <script src="/static/js/admin.js"></script>
 </body>
 
 </html>

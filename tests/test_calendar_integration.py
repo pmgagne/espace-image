@@ -21,13 +21,13 @@ SUMMARY:Bastille Day Party
 END:VEVENT
 END:VCALENDAR"""
 
-    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value.status_code = 200
-        mock_get.return_value.text = ics_content
-        mock_get.return_value.raise_for_status = lambda: None
+    with patch(
+        "icalevents.icaldownload.ICalDownload.data_from_url", new_callable=AsyncMock
+    ) as mock_data:
+        mock_data.return_value = ics_content
 
         sources = [(1, "http://example.com/cal1.ics"), (2, "webcal://example.com/cal2.ics")]
         await CalendarService.get_all_alarms(sources)
 
-        # We expect fetch_ics to be called twice
-        assert mock_get.call_count == 2
+        # We expect the downloader to be called twice
+        assert mock_data.call_count == 2

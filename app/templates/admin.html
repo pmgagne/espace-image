@@ -1,83 +1,71 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="admin-page">
-    <h1>Admin Panel</h1>
-    <a href="/" class="back-link">Back to Slideshow</a>
+<script src="/static/js/admin.js"></script>
+</form>
+</div>
+</div>
 
-    <hr>
+<script>
+    // Include file input logic for this page too
+    document.body.addEventListener('change', function (e) {
+        if (e.target && e.target.type === 'file') {
+            var wrapper = e.target.parentNode;
+            if (wrapper.classList.contains('file-input-wrapper')) {
+                var labelSpan = wrapper.querySelector('.btn-text');
+                if (labelSpan) {
+                    var count = e.target.files ? e.target.files.length : 1;
+                    if (count > 0) {
+                        labelSpan.innerText = count + (count === 1 ? " File Selected" : " Files Selected");
+                    } else {
+                        labelSpan.innerText = wrapper.getAttribute('data-placeholder') || "Choose Files";
+                    }
+                }
+            }
+        }
+    });
 
-    <div class="admin-flex">
-        <!-- Settings -->
-        <div class="admin-panel">
+    // Format last synced UTC times to the user's local timezone
+    function parseUtcStringToDate(utc) {
+        if (!utc) return null;
+        var s = String(utc).trim();
+        // Normalize common variants: replace space separator with T
+        if (s.indexOf('T') === -1 && s.indexOf(' ') !== -1) {
+            s = s.replace(' ', 'T');
+        }
+        // If no timezone info present, assume UTC and append Z
+        if (!(/[zZ]$/.test(s) || /[\+\-]\d{2}:?\d{2}$/.test(s))) {
+            s = s + 'Z';
+        }
+        var d = new Date(s);
+        if (isNaN(d.getTime())) return null;
+        return d;
+    }
 
-            <div style="display: flex; flex-wrap: wrap; gap: 20px;">
-                <!-- Settings -->
-                <div style="background: #333; padding: 20px; border-radius: 8px; flex: 1; min-width: 300px;">
-                    <h2>Settings</h2>
-                    <form action="/admin/settings/active-preset" method="post">
-                        <label>Active Slideshow Preset:</label>
-                        <select name="preset_id">
-                            {% for preset in presets %}
-                            <option value="{{ preset.id }}" {% if settings.active_preset_id==preset.id %}selected{%
-                                endif %}>
-                                {{ preset.name }} ({{ preset.photos|length }} photos)
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <button type="submit">Save</button>
-                        <div class="admin-panel">
-                        </div>
+    function formatLastSyncedTimes() {
+        var els = document.querySelectorAll('.last-synced');
+        els.forEach(function (el) {
+            var utc = el.getAttribute('data-utc') || el.textContent || '';
+            utc = (typeof utc === 'string') ? utc.trim() : '';
+            if (!utc) return;
+            try {
+                var d = parseUtcStringToDate(utc);
+                if (!d) {
+                    // try a looser parse from displayed text (space-separated)
+                    var alt = utc.replace(' ', 'T') + 'Z';
+                    d = parseUtcStringToDate(alt);
+                }
+                if (!d) return;
+                // Use locale string for readability; keep default locale
+                el.textContent = d.toLocaleString();
+            } catch (e) {
+                console.warn('Failed to parse last-synced time', e, utc);
+            }
+        });
+    }
 
-                        <!-- Create Preset -->
-                        <div style="background: #333; padding: 20px; border-radius: 8px; flex: 1; min-width: 300px;">
-                            <h2>New Preset</h2>
-                            <form action="/admin/presets" method="post">
-                                <input type="text" name="name" placeholder="Preset Name" required>
-                                <button type="submit">Create</button>
-                            </form>
-                        </div>
-                </div>
-                <div class="admin-panel">
-                    <hr>
-
-                    <!-- Upload -->
-                    <div style="background: #333; padding: 20px; border-radius: 8px;">
-                        <h2>Upload Photos</h2>
-                        <form action="/admin/upload" method="post" enctype="multipart/form-data">
-                            <label>Target Preset:</label>
-                            <select name="preset_id">
-                                {% for preset in presets %}
-                                <option value="{{ preset.id }}">{{ preset.name }}</option>
-                                {% endfor %}
-                            </select>
-                            <br><br>
-                            <label class="file-input-wrapper btn" data-placeholder="Choose Photos">
-                                <span class="btn-text">Choose Photos</span>
-                                <input type="file" name="files" multiple accept="image/*">
-                            </label>
-                            <br><br>
-                            <button type="submit">Upload</button>
-                        </form>
-                    </div>
-                </div>
-
-                <script>
-                    // Include file input logic for this page too
-                    document.body.addEventListener('change', function (e) {
-                        if (e.target && e.target.type === 'file') {
-                            var wrapper = e.target.parentNode;
-                            if (wrapper.classList.contains('file-input-wrapper')) {
-                                var labelSpan = wrapper.querySelector('.btn-text');
-                                if (labelSpan) {
-                                    var count = e.target.files ? e.target.files.length : 1;
-                                    if (count > 0) {
-                                        labelSpan.innerText = count + (count === 1 ? " File Selected" : " Files Selected");
-                                    } else {
-                                        labelSpan.innerText = wrapper.getAttribute('data-placeholder') || "Choose Files";
-                                    }
-                                }
-                            }
-                        }
-                    });
-                </script>
-                {% endblock %}
+    document.addEventListener('DOMContentLoaded', formatLastSyncedTimes);
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+        try { formatLastSyncedTimes(); } catch (e) { /* ignore */ }
+    });
+</script>
+{% endblock %}

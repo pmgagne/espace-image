@@ -1,4 +1,4 @@
-import asyncio
+import contextlib
 import logging
 import os
 
@@ -8,7 +8,6 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
-from app.db.engine import engine
 from app.db.models import (
     AlarmEvent,
     AppSettings,
@@ -21,6 +20,7 @@ from app.db.session import get_session
 from app.services.calendar_service import CalendarService
 from app.services.image_service import GalleryManager
 from app.services.weather_service import WeatherService
+from app.utils.timezone import get_local_timezone_name
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
@@ -46,7 +46,11 @@ async def get_settings_partial(request: Request, session: Session = Depends(get_
     if settings and settings.weather_latitude and settings.weather_longitude:
         try:
             # Simple reverse geocode for Admin UI context
-            url = f"https://nominatim.openstreetmap.org/reverse?lat={settings.weather_latitude}&lon={settings.weather_longitude}&format=json"
+            url = (
+                f"https://nominatim.openstreetmap.org/reverse?"
+                f"lat={settings.weather_latitude}&"
+                f"lon={settings.weather_longitude}&format=json"
+            )
             async with httpx.AsyncClient() as client:
                 resp = await client.get(url, headers={"User-Agent": "Espace-Image/1.0"})
                 if resp.status_code == 200:
@@ -63,10 +67,17 @@ async def get_settings_partial(request: Request, session: Session = Depends(get_
         except Exception:
             logger.exception("Geocoding error while reverse geocoding")
 
+    backend_timezone = get_local_timezone_name()
+
     return templates.TemplateResponse(
         request,
         "partials/settings.html",
-        {"settings": settings, "presets": presets, "location_name": location_name},
+        {
+            "settings": settings,
+            "presets": presets,
+            "location_name": location_name,
+            "backend_timezone": backend_timezone,
+        },
     )
 
 
@@ -99,7 +110,12 @@ async def search_location(
     return templates.TemplateResponse(
         request,
         "partials/settings.html",
-        {"settings": settings, "presets": presets, "location_name": location_name},
+        {
+            "settings": settings,
+            "presets": presets,
+            "location_name": location_name,
+            "backend_timezone": get_local_timezone_name(),
+        },
     )
 
 
@@ -196,13 +212,13 @@ async def sync_calendars_now(
 ):
     """Manually trigger calendar synchronization."""
 
-    async def _run_sync() -> None:
-        with Session(engine) as sync_session:
-            await CalendarService.sync_calendar_events(sync_session)
+    # Run sync inline so the HTMX request only returns when sync completes.
+    # This gives users visible feedback (loading indicator) matching
+    # actual work. Run sync but suppress exceptions to avoid bubbling
+    # errors to the admin UI
+    with contextlib.suppress(Exception):
+        await CalendarService.sync_calendar_events(session)
 
-    _task = asyncio.create_task(_run_sync())
-    # Ensure any exception is not swallowed silently
-    _task.add_done_callback(lambda fut: fut.exception())
     return await get_calendars_partial(request, session)
 
 
@@ -229,13 +245,19 @@ async def get_gallery_partial(
     return templates.TemplateResponse(
         request,
         "partials/gallery.html",
-        {"presets": presets, "selected_preset": selected_preset, "photos": photos},
+        {
+            "presets": presets,
+            "selected_preset": selected_preset,
+            "photos": photos,
+        },
     )
 
 
 @router.post("/presets", response_class=HTMLResponse)
 async def create_preset(
-    request: Request, name: str = Form(...), session: Session = Depends(get_session)
+    request: Request,
+    name: str = Form(...),
+    session: Session = Depends(get_session),
 ):
     preset = Preset(name=name)
     session.add(preset)
@@ -318,8 +340,10 @@ async def simulate_alarm(
     from datetime import datetime, timedelta
     from uuid import uuid4
 
-    # Calculate trigger time
-    trigger_time = datetime.now() + timedelta(seconds=delay_seconds)
+    # Calculate trigger time (UTC-aware)
+    from app.utils.timezone import ensure_utc_aware
+
+    trigger_time = ensure_utc_aware(datetime.now() + timedelta(seconds=delay_seconds))
 
     # Create alarm event with unique UID
     alarm = AlarmEvent(
@@ -333,5 +357,9 @@ async def simulate_alarm(
     return templates.TemplateResponse(
         request,
         "partials/debug.html",
-        {"success_message": f"Simulated alarm created! It will appear in {delay_seconds} seconds."},
+        {
+            "success_message": (
+                f"Simulated alarm created! It will appear in {delay_seconds} seconds."
+            )
+        },
     )

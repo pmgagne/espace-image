@@ -1,5 +1,5 @@
 import logging
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import httpx
 
@@ -7,6 +7,11 @@ logger = logging.getLogger(__name__)
 
 
 class WeatherService:
+    """
+    Service for fetching current weather and geocoding locations using
+    Open-Meteo APIs.
+    """
+
     # WMO Weather interpretation codes (WW)
     # https://open-meteo.com/en/docs
     WMO_CODES: ClassVar[dict[int, str]] = {
@@ -37,14 +42,26 @@ class WeatherService:
     }
 
     @staticmethod
-    async def get_current_weather(lat: float, lon: float) -> dict:
+    async def get_current_weather(lat: float, lon: float) -> dict[str, Any]:
         """
-        Fetches current weather from Open-Meteo.
+        Fetch current weather from Open-Meteo.
+
+        Args:
+            lat (float): Latitude.
+            lon (float): Longitude.
+
+        Returns:
+            dict: Weather data with keys 'temp', 'condition', and 'location'.
         """
         try:
-            url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+            url = "https://api.open-meteo.com/v1/forecast"
+            params: dict[str, float | str | int] = {
+                "latitude": lat,
+                "longitude": lon,
+                "current_weather": 1,
+            }
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, timeout=5.0)
+                response = await client.get(url, params=params, timeout=5.0)
                 response.raise_for_status()
                 data = response.json()
 
@@ -54,13 +71,26 @@ class WeatherService:
 
                 condition = WeatherService.WMO_CODES.get(code, "Inconnu")
 
+                # Defensive handling: the API may omit `temperature` in
+                # error cases.
+                if temp is None:
+                    temp_val: Any = "--"
+                else:
+                    try:
+                        temp_val = round(temp)
+                    except Exception:
+                        temp_val = "--"
+
+                location = f"{lat:.2f}, {lon:.2f}"
                 return {
-                    "temp": round(temp),
+                    "temp": temp_val,
                     "condition": condition,
-                    "location": f"{lat:.2f}, {lon:.2f}",  # Placeholder until reverse geocoding
+                    "location": location,
                 }
         except Exception:
-            logger.exception("Weather API error while fetching current weather")
+            logger.exception(
+                "Weather API error while fetching current weather",
+            )
             return {
                 "temp": "--",
                 "condition": "Service Error",
@@ -68,14 +98,25 @@ class WeatherService:
             }
 
     @staticmethod
-    async def geocode_location(query: str) -> dict | None:
+    async def geocode_location(query: str) -> dict[str, Any] | None:
         """
-        Searches for a location name using Open-Meteo Geocoding API.
-        Returns: {'lat': float, 'lon': float, 'name': str} or None
+        Search for a location name using Open-Meteo Geocoding API.
+
+        Args:
+            query (str): Location name to search for.
+
+        Returns:
+            dict[str, Any] | None: {'lat': float, 'lon': float, 'name': str}
+            or None if not found.
         """
         try:
             url = "https://geocoding-api.open-meteo.com/v1/search"
-            params = {"name": query, "count": 1, "language": "fr", "format": "json"}
+            params: dict[str, str | int] = {
+                "name": query,
+                "count": 1,
+                "language": "fr",
+                "format": "json",
+            }
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, params=params, timeout=5.0)
                 response.raise_for_status()
@@ -91,5 +132,7 @@ class WeatherService:
                     "name": f"{result['name']}, {result.get('country', '')}",
                 }
         except Exception:
-            logger.exception("Geocoding error in geocode_location")
+            logger.exception(
+                "Geocoding error in geocode_location",
+            )
             return None

@@ -1,6 +1,8 @@
 <div>
     <h2>General Settings</h2>
-    
+    <p style="color: #aaa; font-size: 0.9em; margin-bottom: 10px;">Backend timezone: <strong>{{ backend_timezone
+            }}</strong></p>
+
     <form hx-post="/admin/settings" hx-target="#admin-content">
         <h3>Weather Configuration</h3>
         <p style="color: #888; font-size: 0.9em; margin-bottom: 15px;">
@@ -12,22 +14,15 @@
 
         <!-- Location Search -->
         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-            <input type="text" 
-                   name="location_query" 
-                   placeholder="Enter City Name (e.g. Montreal)" 
-                   style="flex: 1; margin-bottom: 0;"
-                   onkeydown="if(event.key === 'Enter'){ event.preventDefault(); document.getElementById('btn-search').click(); }"
-                   >
-            <button id="btn-search"
-                    type="button" 
-                    hx-post="/admin/settings/search" 
-                    hx-target="#admin-content"
-                    hx-include="[name='location_query']"
-                    style="background: #3182ce;">
+            <input type="text" name="location_query" placeholder="Enter City Name (e.g. Montreal)"
+                style="flex: 1; margin-bottom: 0;"
+                onkeydown="if(event.key === 'Enter'){ event.preventDefault(); document.getElementById('btn-search').click(); }">
+            <button id="btn-search" type="button" hx-post="/admin/settings/search" hx-target="#admin-content"
+                hx-include="[name='location_query']" style="background: #3182ce;">
                 Search
             </button>
         </div>
-        
+
         <div style="display: flex; gap: 20px;">
             <div style="flex: 1;">
                 <label>Latitude</label>
@@ -35,14 +30,15 @@
             </div>
             <div style="flex: 1;">
                 <label>Longitude</label>
-                <input type="number" step="any" name="longitude" id="lon" value="{{ settings.weather_longitude or '' }}">
+                <input type="number" step="any" name="longitude" id="lon"
+                    value="{{ settings.weather_longitude or '' }}">
             </div>
         </div>
-        
+
         <button type="button" onclick="findLocation()" style="background: #444; margin-bottom: 20px; margin-top: 10px;">
             📍 Use Browser GPS
         </button>
-        
+
         <h3>Slideshow Configuration</h3>
         <div style="display: flex; gap: 20px;">
             <div style="flex: 1;">
@@ -50,7 +46,7 @@
                 <select name="active_preset_id">
                     <option value="">-- No Preset Selected --</option>
                     {% for preset in presets %}
-                    <option value="{{ preset.id }}" {% if settings.active_preset_id == preset.id %}selected{% endif %}>
+                    <option value="{{ preset.id }}" {% if settings.active_preset_id==preset.id %}selected{% endif %}>
                         {{ preset.name }} ({{ preset.photos|length }} photos)
                     </option>
                     {% endfor %}
@@ -61,7 +57,7 @@
                 <input type="number" name="duration" value="{{ settings.slideshow_duration or 30 }}" min="5">
             </div>
         </div>
-        
+
         <div style="margin-top: 20px; border-top: 1px solid #333; padding-top: 20px;">
             <button type="submit">Save Changes</button>
             <span class="htmx-indicator" style="margin-left: 10px; color: #888;">Saving...</span>
@@ -75,16 +71,16 @@
             alert("Geolocation is not supported by your browser");
             return;
         }
-        
+
         var btn = document.querySelector('button[onclick="findLocation()"]');
         var originalText = btn.innerText;
         btn.innerText = "Locating...";
-        
-        navigator.geolocation.getCurrentPosition(function(position) {
+
+        navigator.geolocation.getCurrentPosition(function (position) {
             document.getElementById('lat').value = position.coords.latitude.toFixed(4);
             document.getElementById('lon').value = position.coords.longitude.toFixed(4);
             btn.innerText = originalText;
-        }, function(error) {
+        }, function (error) {
             alert("Unable to retrieve your location: " + error.message);
             btn.innerText = originalText;
         });

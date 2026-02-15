@@ -1,11 +1,11 @@
 from datetime import datetime
-from enum import Enum as PyEnum
+from enum import StrEnum
 
 from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 
-class CalendarSyncStatus(str, PyEnum):
+class CalendarSyncStatus(StrEnum):
     """Status of calendar synchronization."""
 
     PENDING = "pending"

@@ -36,6 +36,7 @@ def test_extract_events_detects_proximity():
     assert len(events) == 1
     ev = events[0]
     assert ev.get("uid") == "prox-event@example.com"
+    # We detect VALARM/PROXIMITY by scanning raw ICS; expect True
     assert ev.get("has_non_time_alarm") is True
 
 

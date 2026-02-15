@@ -1,5 +1,7 @@
 # Strategic Plan: Persistent Bottom-Center Alarm Box
 
+**See also:** [ADR-2026-02-14-alarm-dataflow.md](docs/ADR/ADR-2026-02-14-alarm-dataflow.md) for architectural rationale and dataflow diagrams for alarm display.
+
 ## 1. Understanding the Goal
 
 The objective is to redesign the Calendar Event (Alarm) popup to:
@@ -14,10 +16,11 @@ The objective is to redesign the Calendar Event (Alarm) popup to:
 
 **Current State:**
 
-* **Backend (`dashboard.py`):** `check_alarm` fetches alarms but stops at the first undismissed one. It returns a full-screen modal HTML string for the slideshow.
-* **Modern UI:** Uses `.alarm-modal` with `position: fixed; top: 0; left: 0; width: 100vw; height: 100vh` and a pulsing red background.
-* **Legacy UI:** Uses similar full-screen blocking styles.
-* **Dismissal:** Uses HTMX (`hx-post`) to swap the overlay content.
+* **Backend-driven alarm logic:** All alarm computation and filtering is performed server-side. The backend exposes endpoints that return rendered HTML fragments with the current alarm list. See ADR for full dataflow.
+* **Backend (`dashboard.py`):** `check_alarm` previously fetched only the first undismissed alarm; now it returns all active alarms as a list for display.
+* **Modern UI:** Uses `.alarm-modal` (legacy) or `.alarm-box-container` (current) for alarm display, positioned at the bottom center.
+* **Legacy UI:** Uses a similar container, styled for iPad 2 compatibility.
+* **Dismissal:** Uses HTMX (`hx-post`) to refresh the alarm container after dismissing an event.
 
 **Required Changes:**
 
