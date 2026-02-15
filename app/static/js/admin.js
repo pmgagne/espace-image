@@ -27,7 +27,6 @@
             try {
                 var d = parseUtcStringToDate(utc);
                 if (!d) {
-                    // try a looser parse from displayed text (space-separated)
                     var alt = utc.replace(' ', 'T') + 'Z';
                     d = parseUtcStringToDate(alt);
                 }
@@ -35,6 +34,24 @@
                 el.textContent = d.toLocaleString();
             } catch (e) {
                 console.warn('Failed to parse last-synced time', e, utc);
+            }
+        });
+        // Also format next-sync times
+        var nextEls = document.querySelectorAll('.next-sync');
+        nextEls.forEach(function (el) {
+            var utc = el.getAttribute('data-utc') || el.textContent || '';
+            utc = (typeof utc === 'string') ? utc.trim() : '';
+            if (!utc || utc === '—') return;
+            try {
+                var d = parseUtcStringToDate(utc);
+                if (!d) {
+                    var alt = utc.replace(' ', 'T') + 'Z';
+                    d = parseUtcStringToDate(alt);
+                }
+                if (!d) return;
+                el.textContent = d.toLocaleString();
+            } catch (e) {
+                console.warn('Failed to parse next-sync time', e, utc);
             }
         });
     }

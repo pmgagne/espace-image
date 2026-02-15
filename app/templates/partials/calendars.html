@@ -57,6 +57,9 @@
                     <div>Last synced: <span class="last-synced"
                             data-utc="{{ status.last_synced_at.isoformat() if status.last_synced_at else '' }}">{{
                             status.last_synced_at or "Never" }}</span></div>
+                    <div>Next sync: <span class="next-sync"
+                            data-utc="{{ status.next_sync_at.isoformat() if status.next_sync_at else '' }}">{{
+                            status.next_sync_at or "—" }}</span></div>
                     {% if status.error_message %}
                     <div style="color: #e57373;">Error: {{ status.error_message }}</div>
                     {% endif %}

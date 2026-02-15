@@ -551,9 +551,6 @@ class CalendarService:
     ) -> None:
         sync_status.sync_status = CalendarSyncStatus.SUCCESS
         sync_status.last_synced_at = utc_now
-        # Add a random jitter of 5-10 minutes to avoid simultaneous polling
-        jitter_minutes = random.randint(5, 10)
-        sync_status.next_sync_at = utc_now + timedelta(minutes=10 + jitter_minutes)
         sync_status.error_count = 0
         sync_status.error_message = ""
         session.add(sync_status)
@@ -674,6 +671,27 @@ class CalendarService:
             await CalendarService._sync_single_source(
                 session, source, utc_now, window_start, window_end
             )
+
+        # After syncing all sources, assign unique-ish offsets (5-10 minutes)
+        # Shuffle offsets and assign one per status; cycle if more sources exist.
+        try:
+            statuses = session.exec(select(CalendarSyncStatusEntry)).all()
+            offsets = [5, 6, 7, 8, 9, 10]
+            random.shuffle(offsets)
+            idx = 0
+            for st in statuses:
+                try:
+                    offset = offsets[idx % len(offsets)]
+                    st.next_sync_at = utc_now + timedelta(minutes=10 + offset)
+                    session.add(st)
+                    idx += 1
+                except Exception:
+                    logger.exception(
+                        "Failed to assign next_sync_at for status %s", getattr(st, "id", "?")
+                    )
+            session.commit()
+        except Exception:
+            logger.exception("Failed to assign next_sync_at after calendar sync")
 
         # Auto-cleanup: Purge dismissed events outside the window
         try:

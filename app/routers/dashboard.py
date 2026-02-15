@@ -47,8 +47,22 @@ async def read_root(request: Request, session: Session = Depends(get_session)):
 async def read_legacy(request: Request, session: Session = Depends(get_session)):
     """Legacy Slideshow View (iPad 2)"""
     settings = session.exec(select(AppSettings)).first()
+    # Determine the most recent calendar sync time (if any) to display in legacy UI
+    try:
+        statuses = session.exec(select(CalendarSyncStatusEntry)).all()
+        latest = None
+        for st in statuses:
+            if st.last_synced_at:
+                if latest is None or st.last_synced_at > latest:
+                    latest = st.last_synced_at
+        last_sync_utc = latest.isoformat() if latest else ""
+    except Exception:
+        last_sync_utc = ""
+
     return templates.TemplateResponse(
-        request, "legacy/index.html", {"mode": "legacy", "settings": settings}
+        request,
+        "legacy/index.html",
+        {"mode": "legacy", "settings": settings, "last_sync_utc": last_sync_utc},
     )
 
 

@@ -219,6 +219,8 @@ async def sync_calendars_now(
     with contextlib.suppress(Exception):
         await CalendarService.sync_calendar_events(session)
 
+    # CalendarService.sync_calendar_events now assigns per-source next_sync_at
+
     return await get_calendars_partial(request, session)
 
 
