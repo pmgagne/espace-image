@@ -6,6 +6,7 @@
 - [ADR-2026-02-14-alarm-dataflow.md](../ADR/ADR-2026-02-14-alarm-dataflow.md) — architectural rationale and dataflow diagrams for alarm display
 - [ADR-2026-02-12-backend-utc-time-storage.md](../ADR/ADR-2026-02-12-backend-utc-time-storage.md) — time storage and normalization
 - [TASK011-migrate-icalendar-to-icalevents.md](../../memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md) — migration details and rationale
+- [TYPE_HINTS.md](../TYPE_HINTS.md) — type hinting policy and enforcement
 
 ## Overview
 

@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime, time
+from datetime import UTC, date, datetime, time
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def ensure_utc_aware(dt: datetime) -> datetime:
         return dt.replace(tzinfo=UTC)
 
 
-def normalize_datetime(val) -> datetime | None:
+def normalize_datetime(val: datetime | date | None) -> datetime | None:
     """
     Normalize a date or datetime-like value to an aware UTC datetime.
 

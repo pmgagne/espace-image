@@ -74,5 +74,5 @@ class RateLimiter:
             return False
 
 
-# module-level singleton for convenience
-rate_limiter = RateLimiter()
+# Module-level singleton for convenience and explicit typing
+rate_limiter: RateLimiter = RateLimiter()

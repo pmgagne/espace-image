@@ -1,13 +1,17 @@
+#!/usr/bin/env python3
+# ruff: noqa
 import asyncio
 import logging
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 import backoff
 from icalevents.icaldownload import ICalDownload
 from icalevents.icalevents import events as icalevents_events
 from icalevents.icalparser import Event as ICalEvent
+from sqlalchemy import and_
 from sqlmodel import Session, select
 
 from app.db.models import (
@@ -29,11 +33,12 @@ class CalendarService:
     Provides static and async methods to:
     - Download and parse iCalendar (ICS) feeds from configured sources
     - Cache and update calendar events
-    - Extract alarms and event data for use in the dashboard and other consumers
+        - Extract alarms and event data for use in the dashboard
+            and other consumers
     """
 
     @staticmethod
-    def _get_local_tz() -> ZoneInfo | None:
+    def _get_local_tz() -> tzinfo | None:
         """
         Return the local timezone to use for naive datetimes.
 
@@ -41,7 +46,8 @@ class CalendarService:
         the system local timezone if available.
 
         Returns:
-            ZoneInfo | None: The detected local timezone, or None if unavailable.
+            ZoneInfo | None: The detected local timezone, or None if
+            unavailable.
         """
         tzname = os.environ.get("TZ")
         if tzname:
@@ -56,7 +62,7 @@ class CalendarService:
             return None
 
     @staticmethod
-    def _on_backoff(details: dict) -> None:
+    def _on_backoff(details: Any) -> None:
         """
         Callback for backoff retry attempts.
 
@@ -73,7 +79,7 @@ class CalendarService:
         )
 
     @staticmethod
-    def _on_giveup(details: dict) -> None:
+    def _on_giveup(details: Any) -> None:
         """
         Callback when backoff gives up after max retries.
 
@@ -92,39 +98,57 @@ class CalendarService:
         ics_content: str,
         start: datetime,
         end: datetime,
-        tzinfo: ZoneInfo | None = None,
+        tzinfo: tzinfo | None = None,
         fix_icloud: bool = False,
     ) -> list[ICalEvent]:
         """
-        Parse ICS content string into a list of ICalEvent objects using icalevents.
+        Parse ICS content string into a list of ICalEvent objects.
+
+        Uses the icalevents library for parsing.
 
         Args:
             ics_content (str): The raw ICS data as a string.
             start (datetime): Start of the window for event extraction.
             end (datetime): End of the window for event extraction.
             tzinfo (ZoneInfo | None): Timezone to use for parsing, if any.
-            fix_icloud (bool): Whether to apply iCloud/Apple-specific parsing workarounds.
+            fix_icloud (bool):
+                Whether to apply iCloud/Apple-specific parsing
+                workarounds.
 
         Returns:
             list[ICalEvent]: List of parsed calendar events.
         """
-        base_kwargs = {"string_content": ics_content, "start": start, "end": end, "tzinfo": tzinfo}
+        base_kwargs: dict[str, Any] = {
+            "string_content": ics_content,
+            "start": start,
+            "end": end,
+            "tzinfo": tzinfo,
+        }
         if fix_icloud:
             candidate_flags = ["fix_apple", "fix_icloud", "fix_apple_icloud"]
+            events_fn = cast(Any, icalevents_events)
             for flag in candidate_flags:
                 try:
                     kwargs = base_kwargs.copy()
                     kwargs[flag] = True
-                    logger.debug("Trying icalevents parser with flag: %s", flag)
-                    return icalevents_events(**kwargs)
+                    logger.debug(
+                        "Trying icalevents parser with flag: %s",
+                        flag,
+                    )
+                    return events_fn(**kwargs)
                 except TypeError:
                     # Unexpected kwarg for this icalevents version; try next
                     continue
                 except Exception as e:
-                    logger.warning("icalevents failed with %s=True: %s", flag, e)
+                    logger.warning(
+                        "icalevents failed with %s=True: %s",
+                        flag,
+                        e,
+                    )
                     return []
         try:
-            return icalevents_events(**base_kwargs)
+            events_fn = cast(Any, icalevents_events)
+            return events_fn(**base_kwargs)
         except Exception as e:
             logger.warning("Failed to parse ICS content: %s", e)
             return []
@@ -132,7 +156,9 @@ class CalendarService:
     @staticmethod
     def _has_non_time_alarm(_component: object) -> bool:
         """
-        Legacy: kept for compatibility. Use `_detect_proximity_uids` on raw ICS instead.
+        Legacy: kept for compatibility.
+
+        Use `_detect_proximity_uids` on raw ICS instead.
 
         Args:
             _component (object): Unused; kept for interface compatibility.
@@ -143,12 +169,12 @@ class CalendarService:
         return False
 
     @staticmethod
-    def _to_datetime(val: datetime | str) -> datetime:
+    def _to_datetime(val: datetime | date | None) -> datetime | None:
         """
         Normalize a date or datetime to an aware UTC datetime using utilities.
 
         Args:
-            val (datetime | str): The value to normalize.
+            val (datetime | date | None): The value to normalize.
 
         Returns:
             datetime: A UTC-aware datetime object.
@@ -160,7 +186,8 @@ class CalendarService:
         """
         Scan raw ICS content and return a set of UIDs for VEVENTs that contain
         a VALARM with a PROXIMITY property.
-        This is a lightweight heuristic (string-based) to preserve previous behavior.
+        This is a lightweight heuristic.
+        It is string-based to preserve previous behavior.
 
         Args:
             ics_content (str): The raw ICS data as a string.
@@ -190,9 +217,9 @@ class CalendarService:
         check_time: datetime,
         lookahead_minutes: int = 0,
         lookback_minutes: int = 60 * 12,
-        tzinfo: ZoneInfo | None = None,
+        tzinfo: tzinfo | None = None,
         fix_icloud: bool = False,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """
         Returns a list of events starting within the next `lookahead_minutes`
         OR that started in the last `lookback_minutes` (e.g. today).
@@ -203,12 +230,14 @@ class CalendarService:
             lookahead_minutes (int): Minutes ahead to include events.
             lookback_minutes (int): Minutes back to include events.
             tzinfo (ZoneInfo | None): Timezone to use for parsing, if any.
-            fix_icloud (bool): Whether to apply iCloud/Apple-specific parsing workarounds.
+            fix_icloud (bool):
+                Whether to apply iCloud/Apple-specific parsing
+                workarounds.
 
         Returns:
             list[dict]: List of alarm event dictionaries.
         """
-        alarms = []
+        alarms: list[dict[str, Any]] = []
         lower_bound = check_time - timedelta(minutes=lookback_minutes)
         upper_bound = check_time + timedelta(minutes=lookahead_minutes)
         events = CalendarService.parse_ics_events(
@@ -222,25 +251,31 @@ class CalendarService:
         local_tz = CalendarService._get_local_tz()
         for event in events:
             try:
-                if event.start is not None and event.start.tzinfo is None and local_tz is not None:
-                    event.start = event.start.replace(tzinfo=local_tz)
-                if (
-                    getattr(event, "end", None) is not None
-                    and event.end.tzinfo is None
-                    and local_tz is not None
-                ):
-                    event.end = event.end.replace(tzinfo=local_tz)
+                if event.start is not None:
+                    start = event.start
+                    if start.tzinfo is None and local_tz is not None:
+                        event.start = start.replace(tzinfo=local_tz)
+                if getattr(event, "end", None) is not None:
+                    end = event.end
+                    if end is not None:
+                        if end.tzinfo is None and local_tz is not None:
+                            event.end = end.replace(tzinfo=local_tz)
             except Exception:
-                logger.debug("Failed to apply local tz to event: %s", getattr(event, "uid", "?"))
+                uid = getattr(event, "uid", "?")
+                logger.debug(
+                    "Failed to apply local tz to event: %s",
+                    uid,
+                )
         for event in events:
             # event is an ICalEvent
             if event.start and lower_bound <= event.start <= upper_bound:
+                desc = str(event.description) if event.description else ""
                 alarms.append(
                     {
                         "uid": str(event.uid),
                         "name": str(event.summary),
                         "begin": event.start,
-                        "description": str(event.description) if event.description else "",
+                        "description": desc,
                     }
                 )
         return alarms
@@ -278,15 +313,17 @@ class CalendarService:
         check_time: datetime | None = None,
         lookback_minutes: int | None = None,
         lookahead_minutes: int = 0,
-        tzinfo: ZoneInfo | None = None,
-    ) -> list[dict]:
+        tzinfo: tzinfo | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Aggregates alarms from multiple URLs using icalevents.
 
         Args:
             sources (list[tuple[int, str]]): List of (source_id, url) tuples.
-            check_time (datetime | None): Reference time for alarm calculation. Defaults to now.
-            lookback_minutes (int | None): Minutes back to include events. Defaults to 12 hours.
+            check_time (datetime | None):
+                Reference time for alarm calculation. Defaults to now.
+            lookback_minutes (int | None):
+                Minutes back to include events. Defaults to 12 hours.
             lookahead_minutes (int): Minutes ahead to include events.
             tzinfo (ZoneInfo | None): Timezone to use for parsing, if any.
 
@@ -300,10 +337,10 @@ class CalendarService:
         tasks = [CalendarService.fetch_ics(url) for _, url in sources]
         logger.info("Fetching ICS for %d sources", len(sources))
         results = await asyncio.gather(*tasks)
-        all_alarms = []
+        all_alarms: list[dict[str, Any]] = []
         for (source_id, url), content in zip(sources, results, strict=False):
             if content:
-                fix_icloud = isinstance(url, str) and "icloud.com" in url
+                fix_icloud = "icloud.com" in url
                 alarms = CalendarService.get_upcoming_alarms(
                     content,
                     check_time,
@@ -322,7 +359,10 @@ class CalendarService:
                     alarm["uid"] = f"{source_id}:{alarm['uid']}"
                 all_alarms.extend(alarms)
             else:
-                logger.warning("Skipping calendar %s due to missing content.", source_id)
+                logger.warning(
+                    "Skipping calendar %s due to missing content.",
+                    source_id,
+                )
         return all_alarms
 
     @staticmethod
@@ -332,21 +372,26 @@ class CalendarService:
         window_start: datetime,
         window_end: datetime,
         fix_icloud: bool = False,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """
-        Parses ICS content and extracts events within the given time window using icalevents.
+        Parses ICS content and extracts events within the given
+        time window using icalevents.
 
         Args:
             ics_content (str): The raw ICS data as a string.
             source_id (int): The calendar source ID.
             window_start (datetime): Start of the window for event extraction.
             window_end (datetime): End of the window for event extraction.
-            fix_icloud (bool): Whether to apply iCloud/Apple-specific parsing workarounds.
+            fix_icloud (bool):
+                Whether to apply iCloud/Apple-specific parsing
+                workarounds.
 
         Returns:
-            list[dict]: List of event dicts with keys: uid, event_start, event_end, summary, description, location, has_non_time_alarm, source_id.
+            list[dict]: List of event dicts with keys:
+                uid, event_start, event_end, summary, description,
+                location, has_non_time_alarm, source_id.
         """
-        events: list[dict] = []
+        events: list[dict[str, Any]] = []
         ical_events = CalendarService.parse_ics_events(
             ics_content, window_start, window_end, fix_icloud=fix_icloud
         )
@@ -359,21 +404,25 @@ class CalendarService:
         local_tz = CalendarService._get_local_tz()
         for event in ical_events:
             try:
-                if event.start is not None and event.start.tzinfo is None and local_tz is not None:
-                    event.start = event.start.replace(tzinfo=local_tz)
-                if (
-                    getattr(event, "end", None) is not None
-                    and event.end.tzinfo is None
-                    and local_tz is not None
-                ):
-                    event.end = event.end.replace(tzinfo=local_tz)
+                if event.start is not None:
+                    start = event.start
+                    if start.tzinfo is None and local_tz is not None:
+                        event.start = start.replace(tzinfo=local_tz)
+                if getattr(event, "end", None) is not None:
+                    end = event.end
+                    if end is not None:
+                        if end.tzinfo is None and local_tz is not None:
+                            event.end = end.replace(tzinfo=local_tz)
             except Exception:
                 logger.debug(
                     "Failed to apply local tz to event during extract: %s",
                     getattr(event, "uid", "?"),
                 )
         proximity_uids = CalendarService._detect_proximity_uids(ics_content)
-        logger.debug("Detected %d proximity UIDs in raw ICS", len(proximity_uids))
+        logger.debug(
+            "Detected %d proximity UIDs in raw ICS",
+            len(proximity_uids),
+        )
         for event in ical_events:
             events.append(
                 {
@@ -390,7 +439,10 @@ class CalendarService:
         return events
 
     @staticmethod
-    def _get_or_create_sync_status(session: Session, source_id: int) -> CalendarSyncStatusEntry:
+    def _get_or_create_sync_status(
+        session: Session,
+        source_id: int,
+    ) -> CalendarSyncStatusEntry:
         sync_status = session.exec(
             select(CalendarSyncStatusEntry).where(
                 CalendarSyncStatusEntry.calendar_source_id == source_id
@@ -406,7 +458,10 @@ class CalendarService:
         return sync_status
 
     @staticmethod
-    def _mark_syncing(session: Session, sync_status: CalendarSyncStatusEntry) -> None:
+    def _mark_syncing(
+        session: Session,
+        sync_status: CalendarSyncStatusEntry,
+    ) -> None:
         sync_status.sync_status = CalendarSyncStatus.SYNCING
         session.add(sync_status)
         session.commit()
@@ -437,8 +492,8 @@ class CalendarService:
         session.flush()
 
     @staticmethod
-    def _select_latest_by_uid(events: list[dict]) -> dict[str, dict]:
-        latest_by_uid: dict[str, dict] = {}
+    def _select_latest_by_uid(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        latest_by_uid: dict[str, dict[str, Any]] = {}
         for event in events:
             uid = event["uid"]
             if uid not in latest_by_uid:
@@ -454,7 +509,9 @@ class CalendarService:
 
     @staticmethod
     def _add_cache_entries(
-        session: Session, latest_by_uid: dict[str, dict], source_id: int
+        session: Session,
+        latest_by_uid: dict[str, dict[str, Any]],
+        source_id: int,
     ) -> None:
         for uid, event in latest_by_uid.items():
             try:
@@ -475,8 +532,8 @@ class CalendarService:
             cache_entry = CalendarEventCache(
                 calendar_source_id=source_id,
                 uid=uid,
-                event_start=start_utc,
-                event_end=end_utc,
+                event_start=cast(Any, start_utc),
+                event_end=cast(Any, end_utc),
                 summary=event["summary"],
                 description=event["description"],
                 location=event["location"],
@@ -488,7 +545,7 @@ class CalendarService:
         session: Session,
         sync_status: CalendarSyncStatusEntry,
         utc_now: datetime,
-        events: list[dict],
+        events: list[dict[str, Any]],
         source: CalendarSource,
     ) -> None:
         sync_status.sync_status = CalendarSyncStatus.SUCCESS
@@ -499,7 +556,10 @@ class CalendarService:
         session.add(sync_status)
         session.commit()
         logger.info(
-            f"Successfully synced calendar {source.id} ({source.label}): {len(events)} events"
+            "Successfully synced calendar %s (%s): %d events",
+            source.id,
+            source.label,
+            len(events),
         )
 
     @staticmethod
@@ -526,7 +586,11 @@ class CalendarService:
         window_start: datetime,
         window_end: datetime,
     ) -> None:
-        """Sync a single calendar source: fetch, parse, upsert cache, update status."""
+        """
+        Sync a single calendar source: fetch, parse, upsert cache,
+        and update status.
+        """
+        assert source.id is not None
         source_id = source.id
 
         sync_status = CalendarService._get_or_create_sync_status(session, source_id)
@@ -541,29 +605,50 @@ class CalendarService:
                 )
                 return
 
-            fix_icloud = isinstance(source.url, str) and "icloud.com" in source.url
+            fix_icloud = "icloud.com" in source.url
             events = CalendarService.extract_events_from_ics(
-                ics_content, source_id, window_start, window_end, fix_icloud=fix_icloud
+                ics_content,
+                source_id,
+                window_start,
+                window_end,
+                fix_icloud=fix_icloud,
             )
 
             # Remove cached events for this source (we'll re-insert)
             CalendarService._clear_existing_cache(session, source_id)
 
             latest_by_uid = CalendarService._select_latest_by_uid(events)
-            CalendarService._add_cache_entries(session, latest_by_uid, source_id)
+            CalendarService._add_cache_entries(
+                session,
+                latest_by_uid,
+                source_id,
+            )
 
             session.commit()
 
-            CalendarService._finalize_success(session, sync_status, utc_now, events, source)
+            CalendarService._finalize_success(
+                session,
+                sync_status,
+                utc_now,
+                events,
+                source,
+            )
 
         except Exception as e:
-            CalendarService._finalize_failure(session, sync_status, utc_now, e, source_id)
+            CalendarService._finalize_failure(
+                session,
+                sync_status,
+                utc_now,
+                e,
+                source_id,
+            )
 
     @staticmethod
     async def sync_calendar_events(session: Session) -> None:
         """
-        Background task: Fetches all calendar sources and caches events within the 1-week window.
-        Automatically purges events outside the window and handles errors gracefully.
+        Background task: Fetches all calendar sources and caches events
+        within the 1-week window. Automatically purges events outside the
+        window and handles errors gracefully.
         """
         utc_now = datetime.now(UTC)
         window_start = utc_now - timedelta(days=7)
@@ -574,7 +659,10 @@ class CalendarService:
             logger.info("No calendar sources configured.")
             return
 
-        logger.info(f"Starting background sync for {len(sources)} calendar sources.")
+        logger.info(
+            "Starting background sync for %d calendar sources.",
+            len(sources),
+        )
 
         for source in sources:
             if not source.id:
@@ -586,10 +674,14 @@ class CalendarService:
 
         # Auto-cleanup: Purge dismissed events outside the window
         try:
+            dismissed_col = cast(Any, AlarmEvent.dismissed_at)
+            trigger_col = cast(Any, AlarmEvent.trigger_time)
             old_dismissed = session.exec(
                 select(AlarmEvent).where(
-                    (AlarmEvent.dismissed_at.is_not(None))
-                    & (AlarmEvent.trigger_time < window_start)
+                    and_(
+                        dismissed_col.isnot(None),
+                        trigger_col < window_start,
+                    )
                 )
             ).all()
 
@@ -598,7 +690,10 @@ class CalendarService:
 
             if old_dismissed:
                 session.commit()
-                logger.info(f"Purged {len(old_dismissed)} dismissed events outside window")
+                logger.info(
+                    "Purged %d dismissed events outside window",
+                    len(old_dismissed),
+                )
         except Exception as e:
             logger.warning(f"Error purging old dismissed events: {e}")
 
