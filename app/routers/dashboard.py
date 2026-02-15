@@ -52,9 +52,8 @@ async def read_legacy(request: Request, session: Session = Depends(get_session))
         statuses = session.exec(select(CalendarSyncStatusEntry)).all()
         latest = None
         for st in statuses:
-            if st.last_synced_at:
-                if latest is None or st.last_synced_at > latest:
-                    latest = st.last_synced_at
+            if st.last_synced_at and (latest is None or st.last_synced_at > latest):
+                latest = st.last_synced_at
         last_sync_utc = latest.isoformat() if latest else ""
     except Exception:
         last_sync_utc = ""
