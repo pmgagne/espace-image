@@ -1,0 +1,49 @@
+{
+    "extends": [
+        "html-validate:recommended"
+    ],
+    "elements": [
+        "html5"
+    ],
+    "rules": {
+        "no-inline-style": "warn",
+        "require-sri": "off",
+        "no-trailing-whitespace": "off",
+        "void-style": "off",
+        "attr-quotes": "warn",
+        "no-raw-characters": "off",
+        "class-pattern": "off",
+        "id-pattern": "off",
+        "doctype-style": "error",
+        "element-permitted-content": "error",
+        "element-required-attributes": "error",
+        "no-dup-attr": "error",
+        "no-dup-id": "error",
+        "no-missing-references": "error",
+        "no-redundant-for": "error",
+        "no-redundant-role": "off",
+        "require-csp-nonce": "off",
+        "wcag/h30": "error",
+        "wcag/h32": "error",
+        "wcag/h36": "error",
+        "wcag/h37": "error",
+        "wcag/h67": "warn",
+        "wcag/h71": "error",
+        "input-missing-label": "error",
+        "prefer-native-element": "warn",
+        "aria-label-misuse": "warn",
+        "no-implicit-button-type": "warn",
+        "deprecated": "warn",
+        "no-deprecated-attr": "warn",
+        "unrecognized-char-ref": "error",
+        "heading-level": "warn",
+        "long-title": "warn",
+        "meta-refresh": "error",
+        "missing-doctype": "warn",
+        "no-conditional-comment": "warn",
+        "prefer-tbody": "warn",
+        "script-type": "off",
+        "tel-non-breaking": "warn",
+        "close-order": "warn"
+    }
+}

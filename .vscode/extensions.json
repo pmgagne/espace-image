@@ -1,25 +1,16 @@
 {
   "recommendations": [
-    // Python Development
     "ms-python.python",
     "ms-python.vscode-pylance",
     "ms-python.debugpy",
     "charliermarsh.ruff",
-    // Copilot & AI
-    "GitHub.copilot-chat",
-    // Web Development
     "bradlc.vscode-tailwindcss",
     "formulahendry.auto-rename-tag",
-    // Docker
     "ms-azuretools.vscode-docker",
-    // Git & Version Control
     "GitHub.vscode-github-actions",
-    // Utilities
     "DavidAnson.vscode-markdownlint",
     "redhat.vscode-yaml",
     "tamasfe.even-better-toml",
-    "qwtel.sqlite-viewer",
-    // Code Quality
-    "streetsidesoftware.code-spell-checker"
+    "qwtel.sqlite-viewer"
   ]
 }

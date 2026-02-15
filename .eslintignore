@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Vendored files (do not edit)
+app/static/js/htmx.min.js
+app/static/polyfills/
+
+# Build outputs
+dist/
+build/
+*.min.js
+*.min.css

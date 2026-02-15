@@ -1,49 +1,49 @@
 <div>
     <h2>General Settings</h2>
-    <p style="color: #aaa; font-size: 0.9em; margin-bottom: 10px;">Backend timezone: <strong>{{ backend_timezone
-            }}</strong></p>
+    <p class="text-muted-light text-sm mb-10">Backend timezone: <strong>{{ backend_timezone
+            }}</strong> — Browser timezone: <strong id="browser-tz">Detecting…</strong></p>
 
     <form hx-post="/admin/settings" hx-target="#admin-content">
         <h3>Weather Configuration</h3>
-        <p style="color: #888; font-size: 0.9em; margin-bottom: 15px;">
+        <p class="text-muted text-sm mb-15">
             Powered by Open-Meteo. Requires Latitude and Longitude.
             {% if location_name %}
-            <br><span style="color: #4caf50;">Detected: <strong>{{ location_name }}</strong></span>
+            <br><span class="text-success">Detected: <strong>{{ location_name }}</strong></span>
             {% endif %}
         </p>
 
         <!-- Location Search -->
-        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-            <input type="text" name="location_query" placeholder="Enter City Name (e.g. Montreal)"
-                style="flex: 1; margin-bottom: 0;"
-                onkeydown="if(event.key === 'Enter'){ event.preventDefault(); document.getElementById('btn-search').click(); }">
+        <div class="d-flex flex-gap-10 mb-15">
+            <label for="location_query" class="d-none">Location Search</label>
+            <input type="text" name="location_query" id="location_query" placeholder="Enter City Name (e.g. Montreal)"
+                class="flex-1 mb-0">
             <button id="btn-search" type="button" hx-post="/admin/settings/search" hx-target="#admin-content"
-                hx-include="[name='location_query']" style="background: #3182ce;">
+                hx-include="[name='location_query']" class="bg-info">
                 Search
             </button>
         </div>
 
-        <div style="display: flex; gap: 20px;">
-            <div style="flex: 1;">
-                <label>Latitude</label>
+        <div class="d-flex flex-gap-20">
+            <div class="flex-1">
+                <label for="lat">Latitude</label>
                 <input type="number" step="any" name="latitude" id="lat" value="{{ settings.weather_latitude or '' }}">
             </div>
-            <div style="flex: 1;">
-                <label>Longitude</label>
+            <div class="flex-1">
+                <label for="lon">Longitude</label>
                 <input type="number" step="any" name="longitude" id="lon"
                     value="{{ settings.weather_longitude or '' }}">
             </div>
         </div>
 
-        <button type="button" onclick="findLocation()" style="background: #444; margin-bottom: 20px; margin-top: 10px;">
+        <button type="button" id="btn-gps" class="bg-dark-tertiary mb-20 mt-10">
             📍 Use Browser GPS
         </button>
 
         <h3>Slideshow Configuration</h3>
-        <div style="display: flex; gap: 20px;">
-            <div style="flex: 1;">
-                <label>Active Preset</label>
-                <select name="active_preset_id">
+        <div class="d-flex flex-gap-20">
+            <div class="flex-1">
+                <label for="active_preset_id">Active Preset</label>
+                <select name="active_preset_id" id="active_preset_id">
                     <option value="">-- No Preset Selected --</option>
                     {% for preset in presets %}
                     <option value="{{ preset.id }}" {% if settings.active_preset_id==preset.id %}selected{% endif %}>
@@ -52,37 +52,16 @@
                     {% endfor %}
                 </select>
             </div>
-            <div style="flex: 1;">
-                <label>Duration (seconds)</label>
-                <input type="number" name="duration" value="{{ settings.slideshow_duration or 30 }}" min="5">
+            <div class="flex-1">
+                <label for="duration">Duration (seconds)</label>
+                <input type="number" name="duration" id="duration" value="{{ settings.slideshow_duration or 30 }}"
+                    min="5">
             </div>
         </div>
 
-        <div style="margin-top: 20px; border-top: 1px solid #333; padding-top: 20px;">
+        <div class="mt-20 border-top pt-20">
             <button type="submit">Save Changes</button>
-            <span class="htmx-indicator" style="margin-left: 10px; color: #888;">Saving...</span>
+            <span class="htmx-indicator ml-10 text-muted">Saving...</span>
         </div>
     </form>
 </div>
-
-<script>
-    function findLocation() {
-        if (!navigator.geolocation) {
-            alert("Geolocation is not supported by your browser");
-            return;
-        }
-
-        var btn = document.querySelector('button[onclick="findLocation()"]');
-        var originalText = btn.innerText;
-        btn.innerText = "Locating...";
-
-        navigator.geolocation.getCurrentPosition(function (position) {
-            document.getElementById('lat').value = position.coords.latitude.toFixed(4);
-            document.getElementById('lon').value = position.coords.longitude.toFixed(4);
-            btn.innerText = originalText;
-        }, function (error) {
-            alert("Unable to retrieve your location: " + error.message);
-            btn.innerText = originalText;
-        });
-    }
-</script>

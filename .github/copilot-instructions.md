@@ -11,14 +11,17 @@
 - Install deps: uv sync --dev
 - Run app: uv run uvicorn app.main:app --reload
 - Tests: uv run pytest tests/ -v --cov=app --cov-report=xml
-- Lint/format: uv run ruff check .  |  uv run ruff format .
+- Lint/format Python: uv run ruff check .  |  uv run ruff format .
+- Lint HTML/CSS/JS: npm run lint (or npm run lint:html, lint:css, lint:js separately)
+- Auto-fix linting: npm run lint:fix
 
 ## Project-specific conventions
 - Use async route handlers and Depends(get_session) for DB access (see app/routers/admin.py).
 - Gallery uploads: GalleryManager.save_upload stores files and Photo rows; slideshow reads from Photo by active preset.
 - Legacy compatibility: app/templates/legacy/index.html + ES5 JS only, no CSS Grid, include polyfills in app/static/polyfills.
-- Don’t edit vendored JS in app/static/js/htmx.min.js unless explicitly requested.
-
+- Don’t edit vendored JS in app/static/js/htmx.min.js unless explicitly requested.- CSS: Use utility classes from app/static/css/admin-forms.css instead of inline styles.
+- HTML: All form inputs must have associated labels (for/id attributes or aria-label).
+- JavaScript: Avoid inline event handlers; use event listeners in app/static/js/admin.js or main.js.
 ## Integration points & config
 - Calendar sources: iCloud/ICS URLs stored in CalendarSource; background sync every 10 minutes.
 - Weather: WeatherService hits Open-Meteo; admin geocoding uses Nominatim (see app/routers/admin.py).

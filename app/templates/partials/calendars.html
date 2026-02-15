@@ -1,35 +1,34 @@
 <div>
-    <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div class="d-flex justify-between align-center">
         <h2>Calendar Sources</h2>
-        <div style="display:flex; align-items:center; gap:10px;">
-            <div id="cal-sync-msg" style="display:none; color:#9ae6b4; font-size:0.9em;"></div>
-            <button id="btn-sync-calendars" hx-post="/admin/calendars/sync-now" hx-target="#admin-content"
-                style="margin-bottom: 0;">
+        <div class="d-flex align-center flex-gap-10">
+            <div id="cal-sync-msg" class="d-none text-success-light text-sm"></div>
+            <button type="button" id="btn-sync-calendars" hx-post="/admin/calendars/sync-now" hx-target="#admin-content"
+                class="mb-0">
                 <span class="btn-text">Sync Now</span>
             </button>
         </div>
     </div>
 
-    <div style="margin-bottom: 30px;">
-        <form hx-post="/admin/calendars" hx-target="#admin-content"
-            style="background: #222; padding: 20px; border-radius: 8px;">
+    <div class="mb-30">
+        <form hx-post="/admin/calendars" hx-target="#admin-content" class="card">
             <h3>Add New Calendar</h3>
-            <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;">
-                <div style="flex: 1; min-width: 150px;">
-                    <label>Label</label>
-                    <input type="text" name="label" placeholder="e.g. Work" required style="margin-bottom:0;">
+            <div class="d-flex flex-wrap flex-gap-wrap-10 align-end">
+                <div class="flex-1 min-w-150">
+                    <label for="cal-label">Label</label>
+                    <input type="text" name="label" id="cal-label" placeholder="e.g. Work" required class="mb-0">
                 </div>
-                <div style="flex: 2; min-width: 200px;">
-                    <label>URL (WebCal/ICS)</label>
-                    <input type="text" name="url" placeholder="https://..." required style="margin-bottom:0;">
+                <div class="flex-2 min-w-200">
+                    <label for="cal-url">URL (WebCal/ICS)</label>
+                    <input type="text" name="url" id="cal-url" placeholder="https://..." required class="mb-0">
                 </div>
-                <div style="width: 100px;">
+                <div class="w-100">
                     <label>Color</label>
-                    <input type="color" name="color" value="#3182ce"
-                        style="width: 100%; height: 40px; padding: 0; border: none; background: none; cursor: pointer;">
+                    <input type="color" name="color" value="#3182ce" aria-label="Calendar color"
+                        class="w-full h-40 p-0 border-none cursor-pointer">
                 </div>
                 <div>
-                    <button type="submit" style="margin-bottom: 0;">Add</button>
+                    <button type="submit" class="mb-0">Add</button>
                 </div>
             </div>
         </form>
@@ -38,27 +37,30 @@
     <h3>Active Calendars</h3>
 
     {% if not sources %}
-    <p style="color: #666; font-style: italic;">No calendars configured.</p>
+    <p class="text-gray text-italic">No calendars configured.</p>
     {% else %}
-    <div style="display: flex; flex-direction: column; gap: 10px;">
+    <div class="d-flex flex-column flex-column-gap-10">
         {% for source in sources %}
-        <div
-            style="background: #222; padding: 15px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; border-left: 5px solid {{ source.color }};">
-            <div style="flex: 1; margin-right: 15px;">
+        <!-- Dynamic border-left color requires inline style -->
+        <div class="bg-dark p-15 rounded-md d-flex justify-between align-center border-left-accent"
+            style="border-left-color: {{ source.color }};">
+            <div class="flex-1 mr-15">
                 <strong>{{ source.label }}</strong>
-                <div
-                    style="font-size: 0.8em; color: #888; max-width: 500px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <div class="text-xs text-muted max-w-500 text-truncate">
                     {{ source.url }}
                 </div>
                 {% set status = sync_statuses.get(source.id) %}
-                <div style="font-size: 0.8em; color: #aaa; margin-top: 5px;">
+                <div class="text-xs text-muted-light mt-5">
                     {% if status %}
                     <div>Status: <strong>{{ status.sync_status }}</strong></div>
                     <div>Last synced: <span class="last-synced"
                             data-utc="{{ status.last_synced_at.isoformat() if status.last_synced_at else '' }}">{{
                             status.last_synced_at or "Never" }}</span></div>
+                    <div>Next sync: <span class="next-sync"
+                            data-utc="{{ status.next_sync_at.isoformat() if status.next_sync_at else '' }}">{{
+                            status.next_sync_at or "—" }}</span></div>
                     {% if status.error_message %}
-                    <div style="color: #e57373;">Error: {{ status.error_message }}</div>
+                    <div class="text-error">Error: {{ status.error_message }}</div>
                     {% endif %}
                     {% else %}
                     <div>Status: <strong>pending</strong></div>
@@ -67,8 +69,8 @@
                 </div>
             </div>
 
-            <button class="delete-btn" hx-delete="/admin/calendars/{{ source.id }}" hx-target="#admin-content"
-                hx-confirm="Are you sure you want to remove this calendar?">
+            <button type="button" class="delete-btn" hx-delete="/admin/calendars/{{ source.id }}"
+                hx-target="#admin-content" hx-confirm="Are you sure you want to remove this calendar?">
                 Remove
             </button>
         </div>
