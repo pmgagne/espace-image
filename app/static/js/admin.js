@@ -39,6 +39,20 @@
         });
     }
 
+    function setBrowserTimezone() {
+        try {
+            var tz = (typeof Intl !== 'undefined' && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : null;
+            var el = document.getElementById('browser-tz');
+            if (!el) return;
+            if (tz) {
+                el.textContent = tz;
+            } else {
+                var m = (new Date()).toString().match(/\(([^)]+)\)$/);
+                el.textContent = m ? m[1] : (new Date()).toLocaleString();
+            }
+        } catch (e) { /* ignore */ }
+    }
+
     function initFileInputLabels() {
         document.body.addEventListener('change', function (e) {
             if (e.target && e.target.type === 'file') {
@@ -60,12 +74,14 @@
 
     function onHtmxAfterSwap() {
         try { formatLastSyncedTimes(); } catch (e) { /* ignore */ }
+        try { setBrowserTimezone(); } catch (e) { /* ignore */ }
     }
 
     // Initialize on DOM ready
     document.addEventListener('DOMContentLoaded', function () {
         initFileInputLabels();
         formatLastSyncedTimes();
+        try { setBrowserTimezone(); } catch (e) { /* ignore */ }
     });
 
     // Also run after HTMX swaps

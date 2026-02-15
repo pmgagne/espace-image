@@ -1,7 +1,7 @@
 <div>
     <h2>General Settings</h2>
     <p style="color: #aaa; font-size: 0.9em; margin-bottom: 10px;">Backend timezone: <strong>{{ backend_timezone
-            }}</strong></p>
+            }}</strong> — Browser timezone: <strong id="browser-tz">Detecting…</strong></p>
 
     <form hx-post="/admin/settings" hx-target="#admin-content">
         <h3>Weather Configuration</h3>

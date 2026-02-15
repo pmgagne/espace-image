@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import random
 from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -550,7 +551,9 @@ class CalendarService:
     ) -> None:
         sync_status.sync_status = CalendarSyncStatus.SUCCESS
         sync_status.last_synced_at = utc_now
-        sync_status.next_sync_at = utc_now + timedelta(minutes=10)
+        # Add a random jitter of 5-10 minutes to avoid simultaneous polling
+        jitter_minutes = random.randint(5, 10)
+        sync_status.next_sync_at = utc_now + timedelta(minutes=10 + jitter_minutes)
         sync_status.error_count = 0
         sync_status.error_message = ""
         session.add(sync_status)
