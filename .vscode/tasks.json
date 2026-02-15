@@ -155,6 +155,63 @@
                     "endsPattern": "^.*listening.*$"
                 }
             }
+        },
+        {
+            "label": "lint: HTML/CSS/JS - All",
+            "type": "shell",
+            "command": "npm",
+            "args": [
+                "run",
+                "lint"
+            ],
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "lint: HTML only",
+            "type": "shell",
+            "command": "npm",
+            "args": [
+                "run",
+                "lint:html"
+            ],
+            "group": "test",
+            "problemMatcher": []
+        },
+        {
+            "label": "lint: CSS only",
+            "type": "shell",
+            "command": "npm",
+            "args": [
+                "run",
+                "lint:css"
+            ],
+            "group": "test",
+            "problemMatcher": []
+        },
+        {
+            "label": "lint: JavaScript only",
+            "type": "shell",
+            "command": "npm",
+            "args": [
+                "run",
+                "lint:js"
+            ],
+            "group": "test",
+            "problemMatcher": []
+        },
+        {
+            "label": "lint: Auto-fix CSS & JS",
+            "type": "shell",
+            "command": "npm",
+            "args": [
+                "run",
+                "lint:fix"
+            ],
+            "group": "build",
+            "problemMatcher": []
         }
-    ]
-}

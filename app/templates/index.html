@@ -326,7 +326,7 @@
 
 <!-- Alarm Poller (Updates every 10s for responsiveness) -->
 <div id="alarm-poller" hx-get="/components/alarm" hx-trigger="load, every 10s" hx-swap="innerHTML"
-    hx-vals='js:{tz_offset: (new Date()).getTimezoneOffset()}'>
+    hx-vals="js:{tz_offset: (new Date()).getTimezoneOffset()}">
 </div>
 
 <script>

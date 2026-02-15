@@ -10,7 +10,7 @@
         if (s.indexOf('T') === -1 && s.indexOf(' ') !== -1) {
             s = s.replace(' ', 'T');
         }
-        if (!(/[zZ]$/.test(s) || /[\+\-]\d{2}:?\d{2}$/.test(s))) {
+        if (!(/[zZ]$/.test(s) || /[+-]\d{2}:?\d{2}$/.test(s))) {
             s = s + 'Z';
         }
         var d = new Date(s);
@@ -33,7 +33,7 @@
                 if (!d) return;
                 el.textContent = d.toLocaleString();
             } catch (e) {
-                console.warn('Failed to parse last-synced time', e, utc);
+                // Silently ignore parse errors
             }
         });
         // Also format next-sync times
@@ -51,23 +51,27 @@
                 if (!d) return;
                 el.textContent = d.toLocaleString();
             } catch (e) {
-                console.warn('Failed to parse next-sync time', e, utc);
+                // Failed to parse timestamp (silently ignore)
             }
         });
     }
 
     function setBrowserTimezone() {
         try {
-            var tz = (typeof Intl !== 'undefined' && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : null;
             var el = document.getElementById('browser-tz');
             if (!el) return;
+            // Check if Intl is available (not in iOS 9.3)
+            /* eslint-disable-next-line compat/compat */
+            var tz = (typeof Intl !== 'undefined' && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : null;
             if (tz) {
                 el.textContent = tz;
             } else {
                 var m = (new Date()).toString().match(/\(([^)]+)\)$/);
                 el.textContent = m ? m[1] : (new Date()).toLocaleString();
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            // Ignore timezone detection errors
+        }
     }
 
     function initFileInputLabels() {
@@ -144,8 +148,10 @@
                 if (spinner) spinner.remove();
             }
             // hide message after a short delay
-            setTimeout(function () { try { if (msg) msg.style.display = 'none'; } catch (e) { } }, 2500);
-        } catch (e) { /* ignore */ }
+            setTimeout(function () { if (msg) msg.style.display = 'none'; }, 2500);
+        } catch (e) {
+            // Ignore sync errors
+        }
     });
 
     document.body.addEventListener('htmx:responseError', function (evt) {
@@ -156,8 +162,52 @@
             if (msg) { msg.style.display = 'inline-block'; msg.style.color = '#f87171'; msg.textContent = 'Sync failed'; }
             var btn = document.getElementById('btn-sync-calendars');
             if (btn) { btn.removeAttribute('disabled'); var spinner = btn.querySelector('.sync-spinner'); if (spinner) spinner.remove(); }
-            setTimeout(function () { try { if (msg) msg.style.display = 'none'; } catch (e) { } }, 4000);
-        } catch (e) { /* ignore */ }
+            setTimeout(function () { if (msg) msg.style.display = 'none'; }, 4000);
+        } catch (e) {
+            // Ignore error handling
+        }
+    });
+
+    // === Settings Page Event Handlers ===
+
+    // Location search - Enter key triggers search button
+    document.body.addEventListener('htmx:afterSwap', function () {
+        var locationInput = document.getElementById('location_query');
+        var searchBtn = document.getElementById('btn-search');
+
+        if (locationInput && searchBtn) {
+            locationInput.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    searchBtn.click();
+                }
+            });
+        }
+    });
+
+    // GPS geolocation button
+    document.body.addEventListener('click', function (event) {
+        if (event.target.id === 'btn-gps' || event.target.closest('#btn-gps')) {
+            event.preventDefault();
+
+            if (!navigator.geolocation) {
+                alert('Geolocation is not supported by your browser');
+                return;
+            }
+
+            var btn = document.getElementById('btn-gps');
+            var originalText = btn.innerText;
+            btn.innerText = 'Locating...';
+
+            navigator.geolocation.getCurrentPosition(function (position) {
+                document.getElementById('lat').value = position.coords.latitude.toFixed(4);
+                document.getElementById('lon').value = position.coords.longitude.toFixed(4);
+                btn.innerText = originalText;
+            }, function (error) {
+                alert('Unable to retrieve your location: ' + error.message);
+                btn.innerText = originalText;
+            });
+        }
     });
 
 })();

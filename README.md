@@ -51,6 +51,68 @@ uv run pytest tests/ -v --cov=app --cov-report=xml
 
 All current tests are unit/integration; no Docker build test is required.
 
+### Code Quality & Validation
+
+Lint and validate HTML, CSS, and JavaScript:
+
+```bash
+# Run all validators (HTML, CSS, JS)
+npm run lint
+
+# Run individual validators
+npm run lint:html  # Validate HTML structure and accessibility
+npm run lint:css   # Validate CSS syntax and browser compatibility
+npm run lint:js    # Validate JavaScript syntax and compatibility
+
+# Auto-fix CSS and JavaScript issues
+npm run lint:fix
+```
+
+Python code is linted with Ruff:
+
+```bash
+# Check Python code
+uv run ruff check .
+
+# Auto-format Python code
+uv run ruff format .
+```
+
+## CI/CD Pipeline
+
+The project uses GitHub Actions for continuous integration and deployment:
+
+### Automated Checks
+
+Every push and pull request triggers:
+
+- **Python Linting**: Ruff checks code style and formatting
+- **Frontend Validation**: HTML, CSS, and JavaScript linting
+  - HTML structure and accessibility (WCAG 2.1)
+  - CSS syntax and browser compatibility (iOS 9.3+)
+  - JavaScript ES5/ES6 compliance and compatibility
+- **Unit Tests**: pytest with coverage reporting
+- **Security Scanning**: Trivy vulnerability scanner
+- **Docker Build**: Validation of container build
+
+### Manual Validation
+
+Run the same checks locally before pushing:
+
+```bash
+# Python checks
+uv run ruff check .
+uv run ruff format . --check
+
+# Frontend checks
+npm run lint
+
+# Run tests
+uv run pytest tests/ -v --cov=app
+```
+
+All checks must pass before merging to `main`.
+
 ## Docker
 
 ### Using Docker Compose

@@ -18,9 +18,9 @@
             </select>
         </div>
         <div class="preset-create">
-            <label>New Preset</label>
+            <label for="new-preset-name">New Preset</label>
             <form hx-post="/admin/presets" hx-target="#admin-content" class="preset-create-form">
-                <input type="text" name="name" placeholder="Name" required>
+                <input type="text" name="name" id="new-preset-name" placeholder="Name" required>
                 <button type="submit">Create</button>
             </form>
         </div>
@@ -29,21 +29,21 @@
     {% if selected_preset %}
     <!-- Upload Area -->
     {% if error_message %}
-    <div style="background: #3a1f1f; color: #ffdede; padding: 10px; border-radius: 6px; margin-bottom: 12px;">
+    <div class="alert alert-error">
         <strong>Error:</strong> {{ error_message }}
     </div>
     {% endif %}
     <div class="upload-area">
-        <h3>Upload to: <span style="color: #007bff;">{{ selected_preset.name }}</span></h3>
+        <h3>Upload to: <span class="text-info">{{ selected_preset.name }}</span></h3>
         <form hx-post="/admin/upload" hx-target="#admin-content" hx-encoding="multipart/form-data" class="upload-form">
             <input type="hidden" name="preset_id" value="{{ selected_preset.id }}">
 
-            <label class="file-input-wrapper btn" data-placeholder="Choose Photos" style="margin-bottom: 0;">
+            <label class="file-input-wrapper btn mb-0" data-placeholder="Choose Photos">
                 <span class="btn-text">Choose Photos</span>
                 <input type="file" name="files" multiple accept="image/*">
             </label>
 
-            <button type="submit" style="margin-bottom: 0;">Upload Photos</button>
+            <button type="submit" class="mb-0">Upload Photos</button>
         </form>
     </div>
 
@@ -51,7 +51,7 @@
     <h3>Photos ({{ photos|length }})</h3>
 
     {% if not photos %}
-    <p style="color: #666; font-style: italic;">No photos in this preset yet.</p>
+    <p class="text-gray text-italic">No photos in this preset yet.</p>
     {% else %}
     <div class="gallery-grid">
         {% for photo in photos %}

@@ -27,7 +27,7 @@ button {
     height: 40px;
     padding: 0 16px;
     background: #007bff;
-    color: white;
+    color: #fff;
     border: 1px solid transparent;
     border-radius: 4px;
     cursor: pointer;
@@ -61,7 +61,7 @@ button.delete-btn:hover,
     vertical-align: middle;
 }
 
-.file-input-wrapper input[type=file] {
+.file-input-wrapper input[type="file"] {
     position: absolute;
     top: 0;
     right: 0;
@@ -69,10 +69,9 @@ button.delete-btn:hover,
     min-height: 100%;
     font-size: 100px;
     text-align: right;
-    filter: alpha(opacity=0);
     opacity: 0;
     outline: none;
-    background: white;
+    background: #fff;
     cursor: inherit;
     display: block;
 }
@@ -134,7 +133,7 @@ h2 {
     bottom: 0;
     left: 0;
     right: 0;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgb(0 0 0 / 70%);
     padding: 5px;
     text-align: right;
     opacity: 0;
@@ -158,9 +157,19 @@ h2 {
 }
 
 .admin-flex {
+    display: -webkit-flex;
     display: flex;
+    -webkit-flex-wrap: wrap;
     flex-wrap: wrap;
-    gap: 20px;
+}
+
+.admin-flex>* {
+    margin-right: 20px;
+    margin-bottom: 20px;
+}
+
+.admin-flex>*:last-child {
+    margin-right: 0;
 }
 
 .admin-panel {
@@ -169,4 +178,578 @@ h2 {
     border-radius: 8px;
     flex: 1;
     min-width: 300px;
+}
+
+/* ========================================
+   UTILITY CLASSES
+   iOS 9.3+ Compatible
+   ======================================== */
+
+/* == Display == */
+.d-none {
+    display: none;
+}
+
+.d-block {
+    display: block;
+}
+
+.d-inline-block {
+    display: inline-block;
+}
+
+.d-flex {
+    display: -webkit-flex;
+    display: flex;
+}
+
+.d-inline-flex {
+    display: -webkit-inline-flex;
+    display: inline-flex;
+}
+
+/* == Flexbox Layout == */
+.flex-column {
+    -webkit-flex-direction: column;
+    flex-direction: column;
+}
+
+.flex-row {
+    -webkit-flex-direction: row;
+    flex-direction: row;
+}
+
+.flex-wrap {
+    -webkit-flex-wrap: wrap;
+    flex-wrap: wrap;
+}
+
+/* Justify Content */
+.justify-start {
+    -webkit-justify-content: flex-start;
+    justify-content: flex-start;
+}
+
+.justify-center {
+    -webkit-justify-content: center;
+    justify-content: center;
+}
+
+.justify-end {
+    -webkit-justify-content: flex-end;
+    justify-content: flex-end;
+}
+
+.justify-between {
+    -webkit-justify-content: space-between;
+    justify-content: space-between;
+}
+
+.justify-around {
+    -webkit-justify-content: space-around;
+    justify-content: space-around;
+}
+
+/* Align Items */
+.align-start {
+    -webkit-align-items: flex-start;
+    align-items: flex-start;
+}
+
+.align-center {
+    -webkit-align-items: center;
+    align-items: center;
+}
+
+.align-end {
+    -webkit-align-items: flex-end;
+    align-items: flex-end;
+}
+
+.align-stretch {
+    -webkit-align-items: stretch;
+    align-items: stretch;
+}
+
+/* Flex */
+.flex-1 {
+    -webkit-flex: 1;
+    flex: 1;
+}
+
+.flex-2 {
+    -webkit-flex: 2;
+    flex: 2;
+}
+
+.flex-auto {
+    -webkit-flex: auto;
+    flex: auto;
+}
+
+.flex-none {
+    -webkit-flex: none;
+    flex: none;
+}
+
+/* == Spacing (Margin / Padding) == */
+/* Margin */
+.m-0 {
+    margin: 0;
+}
+
+.mt-0 {
+    margin-top: 0;
+}
+
+.mr-0 {
+    margin-right: 0;
+}
+
+.mb-0 {
+    margin-bottom: 0;
+}
+
+.ml-0 {
+    margin-left: 0;
+}
+
+.mt-5 {
+    margin-top: 5px;
+}
+
+.mr-5 {
+    margin-right: 5px;
+}
+
+.mb-5 {
+    margin-bottom: 5px;
+}
+
+.ml-5 {
+    margin-left: 5px;
+}
+
+.mt-10 {
+    margin-top: 10px;
+}
+
+.mr-10 {
+    margin-right: 10px;
+}
+
+.mb-10 {
+    margin-bottom: 10px;
+}
+
+.ml-10 {
+    margin-left: 10px;
+}
+
+.mt-12 {
+    margin-top: 12px;
+}
+
+.mb-12 {
+    margin-bottom: 12px;
+}
+
+.mt-15 {
+    margin-top: 15px;
+}
+
+.mr-15 {
+    margin-right: 15px;
+}
+
+.mb-15 {
+    margin-bottom: 15px;
+}
+
+.ml-15 {
+    margin-left: 15px;
+}
+
+.mt-20 {
+    margin-top: 20px;
+}
+
+.mr-20 {
+    margin-right: 20px;
+}
+
+.mb-20 {
+    margin-bottom: 20px;
+}
+
+.ml-20 {
+    margin-left: 20px;
+}
+
+.mt-30 {
+    margin-top: 30px;
+}
+
+.mb-30 {
+    margin-bottom: 30px;
+}
+
+/* Padding */
+.p-0 {
+    padding: 0;
+}
+
+.p-5 {
+    padding: 5px;
+}
+
+.p-8 {
+    padding: 8px;
+}
+
+.p-10 {
+    padding: 10px;
+}
+
+.p-15 {
+    padding: 15px;
+}
+
+.p-20 {
+    padding: 20px;
+}
+
+.pt-20 {
+    padding-top: 20px;
+}
+
+.pb-10 {
+    padding-bottom: 10px;
+}
+
+/* == Width / Height == */
+.w-full {
+    width: 100%;
+}
+
+.w-auto {
+    width: auto;
+}
+
+.w-100 {
+    width: 100px;
+}
+
+.h-full {
+    height: 100%;
+}
+
+.h-auto {
+    height: auto;
+}
+
+.h-40 {
+    height: 40px;
+}
+
+.min-w-150 {
+    min-width: 150px;
+}
+
+.min-w-200 {
+    min-width: 200px;
+}
+
+.min-w-300 {
+    min-width: 300px;
+}
+
+/* == Colors (Following Color Guide) == */
+/* Background Colors - Cool/Neutral tones */
+.bg-dark {
+    background: #222;
+}
+
+.bg-dark-secondary {
+    background: #333;
+}
+
+.bg-dark-tertiary {
+    background: #444;
+}
+
+.bg-light {
+    background: #f0f0f0;
+}
+
+/* Background Colors - Functional (use sparingly) */
+.bg-info {
+    background: #3182ce;
+}
+
+.bg-success {
+    background: #4caf50;
+}
+
+.bg-warning {
+    background: #ff9800;
+}
+
+.bg-error {
+    background: #3a1f1f;
+}
+
+/* Text Colors */
+.text-white {
+    color: #fff;
+}
+
+.text-light {
+    color: #ffdede;
+}
+
+.text-muted {
+    color: #888;
+}
+
+.text-muted-light {
+    color: #aaa;
+}
+
+.text-muted-lighter {
+    color: #ccc;
+}
+
+.text-dark {
+    color: #333;
+}
+
+.text-gray {
+    color: #666;
+}
+
+/* Text Colors - Functional */
+.text-info {
+    color: #007bff;
+}
+
+.text-info-alt {
+    color: #3182ce;
+}
+
+.text-success {
+    color: #4caf50;
+}
+
+.text-success-light {
+    color: #9ae6b4;
+}
+
+.text-warning {
+    color: #ff9800;
+}
+
+.text-error {
+    color: #e57373;
+}
+
+/* == Typography == */
+.text-xs {
+    font-size: 0.8em;
+}
+
+.text-sm {
+    font-size: 0.9em;
+}
+
+.text-base {
+    font-size: 1rem;
+}
+
+.text-italic {
+    font-style: italic;
+}
+
+.font-bold {
+    font-weight: bold;
+}
+
+.font-normal {
+    font-weight: normal;
+}
+
+/* == Borders == */
+.border {
+    border: 1px solid #444;
+}
+
+.border-top {
+    border-top: 1px solid #333;
+}
+
+.border-bottom {
+    border-bottom: 1px solid #444;
+}
+
+.border-none {
+    border: none;
+}
+
+.border-light {
+    border-color: #ddd;
+}
+
+.border-left-accent {
+    border-left-width: 5px;
+    border-left-style: solid;
+}
+
+.rounded {
+    border-radius: 4px;
+}
+
+.rounded-md {
+    border-radius: 5px;
+}
+
+.rounded-lg {
+    border-radius: 8px;
+}
+
+.rounded-6 {
+    border-radius: 6px;
+}
+
+/* == Text Utilities == */
+.text-center {
+    text-align: center;
+}
+
+.text-left {
+    text-align: left;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.max-w-500 {
+    max-width: 500px;
+}
+
+/* == Opacity == */
+.opacity-0 {
+    opacity: 0;
+}
+
+.opacity-80 {
+    opacity: 0.8;
+}
+
+.opacity-100 {
+    opacity: 1;
+}
+
+/* == Cursor == */
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.cursor-default {
+    cursor: default;
+}
+
+/* == Box Model == */
+.box-border {
+    box-sizing: border-box;
+}
+
+/* == Position == */
+.relative {
+    position: relative;
+}
+
+.absolute {
+    position: absolute;
+}
+
+/* == Overflow == */
+.overflow-hidden {
+    overflow: hidden;
+}
+
+.overflow-auto {
+    overflow: auto;
+}
+
+/* == iOS 9.3 Flex Gap Alternatives (margin-based) == */
+/* Use these instead of gap property */
+.flex-gap-10>*+* {
+    margin-left: 10px;
+}
+
+.flex-gap-20>*+* {
+    margin-left: 20px;
+}
+
+.flex-column-gap-10>*+* {
+    margin-top: 10px;
+}
+
+.flex-column-gap-15>*+* {
+    margin-top: 15px;
+}
+
+.flex-column-gap-20>*+* {
+    margin-top: 20px;
+}
+
+/* Horizontal spacing for wrapped flexbox */
+.flex-gap-wrap-10>* {
+    margin-right: 10px;
+    margin-bottom: 10px;
+}
+
+.flex-gap-wrap-10>*:last-child {
+    margin-right: 0;
+}
+
+/* == Component Helper Classes == */
+.divider {
+    margin: 30px 0;
+    border: none;
+    border-top: 1px solid #ddd;
+}
+
+.card {
+    background: #222;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.alert {
+    padding: 10px 20px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+}
+
+.alert-info {
+    background: #f0f0f0;
+    color: #333;
+}
+
+.alert-success {
+    background: #4caf50;
+    color: #fff;
+}
+
+.alert-error {
+    background: #3a1f1f;
+    color: #ffdede;
 }
