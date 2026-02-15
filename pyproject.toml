@@ -70,3 +70,8 @@ filterwarnings = [
 [tool.pyright]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
+
+# Style checking (pycodestyle integration)
+[tool.pycodestyle]
+max-line-length = 100
+ignore = ["E501"]     # line too long (handled by ruff)

@@ -2,6 +2,10 @@
 
 A FastAPI-based slideshow that serves a modern UI and a **Legacy UI** optimized for the iPad 2 (iOS 9.3.5). Ships as a containerized app with HTMX-powered interactions, calendar alarms, and weather widgets.
 
+## ⚠️ Security Notice
+
+**This application has NO built-in authentication.** It is designed for **internal-network-only deployment** on a trusted home or office network. See [SECURITY.md](SECURITY.md) for details and guidance on adding authentication if needed for LAN/internet exposure.
+
 ## Features
 
 - **Photo Slideshow:** Rotates through user-uploaded images.

@@ -8,10 +8,14 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.db.engine import create_db_and_tables, engine
 from app.routers import admin, dashboard, media
 from app.services.calendar_service import CalendarService
+
+# Security Note: This application has NO authentication and is designed for
+# internal-network-only deployment. See SECURITY.md for details.
 
 # Configure logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -25,15 +29,25 @@ logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Middleware to add security headers to all responses."""
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        return response
+
+
 async def background_sync_calendars():
     """Background task to sync calendar events every 10 minutes."""
-    session = Session(engine)
-    try:
-        await CalendarService.sync_calendar_events(session)
-    except Exception as e:
-        logger.exception(f"Error in background calendar sync: {e}")
-    finally:
-        session.close()
+    with Session(engine) as session:
+        try:
+            await CalendarService.sync_calendar_events(session)
+        except Exception as e:
+            logger.exception("Error in background calendar sync: %s", e)
 
 
 @asynccontextmanager
@@ -63,6 +77,9 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Espace-Image", lifespan=lifespan)
+
+# Add security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Ensure static directory exists
 os.makedirs("app/static", exist_ok=True)

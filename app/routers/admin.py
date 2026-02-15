@@ -46,7 +46,11 @@ async def get_settings_partial(request: Request, session: Session = Depends(get_
     if settings and settings.weather_latitude and settings.weather_longitude:
         try:
             # Simple reverse geocode for Admin UI context
-            url = f"https://nominatim.openstreetmap.org/reverse?lat={settings.weather_latitude}&lon={settings.weather_longitude}&format=json"
+            url = (
+                f"https://nominatim.openstreetmap.org/reverse?"
+                f"lat={settings.weather_latitude}&"
+                f"lon={settings.weather_longitude}&format=json"
+            )
             async with httpx.AsyncClient() as client:
                 resp = await client.get(url, headers={"User-Agent": "Espace-Image/1.0"})
                 if resp.status_code == 200:
@@ -209,8 +213,9 @@ async def sync_calendars_now(
     """Manually trigger calendar synchronization."""
 
     # Run sync inline so the HTMX request only returns when sync completes.
-    # This gives users visible feedback (loading indicator) matching actual work.
-    # Run sync but suppress exceptions to avoid bubbling errors to the admin UI
+    # This gives users visible feedback (loading indicator) matching
+    # actual work. Run sync but suppress exceptions to avoid bubbling
+    # errors to the admin UI
     with contextlib.suppress(Exception):
         await CalendarService.sync_calendar_events(session)
 
@@ -240,13 +245,19 @@ async def get_gallery_partial(
     return templates.TemplateResponse(
         request,
         "partials/gallery.html",
-        {"presets": presets, "selected_preset": selected_preset, "photos": photos},
+        {
+            "presets": presets,
+            "selected_preset": selected_preset,
+            "photos": photos,
+        },
     )
 
 
 @router.post("/presets", response_class=HTMLResponse)
 async def create_preset(
-    request: Request, name: str = Form(...), session: Session = Depends(get_session)
+    request: Request,
+    name: str = Form(...),
+    session: Session = Depends(get_session),
 ):
     preset = Preset(name=name)
     session.add(preset)
@@ -346,5 +357,9 @@ async def simulate_alarm(
     return templates.TemplateResponse(
         request,
         "partials/debug.html",
-        {"success_message": f"Simulated alarm created! It will appear in {delay_seconds} seconds."},
+        {
+            "success_message": (
+                f"Simulated alarm created! It will appear in {delay_seconds} seconds."
+            )
+        },
     )

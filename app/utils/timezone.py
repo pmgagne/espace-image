@@ -74,6 +74,8 @@ def get_local_timezone_name() -> str:
     """
     try:
         tz = datetime.now().astimezone().tzinfo
+        if tz is None:
+            return "UTC"
         # ZoneInfo has attribute 'key' on Python 3.9+ when created via ZoneInfo
         name = getattr(tz, "key", None) or getattr(tz, "zone", None)
         if name:

@@ -17,6 +17,9 @@
     // Linting & Code Quality
     "ruff.fixAll": true,
     "ruff.organizeImports": true,
+    "python.linting.enabled": false, // Disable built-in linting (using Ruff instead)
+    "python.linting.pylintEnabled": false,
+    "python.linting.flake8Enabled": false,
     // Copilot & IntelliSense
     "github.copilot.enable": {
         "*": false,
@@ -64,6 +67,10 @@
         "**/dist": true
     },
     "chat.tools.terminal.autoApprove": {
-        "uv": true
+        "uv": true,
+        "/^python3 << 'PYTHONEOF'\ncontent = '''# Espace-Image Environment Configuration\n# Copy this file to \\.env and customize as needed\n\n# ============================================================================\n# Application Configuration\n# ============================================================================\n\n# Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL\nLOG_LEVEL=INFO\n\n# Enable debug mode \\(shows additional debugging information in UI\\)\n# WARNING: Never enable in production\nWEBAPP_DEBUG=false\n\n# ============================================================================\n# Database Configuration\n# ============================================================================\n\n# Database URL - defaults to SQLite in data/ directory\n# For production, consider PostgreSQL:\n# DATABASE_URL=postgresql://user:password@localhost/espace_image\nDATABASE_URL=sqlite:///data/espace_image\\.db\n\n# ============================================================================\n# Image Optimization Configuration\n# ============================================================================\n\n# Minimum file size \\(bytes\\) before re-encoding to JPEG \\(default: 800KB\\)\nIMAGE_OPTIMIZE_MIN_BYTES=819200\n\n# JPEG quality for optimization \\(1-100, default: 82\\)\nIMAGE_JPEG_QUALITY=82\n\n# Minimum JPEG quality when iteratively reducing size \\(1-100, default: 60\\)\nIMAGE_JPEG_MIN_QUALITY=60\n\n# ============================================================================\n# Timezone Configuration\n# ============================================================================\n\n# System timezone \\(IANA timezone name, e\\.g\\., America/New_York\\)\n# If not set, attempts to auto-detect from system\nTZ=America/Toronto\n\n# ============================================================================\n# Security Configuration\n# ============================================================================\n\n# IMPORTANT: This application has NO built-in authentication\\.\n# Deploy behind a reverse proxy with authentication \\(e\\.g\\., nginx with HTTP basic auth\\)\n# or on a trusted internal network only\\.\n\n# Example nginx basic auth configuration:\n# location /admin \\{\n#     auth_basic \"Admin Area\";\n#     auth_basic_user_file /etc/nginx/\\.htpasswd;\n#     proxy_pass http://localhost:8000/admin;\n# \\}\n\n# ============================================================================\n# Notes\n# ============================================================================\n\n# - All times are stored in UTC internally\n# - Weather coordinates are configured via the admin UI\n# - Calendar sources \\(ICS URLs\\) are configured via the admin UI\n# - Slideshow duration is configured via the admin UI\n'''\nwith open\\('/Users/philippegagne/Projets/espace-image/\\.env\\.example', 'w'\\) as f:\n    f\\.write\\(content\\)\nprint\\('Created \\.env\\.example'\\)\nPYTHONEOF\n$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
     }
 }
