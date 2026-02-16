@@ -54,19 +54,29 @@ def test_dismiss_alarm_mock_remains_mock(client, session):
 async def test_get_all_alarms_namespaces_uids(monkeypatch):
     """Verify alarms from multiple calendars are namespaced by source id."""
     ics_one = """BEGIN:VCALENDAR
+VERSION:2.0
 BEGIN:VEVENT
 UID:shared-uid
 SUMMARY:Calendar One
 DTSTART:20260201T100000Z
 DESCRIPTION:One
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT10M
+END:VALARM
 END:VEVENT
 END:VCALENDAR"""
     ics_two = """BEGIN:VCALENDAR
+VERSION:2.0
 BEGIN:VEVENT
 UID:shared-uid
 SUMMARY:Calendar Two
 DTSTART:20260201T100000Z
 DESCRIPTION:Two
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT15M
+END:VALARM
 END:VEVENT
 END:VCALENDAR"""
 

@@ -126,6 +126,7 @@ async def update_settings(
     latitude: float | None = Form(None),
     longitude: float | None = Form(None),
     duration: int | None = Form(None),
+    default_alarm_for_all_events: str | None = Form(None),
     session: Session = Depends(get_session),
 ):
     # Basic validation for form inputs
@@ -151,6 +152,11 @@ async def update_settings(
     settings.weather_longitude = longitude
     if duration is not None:
         settings.slideshow_duration = duration
+    # Checkbox: presence indicates enabled
+    if default_alarm_for_all_events is not None:
+        settings.default_alarm_for_all_events = True
+    else:
+        settings.default_alarm_for_all_events = False
     session.add(settings)
     session.commit()
 
@@ -202,6 +208,26 @@ async def delete_calendar(
     if source:
         session.delete(source)
         session.commit()
+    return await get_calendars_partial(request, session)
+
+
+@router.post("/calendars/{source_id}/defaults", response_class=HTMLResponse)
+async def update_calendar_defaults(
+    request: Request,
+    source_id: int,
+    default_alarm_for_all_events: str | None = Form(None),
+    session: Session = Depends(get_session),
+):
+    """Toggle per-calendar default alarm setting (immediate, no save button required)."""
+    source = session.get(CalendarSource, source_id)
+    if not source:
+        # Re-render calendars partial to show current state (no change)
+        return await get_calendars_partial(request, session)
+
+    source.default_alarm_for_all_events = default_alarm_for_all_events is not None
+    session.add(source)
+    session.commit()
+
     return await get_calendars_partial(request, session)
 
 

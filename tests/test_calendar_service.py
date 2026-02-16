@@ -22,6 +22,11 @@ DTSTAMP:20230101T000000Z
 DTSTART:20260116T100000Z
 DTEND:20260116T110000Z
 SUMMARY:Meeting in 10 mins
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Alarm
+TRIGGER:-PT10M
+END:VALARM
 END:VEVENT
 BEGIN:VEVENT
 UID:event2@example.com
@@ -213,7 +218,19 @@ async def test_fetch_ics_backoff(monkeypatch):
 
 def test_get_upcoming_alarms_naive_event():
     # Event with naive datetime, should attach local tz
-    ics = """BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:uid1\nDTSTART:20260116T100000\nDTEND:20260116T110000\nSUMMARY:Naive Event\nEND:VEVENT\nEND:VCALENDAR"""
+    ics = """BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:uid1
+DTSTART:20260116T100000
+DTEND:20260116T110000
+SUMMARY:Naive Event
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT10M
+END:VALARM
+END:VEVENT
+END:VCALENDAR"""
     now = datetime(2026, 1, 16, 9, 50, 0, tzinfo=UTC)
     alarms = CalendarService.get_upcoming_alarms(ics, now, lookahead_minutes=120)
     assert alarms

@@ -66,7 +66,10 @@ class AlarmService:
 
     @staticmethod
     def format_alarm(
-        event: EventLike, composite_uid: str, utc_now: datetime
+        event: EventLike,
+        composite_uid: str,
+        utc_now: datetime,
+        alarm_offset: timedelta | None = None,
     ) -> dict[str, Any] | None:
         """
         Format calendar event for alarm display.
@@ -94,6 +97,12 @@ class AlarmService:
             display_time = event.event_start.replace(hour=0, minute=0, second=0, microsecond=0)
         else:
             display_time = event.event_start
+
+        # Compute the actual alarm trigger time
+        if alarm_offset is not None:
+            trigger_time = display_time - alarm_offset
+        else:
+            trigger_time = display_time
 
         # Normalize display_time and event_end to UTC-aware datetimes
         try:
@@ -134,5 +143,6 @@ class AlarmService:
                 "start": start_val,
                 "end": end_val,
                 "all_day": is_all_day,
+                "trigger_time": ensure_utc_aware(trigger_time),
             }
         return None

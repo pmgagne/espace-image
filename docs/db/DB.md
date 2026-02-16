@@ -72,6 +72,8 @@ The Espace-Image app uses SQLModel (SQLAlchemy ORM) for its database layer. The 
 - `event_start`, `event_end`: datetime
 - `summary`, `description`, `location`: string
 - `created_at`: datetime
+- `trigger_time`: datetime (nullable) — UTC time when an alarm should fire
+- `optional_trigger`: boolean — True when `trigger_time` was added by the backend as a default (not extracted from a VALARM)
 - Unique constraint: (`calendar_source_id`, `uid`)
 
 ### AlarmEvent

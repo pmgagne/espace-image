@@ -36,6 +36,10 @@ class CalendarSource(SQLModel, table=True):
     label: str
     url: str  # WebCal or ICS URL
     color: str | None = Field(default="#3182ce")  # Default blue
+    default_alarm_for_all_events: bool = Field(
+        default=False,
+        description="If true, add a default alarm at midnight for events without VALARM (per-calendar)",
+    )
 
 
 class AppSettings(SQLModel, table=True):
@@ -45,6 +49,10 @@ class AppSettings(SQLModel, table=True):
     weather_longitude: float | None = Field(default=None)
     weather_timezone: str = Field(default="auto")
     slideshow_duration: int = Field(default=30)  # in seconds
+    default_alarm_for_all_events: bool = Field(
+        default=False,
+        description="If true, add a default alarm at midnight for events with no VALARM",
+    )
 
 
 class AlarmEvent(SQLModel, table=True):
@@ -68,6 +76,10 @@ class CalendarEventCache(SQLModel, table=True):
     summary: str
     description: str = Field(default="")
     location: str = Field(default="")
+    trigger_time: datetime | None = Field(default=None, index=True)
+    optional_trigger: bool = Field(
+        default=False, index=True, description="True if trigger is a default (not from VALARM)"
+    )
     created_at: datetime = Field(default_factory=datetime.now)
 
 

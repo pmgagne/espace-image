@@ -17,6 +17,7 @@ from sqlmodel import Session, select
 
 from app.db.models import (
     AlarmEvent,
+    AppSettings,
     CalendarEventCache,
     CalendarSource,
     CalendarSyncStatus,
@@ -105,7 +106,8 @@ class CalendarService:
         """
         Parse ICS content string into a list of ICalEvent objects.
 
-        Uses the icalevents library for parsing.
+        Uses the icalevents library for parsing and attaches raw icalendar
+        component data to each event for VALARM access.
 
         Args:
             ics_content (str): The raw ICS data as a string.
@@ -117,8 +119,22 @@ class CalendarService:
                 workarounds.
 
         Returns:
-            list[ICalEvent]: List of parsed calendar events.
+            list[ICalEvent]: List of parsed calendar events with .raw attached.
         """
+        # Parse with icalendar to get raw component data
+        raw_events_by_uid: dict[str, Any] = {}
+        try:
+            from icalendar import Calendar
+
+            cal = Calendar.from_ical(ics_content)
+            for component in cal.walk():
+                if component.name == "VEVENT":
+                    uid = str(component.get("UID", ""))
+                    if uid:
+                        raw_events_by_uid[uid] = component
+        except Exception as e:
+            logger.debug(f"Failed to parse ICS with icalendar: {e}")
+
         base_kwargs: dict[str, Any] = {
             "string_content": ics_content,
             "start": start,
@@ -136,7 +152,13 @@ class CalendarService:
                         "Trying icalevents parser with flag: %s",
                         flag,
                     )
-                    return events_fn(**kwargs)
+                    events = events_fn(**kwargs)
+                    # Attach raw components to icalevents Event objects
+                    for event in events:
+                        uid = str(getattr(event, "uid", ""))
+                        if uid in raw_events_by_uid:
+                            event.raw = raw_events_by_uid[uid]  # type: ignore[attr-defined]
+                    return events
                 except TypeError:
                     # Unexpected kwarg for this icalevents version; try next
                     continue
@@ -149,7 +171,13 @@ class CalendarService:
                     return []
         try:
             events_fn = cast(Any, icalevents_events)
-            return events_fn(**base_kwargs)
+            events = events_fn(**base_kwargs)
+            # Attach raw components to icalevents Event objects
+            for event in events:
+                uid = str(getattr(event, "uid", ""))
+                if uid in raw_events_by_uid:
+                    event.raw = raw_events_by_uid[uid]  # type: ignore[attr-defined]
+            return events
         except Exception as e:
             logger.warning("Failed to parse ICS content: %s", e)
             return []
@@ -248,18 +276,98 @@ class CalendarService:
             tzinfo=tzinfo,
             fix_icloud=fix_icloud,
         )
-        # Ensure events have timezone info; if naive, apply local tz fallback
         local_tz = CalendarService._get_local_tz()
+
+        def extract_trigger_time(event: ICalEvent) -> datetime | None:
+            """
+            Extract the alarm trigger time from event.raw.subcomponents (VALARM/TRIGGER).
+            Returns the absolute UTC datetime when the alarm should fire, or None if not found.
+            For proximity alarms (no TRIGGER), returns event start time.
+            """
+            try:
+                # event.raw is a icalendar.Event; subcomponents are VALARM(s)
+                if not hasattr(event, "raw") or not hasattr(event.raw, "subcomponents"):  # type: ignore[attr-defined]
+                    return None
+                event_start = event.start
+                if event_start is None:
+                    return None
+                # If event_start is naive, use local_tz if available
+                if event_start.tzinfo is None and local_tz is not None:
+                    event_start = event_start.replace(tzinfo=local_tz)
+                for sub in getattr(event.raw, "subcomponents", []):  # type: ignore[attr-defined]
+                    if getattr(sub, "name", "").upper() == "VALARM":
+                        trigger = sub.get("TRIGGER")
+                        if trigger is None:
+                            # Check for proximity alarm (PROXIMITY:ARRIVE/DEPART)
+                            proximity = sub.get("PROXIMITY")
+                            if proximity is not None:
+                                logger.debug(
+                                    "Proximity alarm detected (no TRIGGER): %s",
+                                    getattr(event, "uid", "?"),
+                                )
+                                # Proximity alarms fire at event start time
+                                return event_start.astimezone(UTC)
+                            continue
+                        # icalendar parses TRIGGER as vDDDTypes (timedelta or datetime)
+                        # See: https://icalendar.readthedocs.io/en/latest/usage.html#alarms
+                        # Relative: -PT10M (timedelta), Absolute: 20260215T120000Z (datetime)
+                        if hasattr(trigger, "dt"):
+                            # vDDDTypes object with .dt attribute
+                            trig_val = trigger.dt
+                            if isinstance(trig_val, datetime):
+                                # Absolute datetime
+                                if trig_val.tzinfo is None and local_tz is not None:
+                                    trig_val = trig_val.replace(tzinfo=local_tz)
+                                return trig_val.astimezone(UTC)
+                            elif isinstance(trig_val, timedelta):
+                                # Relative offset from event_start
+                                return (event_start + trig_val).astimezone(UTC)
+                        elif isinstance(trigger, timedelta):
+                            # Relative offset from event_start
+                            return (event_start + trigger).astimezone(UTC)
+                        elif isinstance(trigger, str):
+                            # Fallback: try to parse ISO8601 or duration string
+                            try:
+                                if trigger.startswith("-") or trigger.startswith("+"):
+                                    # Duration string, e.g. -PT10M
+                                    # Use icalendar's vDuration parser if available
+                                    from icalendar.prop import vDuration
+
+                                    td = vDuration.from_ical(trigger)  # type: ignore[arg-type]
+                                    return (event_start + td).astimezone(UTC)
+                                else:
+                                    # Try parsing as datetime
+                                    trig_val = datetime.fromisoformat(trigger)
+                                    if trig_val.tzinfo is None and local_tz is not None:
+                                        trig_val = trig_val.replace(tzinfo=local_tz)
+                                    return trig_val.astimezone(UTC)
+                            except Exception:
+                                continue
+            except Exception as e:
+                logger.debug(f"Failed to extract alarm trigger time: {e}")
+            return None
+
         for event in events:
             try:
+                # Convert date objects to datetime (for all-day events)
                 if event.start is not None:
-                    start = event.start
-                    if start.tzinfo is None and local_tz is not None:
-                        event.start = start.replace(tzinfo=local_tz)
+                    if type(event.start) is date:  # Plain date, not datetime
+                        # All-day event: convert date to datetime at midnight
+                        event.start = datetime.combine(event.start, datetime.min.time())
+                        if local_tz is not None:
+                            event.start = event.start.replace(tzinfo=local_tz)
+                    elif event.start.tzinfo is None and local_tz is not None:
+                        event.start = event.start.replace(tzinfo=local_tz)
                 if getattr(event, "end", None) is not None:
                     end = event.end
                     if end is not None:
-                        if end.tzinfo is None and local_tz is not None:
+                        if type(end) is date:  # Plain date, not datetime
+                            # All-day event end: convert date to datetime at midnight
+                            end = datetime.combine(end, datetime.min.time())
+                            if local_tz is not None:
+                                end = end.replace(tzinfo=local_tz)
+                            event.end = end
+                        elif end.tzinfo is None and local_tz is not None:
                             event.end = end.replace(tzinfo=local_tz)
             except Exception:
                 uid = getattr(event, "uid", "?")
@@ -268,17 +376,20 @@ class CalendarService:
                     uid,
                 )
         for event in events:
-            # event is an ICalEvent
             if event.start and lower_bound <= event.start <= upper_bound:
                 desc = str(event.description) if event.description else ""
-                alarms.append(
-                    {
-                        "uid": str(event.uid),
-                        "name": str(event.summary),
-                        "begin": event.start,
-                        "description": desc,
-                    }
-                )
+                trigger_time = extract_trigger_time(event)
+                # Only include events that have actual alarms
+                if trigger_time is not None:
+                    alarms.append(
+                        {
+                            "uid": str(event.uid),
+                            "name": str(event.summary),
+                            "begin": event.start,
+                            "description": desc,
+                            "trigger_time": trigger_time,
+                        }
+                    )
         return alarms
 
     @staticmethod
@@ -376,21 +487,12 @@ class CalendarService:
     ) -> list[dict[str, Any]]:
         """
         Parses ICS content and extracts events within the given
-        time window using icalevents.
-
-        Args:
-            ics_content (str): The raw ICS data as a string.
-            source_id (int): The calendar source ID.
-            window_start (datetime): Start of the window for event extraction.
-            window_end (datetime): End of the window for event extraction.
-            fix_icloud (bool):
-                Whether to apply iCloud/Apple-specific parsing
-                workarounds.
+        time window using icalevents. Also extracts alarm trigger_time.
 
         Returns:
             list[dict]: List of event dicts with keys:
                 uid, event_start, event_end, summary, description,
-                location, has_non_time_alarm, source_id.
+                location, has_non_time_alarm, source_id, trigger_time.
         """
         events: list[dict[str, Any]] = []
         ical_events = CalendarService.parse_ics_events(
@@ -401,29 +503,74 @@ class CalendarService:
             source_id,
             len(ical_events),
         )
-        # Apply local tz fallback for naive datetimes returned by parser
         local_tz = CalendarService._get_local_tz()
-        for event in ical_events:
-            try:
-                if event.start is not None:
-                    start = event.start
-                    if start.tzinfo is None and local_tz is not None:
-                        event.start = start.replace(tzinfo=local_tz)
-                if getattr(event, "end", None) is not None:
-                    end = event.end
-                    if end is not None:
-                        if end.tzinfo is None and local_tz is not None:
-                            event.end = end.replace(tzinfo=local_tz)
-            except Exception:
-                logger.debug(
-                    "Failed to apply local tz to event during extract: %s",
-                    getattr(event, "uid", "?"),
-                )
+
         proximity_uids = CalendarService._detect_proximity_uids(ics_content)
         logger.debug(
             "Detected %d proximity UIDs in raw ICS",
             len(proximity_uids),
         )
+        logger.debug(
+            "Parsed %d events from ICS for source %d",
+            len(ical_events),
+            source_id,
+        )
+
+        def extract_trigger_time(event: ICalEvent) -> datetime | None:
+            """Extract first alarm trigger time, handling proximity alarms."""
+            try:
+                if not hasattr(event, "raw") or not hasattr(event.raw, "subcomponents"):  # type: ignore[attr-defined]
+                    return None
+                event_start = event.start
+                if event_start is None:
+                    return None
+                if event_start.tzinfo is None and local_tz is not None:
+                    event_start = event_start.replace(tzinfo=local_tz)
+                for sub in getattr(event.raw, "subcomponents", []):  # type: ignore[attr-defined]
+                    if getattr(sub, "name", "").upper() == "VALARM":
+                        trigger = sub.get("TRIGGER")
+                        if trigger is None:
+                            # Check for proximity alarm (PROXIMITY:ARRIVE/DEPART)
+                            proximity = sub.get("PROXIMITY")
+                            if proximity is not None:
+                                logger.debug(
+                                    "Proximity alarm in event: %s",
+                                    getattr(event, "uid", "?"),
+                                )
+                                # Proximity alarms fire at event start time
+                                return event_start.astimezone(UTC)
+                            continue
+                        if hasattr(trigger, "dt"):
+                            # vDDDTypes object with .dt attribute
+                            trig_val = trigger.dt
+                            if isinstance(trig_val, datetime):
+                                # Absolute datetime
+                                if trig_val.tzinfo is None and local_tz is not None:
+                                    trig_val = trig_val.replace(tzinfo=local_tz)
+                                return trig_val.astimezone(UTC)
+                            elif isinstance(trig_val, timedelta):
+                                # Relative offset from event_start
+                                return (event_start + trig_val).astimezone(UTC)
+                        elif isinstance(trigger, timedelta):
+                            return (event_start + trigger).astimezone(UTC)
+                        elif isinstance(trigger, str):
+                            try:
+                                if trigger.startswith("-") or trigger.startswith("+"):
+                                    from icalendar.prop import vDuration
+
+                                    td = vDuration.from_ical(trigger)  # type: ignore[arg-type]
+                                    return (event_start + td).astimezone(UTC)
+                                else:
+                                    trig_val = datetime.fromisoformat(trigger)
+                                    if trig_val.tzinfo is None and local_tz is not None:
+                                        trig_val = trig_val.replace(tzinfo=local_tz)
+                                    return trig_val.astimezone(UTC)
+                            except Exception:
+                                continue
+            except Exception as e:
+                logger.debug(f"Failed to extract alarm trigger time: {e}")
+            return None
+
         for event in ical_events:
             events.append(
                 {
@@ -435,6 +582,7 @@ class CalendarService:
                     "location": str(event.location),
                     "has_non_time_alarm": str(event.uid) in proximity_uids,
                     "source_id": source_id,
+                    "trigger_time": extract_trigger_time(event),
                 }
             )
         return events
@@ -512,8 +660,32 @@ class CalendarService:
     def _add_cache_entries(
         session: Session,
         latest_by_uid: dict[str, dict[str, Any]],
-        source_id: int,
+        source: CalendarSource | None = None,
+        source_id: int | None = None,
     ) -> None:
+        # Backwards-compatible: callers may pass either a CalendarSource
+        # object (new) or a source_id int (older tests/calls). Resolve to
+        # a CalendarSource instance.
+        if isinstance(source, int):
+            source_id = source
+            source = None
+        if source is None and source_id is not None:
+            source = session.get(CalendarSource, source_id)
+        if source is None:
+            # If no CalendarSource row exists for this id (tests may pass a raw id),
+            # we'll still proceed using the numeric source_id for calendar_source_id.
+            if source_id is None:
+                raise ValueError("Calendar source not provided to _add_cache_entries")
+
+        # Determine calendar_source_id for DB entries
+        if source is not None:
+            try:
+                calendar_source_id = source.id
+            except Exception:
+                # Fallback if a raw int slipped through as `source`
+                calendar_source_id = int(source)
+        else:
+            calendar_source_id = source_id
         for uid, event in latest_by_uid.items():
             try:
                 start_utc = (
@@ -529,15 +701,54 @@ class CalendarService:
                 )
             except Exception:
                 end_utc = event["event_end"]
+            trigger_time = event.get("trigger_time")
+            if trigger_time is not None:
+                try:
+                    trigger_time = ensure_utc_aware(trigger_time)
+                except Exception:
+                    pass
+            # Determine if we should add a default midnight alarm for events without VALARM
+            optional_trigger_flag = False
+            try:
+                use_default_alarm = (
+                    bool(getattr(source, "default_alarm_for_all_events", False))
+                    if source is not None
+                    else False
+                )
+            except Exception:
+                use_default_alarm = False
 
+            if trigger_time is None and use_default_alarm:
+                # Compute midnight at event start's date in the event timezone (or local tz)
+                try:
+                    ev_start = event.get("event_start")
+                    if ev_start is not None:
+                        local_tz = CalendarService._get_local_tz()
+                        if isinstance(ev_start, datetime):
+                            midnight = datetime.combine(ev_start.date(), datetime.min.time())
+                            if ev_start.tzinfo is not None:
+                                midnight = midnight.replace(tzinfo=ev_start.tzinfo)
+                            elif local_tz is not None:
+                                midnight = midnight.replace(tzinfo=local_tz)
+                        else:
+                            # ev_start likely a date
+                            midnight = datetime.combine(ev_start, datetime.min.time())
+                            if local_tz is not None:
+                                midnight = midnight.replace(tzinfo=local_tz)
+                        trigger_time = ensure_utc_aware(midnight)
+                        optional_trigger_flag = True
+                except Exception:
+                    optional_trigger_flag = False
             cache_entry = CalendarEventCache(
-                calendar_source_id=source_id,
+                calendar_source_id=calendar_source_id,
                 uid=uid,
                 event_start=cast(Any, start_utc),
                 event_end=cast(Any, end_utc),
                 summary=event["summary"],
                 description=event["description"],
                 location=event["location"],
+                trigger_time=trigger_time,
+                optional_trigger=optional_trigger_flag,
             )
             session.add(cache_entry)
 
@@ -621,7 +832,7 @@ class CalendarService:
             CalendarService._add_cache_entries(
                 session,
                 latest_by_uid,
-                source_id,
+                source,
             )
 
             session.commit()

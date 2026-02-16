@@ -132,28 +132,65 @@ async def get_next_slide(
 
 async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None) -> list[dict]:
     """Fetch alarms from cached calendar events and filter dismissed ones."""
-    import logging
-
-    logger = logging.getLogger(__name__)
-    active_alarms = []
+    # Use CalendarService.get_upcoming_alarms to get alarms with correct trigger_time
     utc_now = datetime.now(UTC)
     window_start = utc_now - timedelta(days=7)
     window_end = utc_now + timedelta(days=7)
-    cached_events = session.exec(
-        select(CalendarEventCache).where(
-            (CalendarEventCache.event_start <= window_end)
-            & (CalendarEventCache.event_end >= window_start)
-        )
-    ).all()
-    logger.info(f"Found {len(cached_events)} cached events in window")
-    for event in cached_events:
-        composite_uid = f"{event.calendar_source_id}:{event.uid}"
-        dismissed = session.exec(select(AlarmEvent).where(AlarmEvent.uid == composite_uid)).first()
-        if not dismissed:
-            dismissed = session.exec(select(AlarmEvent).where(AlarmEvent.uid == event.uid)).first()
-        if not dismissed or dismissed.dismissed_at is None:
-            alarm = AlarmService.format_alarm(event, composite_uid, utc_now)
-            if alarm:
+    # For each calendar source, aggregate events in window
+    sources = session.exec(select(CalendarSource)).all()
+    active_alarms = []
+    for source in sources:
+        cached_events = session.exec(
+            select(CalendarEventCache).where(
+                (CalendarEventCache.calendar_source_id == source.id)
+                & (CalendarEventCache.event_start <= window_end)
+                & (CalendarEventCache.event_end >= window_start)
+                & (CalendarEventCache.trigger_time.is_not(None))  # type: ignore[attr-defined]
+            )
+        ).all()
+        for event in cached_events:
+            # Determine the effective trigger time (fallback to event start)
+            trigger = (
+                event.trigger_time
+                if hasattr(event, "trigger_time") and event.trigger_time is not None
+                else event.event_start
+            )
+            # Normalize trigger to UTC-aware for safe comparisons
+            try:
+                trigger_aware = ensure_utc_aware(trigger)
+            except Exception:
+                trigger_aware = (
+                    trigger
+                    if getattr(trigger, "tzinfo", None) is not None
+                    else trigger.replace(tzinfo=UTC)
+                )
+
+            # If this event uses an optional trigger, only show it when its trigger_time has been reached
+            if getattr(event, "optional_trigger", False):
+                if trigger_aware is None or trigger_aware > utc_now:
+                    continue
+
+            composite_uid = f"{event.calendar_source_id}:{event.uid}"
+            dismissed = session.exec(
+                select(AlarmEvent).where(AlarmEvent.uid == composite_uid)
+            ).first()
+            if not dismissed:
+                dismissed = session.exec(
+                    select(AlarmEvent).where(AlarmEvent.uid == event.uid)
+                ).first()
+            if not dismissed or dismissed.dismissed_at is None:
+                alarm = {
+                    "uid": composite_uid,
+                    "name": event.summary,
+                    "start": event.event_start,
+                    "end": event.event_end,
+                    "all_day": event.event_start.hour == 0
+                    and event.event_start.minute == 0
+                    and (event.event_end - event.event_start).days >= 1,
+                    "trigger_time": event.trigger_time
+                    if hasattr(event, "trigger_time") and event.trigger_time is not None
+                    else event.event_start,
+                }
                 active_alarms.append(alarm)
     return active_alarms
 
@@ -163,9 +200,9 @@ def _fetch_simulated_alarms(session: Session) -> list[dict]:
     now = ensure_utc_aware(datetime.now())
     simulated_alarms = session.exec(
         select(AlarmEvent).where(
-            (AlarmEvent.uid.like("test-%"))
+            (AlarmEvent.uid.like("test-%"))  # type: ignore[attr-defined]
             & (AlarmEvent.trigger_time <= now)
-            & (AlarmEvent.dismissed_at.is_(None))
+            & (AlarmEvent.dismissed_at.is_(None))  # type: ignore[attr-defined,union-attr]
         )
     ).all()
 
@@ -205,7 +242,21 @@ def _alarms_to_context(
 
     # Use a timezone-aware minimum datetime for sorting to avoid mixing naive/aware
     min_dt = _datetime.min.replace(tzinfo=UTC)
-    active_alarms.sort(key=lambda x: x.get("start") or min_dt, reverse=True)
+
+    def _sort_key(item: dict):
+        dt = item.get("start")
+        if not dt:
+            return min_dt
+        try:
+            return ensure_utc_aware(dt)
+        except Exception:
+            # Fallback: if ensure fails, coerce naive to UTC
+            try:
+                return dt.replace(tzinfo=UTC)
+            except Exception:
+                return min_dt
+
+    active_alarms.sort(key=_sort_key, reverse=True)
 
     tz_query = f"&tz_offset={tz_offset}" if tz_offset is not None else ""
     contexts: list[dict] = []
@@ -257,7 +308,20 @@ def _render_alarms_html(
 
     # Use timezone-aware minimum datetime for sorting
     min_dt = _datetime.min.replace(tzinfo=UTC)
-    active_alarms.sort(key=lambda x: x.get("start") or min_dt, reverse=True)
+
+    def _sort_key(item: dict):
+        dt = item.get("start")
+        if not dt:
+            return min_dt
+        try:
+            return ensure_utc_aware(dt)
+        except Exception:
+            try:
+                return dt.replace(tzinfo=UTC)
+            except Exception:
+                return min_dt
+
+    active_alarms.sort(key=_sort_key, reverse=True)
 
     tz_query = f"&tz_offset={tz_offset}" if tz_offset is not None else ""
     alarms_html = ""
