@@ -19,6 +19,9 @@ from app.db.models import CalendarEventCache
 from app.routers import dashboard
 from app.services.calendar_service import CalendarService
 
+# Use a fixed reference time to make calendar tests deterministic
+FIXED_NOW = datetime(2026, 2, 16, 0, 0, tzinfo=UTC)
+
 
 # Helper to load ICS and insert events (for DB cache, but tests now use direct ICS parsing for alarms)
 def load_and_cache_events(
@@ -26,7 +29,7 @@ def load_and_cache_events(
 ) -> list[dict[str, Any]]:
     with open(ics_path, encoding="utf-8") as fh:
         ics_content = fh.read()
-    now = datetime.now(UTC)
+    now = FIXED_NOW
     window_start = now - timedelta(days=1)
     window_end = now + timedelta(days=window_days)
     events = CalendarService.extract_events_from_ics(
@@ -55,7 +58,7 @@ def get_alarm(session: Session, uid: str, ics_path: str | None = None) -> dict[s
     if ics_path is not None:
         with open(ics_path, encoding="utf-8") as fh:
             ics_content = fh.read()
-        now = datetime.now(UTC)
+        now = FIXED_NOW
         alarms = CalendarService.get_upcoming_alarms(
             ics_content,
             check_time=now,
@@ -100,7 +103,7 @@ def test_single_alarm_fields(session: Session) -> None:
     # Print all alarms for debugging
     with open("tests/data/single_alarm.ics", encoding="utf-8") as fh:
         ics_content = fh.read()
-    now = datetime.now(UTC)
+    now = FIXED_NOW
     alarms = CalendarService.get_upcoming_alarms(
         ics_content,
         check_time=now,
@@ -186,7 +189,7 @@ def test_recurring_past_origin_expansion_fields(session: Session) -> None:
     # Print all alarms for debugging
     with open("tests/data/recurring_past_origin.ics", encoding="utf-8") as fh:
         ics_content = fh.read()
-    now = datetime.now(UTC)
+    now = FIXED_NOW
     alarms = CalendarService.get_upcoming_alarms(
         ics_content,
         check_time=now,

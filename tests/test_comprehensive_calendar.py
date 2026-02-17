@@ -5,6 +5,9 @@ from sqlmodel import select
 
 from app.services.calendar_service import CalendarService
 
+# Fixed reference time for deterministic calendar parsing tests
+FIXED_NOW = datetime(2026, 2, 16, 12, 0, tzinfo=UTC)
+
 
 def test_comprehensive_calendar_parsing_and_alarms(session):
     # Create a calendar source first (required for _fetch_calendar_alarms)
@@ -18,8 +21,8 @@ def test_comprehensive_calendar_parsing_and_alarms(session):
     with open("tests/data/test_events.ics", encoding="utf-8") as fh:
         ics_content = fh.read()
 
-    now = datetime.now(UTC)
-    window_start = now - timedelta(days=1)
+    now = FIXED_NOW
+    window_start = now - timedelta(days=2)
     window_end = now + timedelta(days=7)
 
     # Parse events from ICS

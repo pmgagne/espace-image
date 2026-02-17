@@ -371,39 +371,34 @@ def _format_fallback_datetime(dt_obj, end_obj, all_day_flag: bool, start_iso_str
         start_day = datetime(start_dt.year, start_dt.month, start_dt.day, tzinfo=UTC)
         diff_days = (start_day - today).days
 
-        if diff_days == 0:
-            day_text = "Aujourd'hui"
-        elif diff_days == 1:
-            day_text = "Demain"
-        else:
-            days = [
-                "Dimanche",
-                "Lundi",
-                "Mardi",
-                "Mercredi",
-                "Jeudi",
-                "Vendredi",
-                "Samedi",
-            ]
-            idx = start_dt.weekday() + 1 if start_dt.weekday() < 6 else 0
-            month_names = [
-                "janvier",
-                "février",
-                "mars",
-                "avril",
-                "mai",
-                "juin",
-                "juillet",
-                "août",
-                "septembre",
-                "octobre",
-                "novembre",
-                "décembre",
-            ]
-            month = month_names[start_dt.month - 1]
-            day_num = start_dt.day
-            year_part = "" if start_dt.year == now_local.year else f" {start_dt.year}"
-            day_text = f"{days[idx]}, {day_num} {month}{year_part}"
+        days = [
+            "Dimanche",
+            "Lundi",
+            "Mardi",
+            "Mercredi",
+            "Jeudi",
+            "Vendredi",
+            "Samedi",
+        ]
+        idx = start_dt.weekday() + 1 if start_dt.weekday() < 6 else 0
+        month_names = [
+            "janvier",
+            "février",
+            "mars",
+            "avril",
+            "mai",
+            "juin",
+            "juillet",
+            "août",
+            "septembre",
+            "octobre",
+            "novembre",
+            "décembre",
+        ]
+        month = month_names[start_dt.month - 1]
+        day_num = start_dt.day
+        year_part = "" if start_dt.year == now_local.year else f" {start_dt.year}"
+        day_text = f"{days[idx]}, {day_num} {month}{year_part}"
 
         if all_day_flag:
             return day_text

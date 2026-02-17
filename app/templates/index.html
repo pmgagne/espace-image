@@ -416,23 +416,13 @@
                 var start = new Date(startIso);
                 var end = endIso ? new Date(endIso) : null;
                 var text = '';
-                // Always show day information (Aujourd'hui/Demain or Weekday, D Month YYYY)
-                var dayText = '';
-                var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                var startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                var diffDays = Math.round((startDay - today) / 86400000);
-                if (diffDays === 0) {
-                    dayText = "Aujourd'hui";
-                } else if (diffDays === 1) {
-                    dayText = "Demain";
-                } else {
-                    var days = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
-                    var months = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
-                    var month = months[start.getMonth()];
-                    var dayNum = start.getDate();
-                    var yearPart = start.getFullYear() === now.getFullYear() ? '' : ' ' + start.getFullYear();
-                    dayText = days[start.getDay()] + ", " + dayNum + " " + month + yearPart;
-                }
+                // Always show day information (Weekday, D Month YYYY)
+                var days = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+                var months = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+                var month = months[start.getMonth()];
+                var dayNum = start.getDate();
+                var yearPart = start.getFullYear() === now.getFullYear() ? '' : ' ' + start.getFullYear();
+                var dayText = days[start.getDay()] + ", " + dayNum + " " + month + yearPart;
 
                 if (allDay) {
                     text = dayText;
