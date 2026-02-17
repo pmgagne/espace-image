@@ -1,5 +1,5 @@
 <div>
-    <h2>Gallery Management</h2>
+    <h1>Gallery Management</h1>
 
     <!-- Top Bar: Preset Selector & Creation -->
     <div class="top-bar">
@@ -34,7 +34,7 @@
     </div>
     {% endif %}
     <div class="upload-area">
-        <h3>Upload to: <span class="text-info">{{ selected_preset.name }}</span></h3>
+        <h2>Upload to: <span class="text-info">{{ selected_preset.name }}</span></h2>
         <form hx-post="/admin/upload" hx-target="#admin-content" hx-encoding="multipart/form-data" class="upload-form">
             <input type="hidden" name="preset_id" value="{{ selected_preset.id }}">
 
@@ -48,7 +48,7 @@
     </div>
 
     <!-- Photo Grid -->
-    <h3>Photos ({{ photos|length }})</h3>
+    <h2>Photos ({{ photos|length }})</h2>
 
     {% if not photos %}
     <p class="text-gray text-italic">No photos in this preset yet.</p>

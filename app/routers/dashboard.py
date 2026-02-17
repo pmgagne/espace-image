@@ -26,6 +26,20 @@ templates = Jinja2Templates(directory="app/templates")
 logger = logging.getLogger(__name__)
 
 
+def _isoformat_safe(dt_obj: object) -> str:
+    """Return a timezone-aware ISO string for dt_obj or empty string on failure."""
+    if not dt_obj or not hasattr(dt_obj, "isoformat"):
+        return ""
+    try:
+        return ensure_utc_aware(dt_obj).isoformat()
+    except Exception:
+        try:
+            return ensure_utc_aware(dt_obj).isoformat()
+        except Exception:
+            logger.debug("Failed to isoformat: %s", dt_obj)
+            return ""
+
+
 @router.get("/")
 async def read_root(request: Request, session: Session = Depends(get_session)):
     """Modern Slideshow View"""
@@ -111,14 +125,13 @@ async def get_next_slide(
             if st.last_synced_at and (latest is None or st.last_synced_at > latest):
                 latest = st.last_synced_at
         try:
-            last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
+            ensure_utc_aware(latest).isoformat() if latest else ""
         except Exception:
             try:
-                last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
+                ensure_utc_aware(latest).isoformat() if latest else ""
             except Exception:
-                last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
+                ensure_utc_aware(latest).isoformat() if latest else ""
     except Exception:
-        last_sync_utc = ""
         return templates.TemplateResponse(
             "partials/slide.html",
             {"request": request, "error_msg": "No Preset Active. Please configure in Admin."},
@@ -180,9 +193,10 @@ async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None
                 )
 
             # If this event uses an optional trigger, only show it when its trigger_time has been reached
-            if getattr(event, "optional_trigger", False):
-                if trigger_aware is None or trigger_aware > utc_now:
-                    continue
+            if getattr(event, "optional_trigger", False) and (
+                trigger_aware is None or trigger_aware > utc_now
+            ):
+                continue
 
             composite_uid = f"{event.calendar_source_id}:{event.uid}"
             dismissed = session.exec(
@@ -278,30 +292,8 @@ def _alarms_to_context(
         start_iso = ""
         end_iso = ""
         all_day = False
-        if "start" in alarm and hasattr(alarm["start"], "isoformat"):
-            try:
-                # Ensure we send a timezone-aware ISO string (UTC) so browsers
-                # parse the instant correctly instead of treating it as local time.
-                start_iso = ensure_utc_aware(alarm["start"]).isoformat()
-            except Exception:
-                try:
-                    start_iso = ensure_utc_aware(alarm["start"]).isoformat()
-                except Exception:
-                    try:
-                        start_iso = ensure_utc_aware(alarm["start"]).isoformat()
-                    except Exception as e:
-                        logger.debug("Failed to isoformat start: %s", e)
-        if "end" in alarm and hasattr(alarm["end"], "isoformat"):
-            try:
-                end_iso = ensure_utc_aware(alarm["end"]).isoformat()
-            except Exception:
-                try:
-                    end_iso = ensure_utc_aware(alarm["end"]).isoformat()
-                except Exception:
-                    try:
-                        end_iso = ensure_utc_aware(alarm["end"]).isoformat()
-                    except Exception as e:
-                        logger.debug("Failed to isoformat end: %s", e)
+        start_iso = _isoformat_safe(alarm.get("start"))
+        end_iso = _isoformat_safe(alarm.get("end"))
         if "all_day" in alarm:
             all_day = alarm["all_day"]
 
@@ -357,28 +349,8 @@ def _render_alarms_html(
         start_iso = ""
         end_iso = ""
         all_day = False
-        if "start" in alarm and hasattr(alarm["start"], "isoformat"):
-            try:
-                start_iso = ensure_utc_aware(alarm["start"]).isoformat()
-            except Exception:
-                try:
-                    start_iso = ensure_utc_aware(alarm["start"]).isoformat()
-                except Exception:
-                    try:
-                        start_iso = ensure_utc_aware(alarm["start"]).isoformat()
-                    except Exception as e:
-                        logger.debug("Failed to isoformat start: %s", e)
-        if "end" in alarm and hasattr(alarm["end"], "isoformat"):
-            try:
-                end_iso = ensure_utc_aware(alarm["end"]).isoformat()
-            except Exception:
-                try:
-                    end_iso = ensure_utc_aware(alarm["end"]).isoformat()
-                except Exception:
-                    try:
-                        end_iso = ensure_utc_aware(alarm["end"]).isoformat()
-                    except Exception as e:
-                        logger.debug("Failed to isoformat end: %s", e)
+        start_iso = _isoformat_safe(alarm.get("start"))
+        end_iso = _isoformat_safe(alarm.get("end"))
         if "all_day" in alarm:
             all_day = alarm["all_day"]
 
@@ -403,13 +375,10 @@ def _format_fallback_datetime(dt_obj, end_obj, all_day_flag: bool, start_iso_str
         if not dt_obj:
             return ""
         now_local = datetime.now(UTC)
-        today = datetime(now_local.year, now_local.month, now_local.day, tzinfo=UTC)
         # Ensure start_dt is UTC-aware
         start_dt = (
             dt_obj if getattr(dt_obj, "tzinfo", None) is not None else dt_obj.replace(tzinfo=UTC)
         )
-        start_day = datetime(start_dt.year, start_dt.month, start_dt.day, tzinfo=UTC)
-        diff_days = (start_day - today).days
 
         days = [
             "Dimanche",

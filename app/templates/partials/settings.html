@@ -1,10 +1,10 @@
 <div>
-    <h2>General Settings</h2>
+    <h1>General Settings</h1>
     <p class="text-muted-light text-sm mb-10">Backend timezone: <strong>{{ backend_timezone
             }}</strong> — Browser timezone: <strong id="browser-tz">Detecting…</strong></p>
 
     <form hx-post="/admin/settings" hx-target="#admin-content">
-        <h3>Weather Configuration</h3>
+        <h2>Weather Configuration</h2>
         <p class="text-muted text-sm mb-15">
             Powered by Open-Meteo. Requires Latitude and Longitude.
             {% if location_name %}
@@ -39,7 +39,7 @@
             📍 Use Browser GPS
         </button>
 
-        <h3>Slideshow Configuration</h3>
+        <h2>Slideshow Configuration</h2>
         <div class="d-flex flex-gap-20">
             <div class="flex-1">
                 <label for="active_preset_id">Active Preset</label>
