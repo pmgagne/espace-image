@@ -54,7 +54,13 @@ async def read_legacy(request: Request, session: Session = Depends(get_session))
         for st in statuses:
             if st.last_synced_at and (latest is None or st.last_synced_at > latest):
                 latest = st.last_synced_at
-        last_sync_utc = latest.isoformat() if latest else ""
+        try:
+            last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
+        except Exception:
+            try:
+                last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
+            except Exception:
+                last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
     except Exception:
         last_sync_utc = ""
 
@@ -97,14 +103,22 @@ async def get_weather(request: Request, session: Session = Depends(get_session))
 async def get_next_slide(
     request: Request, mode: str = "modern", session: Session = Depends(get_session)
 ):
-    """
-    Returns HTML fragment for the next slide.
-
-    Renders `partials/slide.html` with `img_url` in the template context. The
-    `SlideResponse` model documents the available fields for API consumers.
-    """
     settings = session.exec(select(AppSettings)).first()
-    if not settings or not settings.active_preset_id:
+    try:
+        statuses = session.exec(select(CalendarSyncStatusEntry)).all()
+        latest = None
+        for st in statuses:
+            if st.last_synced_at and (latest is None or st.last_synced_at > latest):
+                latest = st.last_synced_at
+        try:
+            last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
+        except Exception:
+            try:
+                last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
+            except Exception:
+                last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
+    except Exception:
+        last_sync_utc = ""
         return templates.TemplateResponse(
             "partials/slide.html",
             {"request": request, "error_msg": "No Preset Active. Please configure in Admin."},
@@ -266,14 +280,28 @@ def _alarms_to_context(
         all_day = False
         if "start" in alarm and hasattr(alarm["start"], "isoformat"):
             try:
-                start_iso = alarm["start"].isoformat()
-            except Exception as e:
-                logger.debug("Failed to isoformat start: %s", e)
+                # Ensure we send a timezone-aware ISO string (UTC) so browsers
+                # parse the instant correctly instead of treating it as local time.
+                start_iso = ensure_utc_aware(alarm["start"]).isoformat()
+            except Exception:
+                try:
+                    start_iso = ensure_utc_aware(alarm["start"]).isoformat()
+                except Exception:
+                    try:
+                        start_iso = ensure_utc_aware(alarm["start"]).isoformat()
+                    except Exception as e:
+                        logger.debug("Failed to isoformat start: %s", e)
         if "end" in alarm and hasattr(alarm["end"], "isoformat"):
             try:
-                end_iso = alarm["end"].isoformat()
-            except Exception as e:
-                logger.debug("Failed to isoformat end: %s", e)
+                end_iso = ensure_utc_aware(alarm["end"]).isoformat()
+            except Exception:
+                try:
+                    end_iso = ensure_utc_aware(alarm["end"]).isoformat()
+                except Exception:
+                    try:
+                        end_iso = ensure_utc_aware(alarm["end"]).isoformat()
+                    except Exception as e:
+                        logger.debug("Failed to isoformat end: %s", e)
         if "all_day" in alarm:
             all_day = alarm["all_day"]
 
@@ -331,14 +359,26 @@ def _render_alarms_html(
         all_day = False
         if "start" in alarm and hasattr(alarm["start"], "isoformat"):
             try:
-                start_iso = alarm["start"].isoformat()
-            except Exception as e:
-                logger.debug("Failed to isoformat start: %s", e)
+                start_iso = ensure_utc_aware(alarm["start"]).isoformat()
+            except Exception:
+                try:
+                    start_iso = ensure_utc_aware(alarm["start"]).isoformat()
+                except Exception:
+                    try:
+                        start_iso = ensure_utc_aware(alarm["start"]).isoformat()
+                    except Exception as e:
+                        logger.debug("Failed to isoformat start: %s", e)
         if "end" in alarm and hasattr(alarm["end"], "isoformat"):
             try:
-                end_iso = alarm["end"].isoformat()
-            except Exception as e:
-                logger.debug("Failed to isoformat end: %s", e)
+                end_iso = ensure_utc_aware(alarm["end"]).isoformat()
+            except Exception:
+                try:
+                    end_iso = ensure_utc_aware(alarm["end"]).isoformat()
+                except Exception:
+                    try:
+                        end_iso = ensure_utc_aware(alarm["end"]).isoformat()
+                    except Exception as e:
+                        logger.debug("Failed to isoformat end: %s", e)
         if "all_day" in alarm:
             all_day = alarm["all_day"]
 
@@ -512,25 +552,49 @@ async def debug_calendar_events(session: Session = Depends(get_session)) -> JSON
     cached = session.exec(select(CalendarEventCache)).all()
     alarms = session.exec(select(AlarmEvent)).all()
 
-    events_out = [
-        {
-            "calendar_source_id": ev.calendar_source_id,
-            "uid": ev.uid,
-            "start": ev.event_start.isoformat(),
-            "end": ev.event_end.isoformat(),
-            "summary": ev.summary,
-        }
-        for ev in cached
-    ]
+    events_out = []
+    for ev in cached:
+        try:
+            start_iso = ensure_utc_aware(ev.event_start).isoformat() if ev.event_start else None
+        except Exception:
+            try:
+                start_iso = ensure_utc_aware(ev.event_start).isoformat() if ev.event_start else None
+            except Exception:
+                start_iso = ev.event_start.isoformat() if ev.event_start else None
+        try:
+            end_iso = ensure_utc_aware(ev.event_end).isoformat() if ev.event_end else None
+        except Exception:
+            try:
+                end_iso = ensure_utc_aware(ev.event_end).isoformat() if ev.event_end else None
+            except Exception:
+                end_iso = ev.event_end.isoformat() if ev.event_end else None
+        events_out.append(
+            {
+                "calendar_source_id": ev.calendar_source_id,
+                "uid": ev.uid,
+                "start": start_iso,
+                "end": end_iso,
+                "summary": ev.summary,
+            }
+        )
 
-    alarms_out = [
-        {
-            "uid": a.uid,
-            "trigger_time": a.trigger_time.isoformat(),
-            "dismissed_at": a.dismissed_at.isoformat() if a.dismissed_at else None,
-        }
-        for a in alarms
-    ]
+    alarms_out = []
+    for a in alarms:
+        try:
+            trig_iso = ensure_utc_aware(a.trigger_time).isoformat() if a.trigger_time else None
+        except Exception:
+            trig_iso = a.trigger_time.isoformat() if a.trigger_time else None
+        try:
+            dismissed_iso = ensure_utc_aware(a.dismissed_at).isoformat() if a.dismissed_at else None
+        except Exception:
+            dismissed_iso = a.dismissed_at.isoformat() if a.dismissed_at else None
+        alarms_out.append(
+            {
+                "uid": a.uid,
+                "trigger_time": trig_iso,
+                "dismissed_at": dismissed_iso,
+            }
+        )
 
     return JSONResponse({"cached_events": events_out, "alarm_events": alarms_out})
 
@@ -543,17 +607,28 @@ async def debug_calendars(session: Session = Depends(get_session)) -> JSONRespon
 
     src_out = [{"id": s.id, "label": s.label, "url": s.url} for s in sources]
 
-    status_out = [
-        {
-            "calendar_source_id": st.calendar_source_id,
-            "last_synced_at": st.last_synced_at.isoformat() if st.last_synced_at else None,
-            "next_sync_at": st.next_sync_at.isoformat() if st.next_sync_at else None,
-            "sync_status": st.sync_status,
-            "error_message": st.error_message,
-            "error_count": st.error_count,
-        }
-        for st in statuses
-    ]
+    status_out = []
+    for st in statuses:
+        try:
+            last_iso = (
+                ensure_utc_aware(st.last_synced_at).isoformat() if st.last_synced_at else None
+            )
+        except Exception:
+            last_iso = st.last_synced_at.isoformat() if st.last_synced_at else None
+        try:
+            next_iso = ensure_utc_aware(st.next_sync_at).isoformat() if st.next_sync_at else None
+        except Exception:
+            next_iso = st.next_sync_at.isoformat() if st.next_sync_at else None
+        status_out.append(
+            {
+                "calendar_source_id": st.calendar_source_id,
+                "last_synced_at": last_iso,
+                "next_sync_at": next_iso,
+                "sync_status": st.sync_status,
+                "error_message": st.error_message,
+                "error_count": st.error_count,
+            }
+        )
 
     return JSONResponse({"sources": src_out, "statuses": status_out})
 
