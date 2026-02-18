@@ -23,7 +23,7 @@ from app.db.models import (
     CalendarSyncStatus,
     CalendarSyncStatusEntry,
 )
-from app.utils.timezone import ensure_utc_aware, normalize_datetime
+from app.utils.timezone import ensure_aware, ensure_utc_aware, normalize_datetime, to_utc
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +239,38 @@ class CalendarService:
         except Exception:
             logger.debug("Failed to detect proximity VALARM from ICS content")
         return uids
+
+    @staticmethod
+    def _extract_trigger_from_raw(ics_content: str, uid: str) -> str | None:
+        """
+        Scan raw ICS content for a VEVENT with matching UID and return the
+        first VALARM TRIGGER value (string) or the string 'PROXIMITY' if a
+        proximity VALARM is present. Returns None if not found.
+        """
+        try:
+            parts = ics_content.split("BEGIN:VEVENT")
+            for part in parts[1:]:
+                # match UID line
+                uid_line = None
+                for line in part.splitlines():
+                    if line.strip().upper().startswith("UID:"):
+                        uid_line = line.split(":", 1)[1].strip()
+                        break
+                if not uid_line or uid_line != uid:
+                    continue
+                # Found VEVENT block for this UID
+                if "BEGIN:VALARM" in part:
+                    # Find PROXIMITY first
+                    if "PROXIMITY" in part:
+                        return "PROXIMITY"
+                    # Find TRIGGER line
+                    for line in part.splitlines():
+                        if line.strip().upper().startswith("TRIGGER:"):
+                            return line.split(":", 1)[1].strip()
+                return None
+        except Exception:
+            return None
+        return None
 
     @staticmethod
     def get_upcoming_alarms(
@@ -495,9 +527,59 @@ class CalendarService:
                 location, has_non_time_alarm, source_id, trigger_time.
         """
         events: list[dict[str, Any]] = []
+        # Patch: Expand RRULE events for the full window, even if DTSTART is old
         ical_events = CalendarService.parse_ics_events(
             ics_content, window_start, window_end, fix_icloud=fix_icloud
         )
+        expanded_events = []
+        for event in ical_events:
+            try:
+                if hasattr(event, "recurrence_rules") and event.recurrence_rules:
+                    # Defensive: If event.start < window_start, manually expand weekly events for each weekday in window
+                    import re
+                    from datetime import timedelta
+
+                    rrule_str = event.recurrence_rules[0] if event.recurrence_rules else ""
+                    if re.search(r"FREQ=WEEKLY", rrule_str):
+                        # Extract INTERVAL parameter (default 1 if not specified)
+                        interval_match = re.search(r"INTERVAL=(\d+)", rrule_str)
+                        interval = int(interval_match.group(1)) if interval_match else 1
+                        increment_days = 7 * interval
+
+                        # Find weekday from DTSTART
+                        dt = event.start
+                        weekday = dt.weekday()
+                        # Expand for each week in window
+                        first_in_window = window_start
+                        # Find first occurrence of this weekday >= window_start
+                        days_ahead = (weekday - window_start.weekday()) % 7
+                        first_occurrence = window_start + timedelta(days=days_ahead)
+                        # If first_occurrence < window_start, add increment_days
+                        if first_occurrence < window_start:
+                            first_occurrence += timedelta(days=increment_days)
+                        occ_dt = first_occurrence
+                        while occ_dt <= window_end:
+                            # Only add if >= dt (DTSTART)
+                            if occ_dt >= dt:
+                                # For recurring events, create unique UID per occurrence
+                                # by appending the occurrence date (RFC 5545 RECURRENCE-ID style)
+                                occurrence_uid = f"{event.uid}:{occ_dt.isoformat()}"
+                                ev_copy = event.__class__(
+                                    uid=occurrence_uid,
+                                    start=occ_dt,
+                                    end=occ_dt + (event.end - event.start) if event.end else None,
+                                    summary=event.summary,
+                                    description=event.description,
+                                    location=event.location,
+                                    raw=getattr(event, "raw", None),
+                                )
+                                expanded_events.append(ev_copy)
+                            occ_dt += timedelta(days=increment_days)
+                        continue
+                expanded_events.append(event)
+            except Exception:
+                expanded_events.append(event)
+        ical_events = expanded_events
         logger.debug(
             "Extracting events from source %s: %d events parsed by icalevents",
             source_id,
@@ -572,6 +654,42 @@ class CalendarService:
             return None
 
         for event in ical_events:
+            # Determine original TZID from raw component or from tzinfo
+            tzid: str | None = None
+            try:
+                raw = getattr(event, "raw", None)
+                if raw is not None:
+                    try:
+                        dtstart_prop = raw.get("DTSTART")
+                        if dtstart_prop is not None:
+                            params = getattr(dtstart_prop, "params", {})
+                            if params and "TZID" in params:
+                                tzid = params.get("TZID")
+                    except Exception:
+                        # ignore and try other methods
+                        pass
+                    if not tzid:
+                        try:
+                            tz_prop = raw.get("TZID")
+                            if tz_prop:
+                                tzid = str(tz_prop)
+                        except Exception:
+                            pass
+                # Fallback: derive from event.start.tzinfo if available
+                if not tzid and getattr(event, "start", None) is not None:
+                    try:
+                        start_tz = event.start.tzinfo
+                        if start_tz is not None:
+                            tzid = (
+                                getattr(start_tz, "key", None)
+                                or getattr(start_tz, "zone", None)
+                                or start_tz.tzname(event.start)
+                            )
+                    except Exception:
+                        tzid = None
+            except Exception:
+                tzid = None
+
             events.append(
                 {
                     "uid": str(event.uid),
@@ -582,10 +700,60 @@ class CalendarService:
                     "location": str(event.location),
                     "has_non_time_alarm": str(event.uid) in proximity_uids,
                     "source_id": source_id,
-                    "trigger_time": extract_trigger_time(event),
+                    "tzid": tzid,
+                    "all_day": getattr(event, "all_day", False),  # Track all-day events
+                    "trigger_time": extract_trigger_time(event)
+                    if extract_trigger_time(event) is not None
+                    else CalendarService._fallback_trigger_from_raw(ics_content, event),
                 }
             )
         return events
+
+    @staticmethod
+    def _fallback_trigger_from_raw(ics_content: str, event: ICalEvent) -> datetime | None:
+        """
+        If `extract_trigger_time` failed, attempt to compute trigger_time by
+        parsing the raw ICS content for the event's UID and interpreting the
+        TRIGGER value. Returns a UTC-aware datetime or None.
+        """
+        try:
+            uid = str(getattr(event, "uid", ""))
+            trig = CalendarService._extract_trigger_from_raw(ics_content, uid)
+            if not trig:
+                return None
+            local_tz = CalendarService._get_local_tz()
+            if trig == "PROXIMITY":
+                ev_start = event.start
+                if ev_start is None:
+                    return None
+                if ev_start.tzinfo is None and local_tz is not None:
+                    ev_start = ev_start.replace(tzinfo=local_tz)
+                return ev_start.astimezone(UTC)
+            # trig is a string: could be duration (-PT10M) or datetime
+            if trig.startswith("-") or trig.startswith("+"):
+                try:
+                    from icalendar.prop import vDuration
+
+                    td = vDuration.from_ical(trig)  # type: ignore[arg-type]
+                    ev_start = event.start
+                    if ev_start is None:
+                        return None
+                    if ev_start.tzinfo is None and local_tz is not None:
+                        ev_start = ev_start.replace(tzinfo=local_tz)
+                    return (ev_start + td).astimezone(UTC)
+                except Exception:
+                    return None
+            else:
+                # Try absolute datetime
+                try:
+                    dt = datetime.fromisoformat(trig)
+                    if dt.tzinfo is None and local_tz is not None:
+                        dt = dt.replace(tzinfo=local_tz)
+                    return dt.astimezone(UTC)
+                except Exception:
+                    return None
+        except Exception:
+            return None
 
     @staticmethod
     def _get_or_create_sync_status(
@@ -642,19 +810,51 @@ class CalendarService:
 
     @staticmethod
     def _select_latest_by_uid(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-        latest_by_uid: dict[str, dict[str, Any]] = {}
+        """
+        Deduplicate events by UID, keeping the latest occurrence.
+
+        For recurring events already expanded by icalevents (multiple occurrences
+        with same UID but different start dates), we need a composite key that
+        includes both UID and start date to preserve all occurrences.
+        """
+        latest_by_key: dict[tuple[str, datetime], dict[str, Any]] = {}
+
         for event in events:
             uid = event["uid"]
-            if uid not in latest_by_uid:
-                latest_by_uid[uid] = event
+            ev_start = event.get("event_start")
+
+            # Create composite key: UID + start date (unique per occurrence)
+            # This way, recurring events keep all their occurrences
+            if isinstance(ev_start, datetime):
+                key = (uid, ev_start.date())  # Group by date, not full datetime
+            else:
+                key = (uid, ev_start)  # Fallback for non-datetime starts
+
+            if key not in latest_by_key:
+                latest_by_key[key] = event
                 continue
-            existing = latest_by_uid[uid]
+
+            existing = latest_by_key[key]
+            # Only replace if this event is "later" (for same date occurrence)
             if event["event_end"] > existing["event_end"] or (
                 event["event_end"] == existing["event_end"]
                 and event["event_start"] > existing["event_start"]
             ):
-                latest_by_uid[uid] = event
-        return latest_by_uid
+                latest_by_key[key] = event
+
+        # Flatten back to dict keyed by UID only (for backwards compatibility)
+        # But now we have all occurrences due to the composite key
+        result: dict[str, dict[str, Any]] = {}
+        for (uid, _date), event in latest_by_key.items():
+            # Use a composite key that includes the occurrence date
+            composite_uid = (
+                f"{uid}#{event['event_start'].isoformat()}"
+                if isinstance(event["event_start"], datetime)
+                else uid
+            )
+            result[composite_uid] = event
+
+        return result
 
     @staticmethod
     def _add_cache_entries(
@@ -686,27 +886,68 @@ class CalendarService:
                 calendar_source_id = int(source)
         else:
             calendar_source_id = source_id
+
+        from app.db.models import CalendarEventCache
+
         for uid, event in latest_by_uid.items():
             try:
-                start_utc = (
-                    ensure_utc_aware(event["event_start"])
-                    if event["event_start"] is not None
-                    else None
-                )
+                # All event times are stored in UTC for consistency.
+                # Original timezone is preserved in event_tz metadata.
+                ev_start = event.get("event_start")
+                ev_end = event.get("event_end")
+                tzid = event.get("tzid")
+                is_all_day = event.get("all_day", False)
+                local_tz = CalendarService._get_local_tz()
+
+                # Convert to UTC if timezone-aware; if naive, attach timezone first
+                try:
+                    if isinstance(ev_start, datetime) and ev_start.tzinfo is None and tzid:
+                        ev_start = ev_start.replace(tzinfo=ZoneInfo(tzid))
+                    elif (
+                        isinstance(ev_start, datetime)
+                        and ev_start.tzinfo is None
+                        and local_tz is not None
+                    ):
+                        ev_start = ev_start.replace(tzinfo=local_tz)
+                    # Convert to UTC
+                    if isinstance(ev_start, datetime) and ev_start.tzinfo is not None:
+                        ev_start = ensure_utc_aware(ev_start)
+                        # Fix for all-day events: icalevents returns them at midnight UTC,
+                        # which shifts to the previous day when converted to negative UTC offsets.
+                        # Shift all-day events to noon UTC so they display correctly in all timezones.
+                        if is_all_day and ev_start.hour == 0 and ev_start.minute == 0:
+                            ev_start = ev_start.replace(hour=12)
+                except Exception:
+                    pass
+
+                try:
+                    if isinstance(ev_end, datetime) and ev_end.tzinfo is None and tzid:
+                        ev_end = ev_end.replace(tzinfo=ZoneInfo(tzid))
+                    elif (
+                        isinstance(ev_end, datetime)
+                        and ev_end.tzinfo is None
+                        and local_tz is not None
+                    ):
+                        ev_end = ev_end.replace(tzinfo=local_tz)
+                    # Convert to UTC
+                    if isinstance(ev_end, datetime) and ev_end.tzinfo is not None:
+                        ev_end = ensure_utc_aware(ev_end)
+                        # Fix for all-day events: shift end time to noon UTC as well
+                        if is_all_day and ev_end.hour == 0 and ev_end.minute == 0:
+                            ev_end = ev_end.replace(hour=12)
+                except Exception:
+                    pass
             except Exception:
-                start_utc = event["event_start"]
-            try:
-                end_utc = (
-                    ensure_utc_aware(event["event_end"]) if event["event_end"] is not None else None
-                )
-            except Exception:
-                end_utc = event["event_end"]
+                pass
+
+            # Trigger time is already converted to UTC in extract_trigger_time()
             trigger_time = event.get("trigger_time")
             if trigger_time is not None:
                 try:
                     trigger_time = ensure_utc_aware(trigger_time)
                 except Exception:
                     pass
+
             # Determine if we should add a default midnight alarm for events without VALARM
             optional_trigger_flag = False
             try:
@@ -721,36 +962,77 @@ class CalendarService:
             if trigger_time is None and use_default_alarm:
                 # Compute midnight at event start's date in the event timezone (or local tz)
                 try:
-                    ev_start = event.get("event_start")
-                    if ev_start is not None:
+                    ev_start_orig = event.get("event_start")
+                    if ev_start_orig is not None:
                         local_tz = CalendarService._get_local_tz()
-                        if isinstance(ev_start, datetime):
-                            midnight = datetime.combine(ev_start.date(), datetime.min.time())
-                            if ev_start.tzinfo is not None:
-                                midnight = midnight.replace(tzinfo=ev_start.tzinfo)
+                        if isinstance(ev_start_orig, datetime):
+                            midnight = datetime.combine(ev_start_orig.date(), datetime.min.time())
+                            if ev_start_orig.tzinfo is not None:
+                                midnight = midnight.replace(tzinfo=ev_start_orig.tzinfo)
                             elif local_tz is not None:
                                 midnight = midnight.replace(tzinfo=local_tz)
                         else:
-                            # ev_start likely a date
-                            midnight = datetime.combine(ev_start, datetime.min.time())
+                            # ev_start_orig likely a date
+                            midnight = datetime.combine(ev_start_orig, datetime.min.time())
                             if local_tz is not None:
                                 midnight = midnight.replace(tzinfo=local_tz)
                         trigger_time = ensure_utc_aware(midnight)
                         optional_trigger_flag = True
                 except Exception:
                     optional_trigger_flag = False
-            cache_entry = CalendarEventCache(
-                calendar_source_id=calendar_source_id,
-                uid=uid,
-                event_start=cast(Any, start_utc),
-                event_end=cast(Any, end_utc),
-                summary=event["summary"],
-                description=event["description"],
-                location=event["location"],
-                trigger_time=trigger_time,
-                optional_trigger=optional_trigger_flag,
-            )
-            session.add(cache_entry)
+
+            # For recurring events, we may have multiple occurrences with the same UID
+            # but different start times (e.g., Feb 13 and Feb 27 for biweekly events).
+            # Try to find and update existing entry first, or insert if none found.
+            try:
+                existing = session.exec(
+                    select(CalendarEventCache).where(
+                        (CalendarEventCache.calendar_source_id == calendar_source_id)
+                        & (CalendarEventCache.uid == uid)
+                    )
+                ).first()
+
+                if existing:
+                    # Update existing entry
+                    existing.event_start = cast(Any, ev_start)
+                    existing.event_end = cast(Any, ev_end)
+                    existing.event_tz = tzid
+                    existing.summary = event["summary"]
+                    existing.description = event["description"]
+                    existing.location = event["location"]
+                    existing.trigger_time = trigger_time
+                    existing.optional_trigger = optional_trigger_flag
+                    session.add(existing)
+                else:
+                    # Insert new entry
+                    cache_entry = CalendarEventCache(
+                        calendar_source_id=calendar_source_id,
+                        uid=uid,
+                        event_start=cast(Any, ev_start),
+                        event_end=cast(Any, ev_end),
+                        event_tz=tzid,
+                        summary=event["summary"],
+                        description=event["description"],
+                        location=event["location"],
+                        trigger_time=trigger_time,
+                        optional_trigger=optional_trigger_flag,
+                    )
+                    session.add(cache_entry)
+            except Exception as e:
+                # If update fails, still try to add as new
+                cache_entry = CalendarEventCache(
+                    calendar_source_id=calendar_source_id,
+                    uid=uid,
+                    event_start=cast(Any, ev_start),
+                    event_end=cast(Any, ev_end),
+                    event_tz=tzid,
+                    summary=event["summary"],
+                    description=event["description"],
+                    location=event["location"],
+                    trigger_time=trigger_time,
+                    optional_trigger=optional_trigger_flag,
+                )
+                session.add(cache_entry)
 
     @staticmethod
     def _finalize_success(

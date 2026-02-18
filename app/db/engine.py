@@ -76,6 +76,18 @@ def migrate_database() -> None:
         else:
             logger.debug("optional_trigger column already exists, no migration needed")
 
+        # Add event_tz column if missing (store original TZID from ICS)
+        if "event_tz" not in columns:
+            logger.info("Adding event_tz column to calendar_event_cache table")
+            cursor.execute("ALTER TABLE calendar_event_cache ADD COLUMN event_tz TEXT")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS ix_calendar_event_cache_event_tz ON calendar_event_cache (event_tz)"
+            )
+            conn.commit()
+            logger.info("Migration completed: event_tz column added")
+        else:
+            logger.debug("event_tz column already exists, no migration needed")
+
         # Migration: Add default_alarm_for_all_events column to calendarsource if missing
         cursor.execute("PRAGMA table_info(calendarsource)")
         cs_columns = [row[1] for row in cursor.fetchall()]

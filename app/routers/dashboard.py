@@ -19,22 +19,27 @@ from app.db.session import get_session
 from app.schemas import SlideResponse, WeatherResponse
 from app.services.alarm_service import AlarmService
 from app.services.weather_service import WeatherService
-from app.utils.timezone import ensure_utc_aware
+from app.utils.timezone import datetime_to_iso_with_tz, ensure_utc_aware
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 logger = logging.getLogger(__name__)
 
 
-def _isoformat_safe(dt_obj: object) -> str:
-    """Return a timezone-aware ISO string for dt_obj or empty string on failure."""
+def _isoformat_safe(dt_obj: object, tzid: str | None = None) -> str:
+    """
+    Return a timezone-aware ISO string for dt_obj or empty string on failure.
+
+    If tzid is provided, the ISO string will include the timezone offset
+    calculated from the original event timezone.
+    """
     if not dt_obj or not hasattr(dt_obj, "isoformat"):
         return ""
     try:
-        return ensure_utc_aware(dt_obj).isoformat()
+        return datetime_to_iso_with_tz(ensure_utc_aware(dt_obj), tzid)
     except Exception:
         try:
-            return ensure_utc_aware(dt_obj).isoformat()
+            return datetime_to_iso_with_tz(ensure_utc_aware(dt_obj), tzid)
         except Exception:
             logger.debug("Failed to isoformat: %s", dt_obj)
             return ""
@@ -167,12 +172,14 @@ async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None
     sources = session.exec(select(CalendarSource)).all()
     active_alarms = []
     for source in sources:
+        # Include cached events even if trigger_time is None; we'll compute
+        # an effective trigger_time (fallback to event_start) below. This
+        # ensures events with missing VALARM still surface in tests and UI.
         cached_events = session.exec(
             select(CalendarEventCache).where(
                 (CalendarEventCache.calendar_source_id == source.id)
                 & (CalendarEventCache.event_start <= window_end)
                 & (CalendarEventCache.event_end >= window_start)
-                & (CalendarEventCache.trigger_time.is_not(None))  # type: ignore[attr-defined]
             )
         ).all()
         for event in cached_events:
@@ -212,6 +219,7 @@ async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None
                     "name": event.summary,
                     "start": event.event_start,
                     "end": event.event_end,
+                    "tzid": getattr(event, "event_tz", None),
                     "all_day": event.event_start.hour == 0
                     and event.event_start.minute == 0
                     and (event.event_end - event.event_start).days >= 1,
@@ -292,8 +300,9 @@ def _alarms_to_context(
         start_iso = ""
         end_iso = ""
         all_day = False
-        start_iso = _isoformat_safe(alarm.get("start"))
-        end_iso = _isoformat_safe(alarm.get("end"))
+        tzid = alarm.get("tzid")
+        start_iso = _isoformat_safe(alarm.get("start"), tzid)
+        end_iso = _isoformat_safe(alarm.get("end"), tzid)
         if "all_day" in alarm:
             all_day = alarm["all_day"]
 
@@ -349,8 +358,9 @@ def _render_alarms_html(
         start_iso = ""
         end_iso = ""
         all_day = False
-        start_iso = _isoformat_safe(alarm.get("start"))
-        end_iso = _isoformat_safe(alarm.get("end"))
+        tzid = alarm.get("tzid")
+        start_iso = _isoformat_safe(alarm.get("start"), tzid)
+        end_iso = _isoformat_safe(alarm.get("end"), tzid)
         if "all_day" in alarm:
             all_day = alarm["all_day"]
 
@@ -544,6 +554,7 @@ async def debug_calendar_events(session: Session = Depends(get_session)) -> JSON
                 "start": start_iso,
                 "end": end_iso,
                 "summary": ev.summary,
+                "tzid": getattr(ev, "event_tz", None),
             }
         )
 

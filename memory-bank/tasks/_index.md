@@ -17,5 +17,6 @@
 - [TASK009] Fix HTML/CSS linter issues in templates - Completed on 2026-02-10
 - [TASK010] Add rate limiting to geocoding endpoint - Completed on 2026-02-10
 - [TASK011] Migrate from icalendar to icalevents - Completed on 2026-02-10 (repo sweep, lint, tests, docs validated)
+- [TASK012] Fix recurring event caching and all-day event timezones - Completed on 2026-02-17
 
 ## Abandoned

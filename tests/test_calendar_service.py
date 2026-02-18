@@ -252,7 +252,8 @@ def test_extract_events_from_ics_missing_fields():
 
 
 def test_select_latest_by_uid():
-    # Two events with same UID, different end/start
+    # Two events with same UID, different start/end times on same date
+    # With new deduplication logic, these should be kept (composite key uses date)
     e1 = {
         "uid": "x",
         "event_start": datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
@@ -264,4 +265,12 @@ def test_select_latest_by_uid():
         "event_end": datetime(2026, 1, 1, 13, 0, tzinfo=UTC),
     }
     latest = CalendarService._select_latest_by_uid([e1, e2])
-    assert latest["x"]["event_end"] == datetime(2026, 1, 1, 13, 0, tzinfo=UTC)
+
+    # With new composite key (uid + date), both events are kept
+    # They have the same date, so dedup picks the "latest" (e2)
+    # But the key is now composite
+    assert len(latest) == 1  # Same date, so only latest is kept
+
+    # Get the event value (key is now composite "x#2026-01-01T...")
+    event = list(latest.values())[0]
+    assert event["event_end"] == datetime(2026, 1, 1, 13, 0, tzinfo=UTC)
