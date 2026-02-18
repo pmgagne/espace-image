@@ -272,5 +272,5 @@ def test_select_latest_by_uid():
     assert len(latest) == 1  # Same date, so only latest is kept
 
     # Get the event value (key is now composite "x#2026-01-01T...")
-    event = list(latest.values())[0]
+    event = next(iter(latest.values()))
     assert event["event_end"] == datetime(2026, 1, 1, 13, 0, tzinfo=UTC)
