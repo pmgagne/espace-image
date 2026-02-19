@@ -113,7 +113,7 @@ APScheduler (every 10 min)
     ↓
 CalendarService.sync_calendar_events()
     ├─ Fetch all CalendarSource URLs via httpx (with backoff retry)
-    ├─ Parse ICS content (icalendar library)
+    ├─ Parse ICS content (icalevents library)
     ├─ Extract events & VALARM entries (time-based + non-time alarms)
     ├─ Cache events in CalendarEventCache (1-week window)
     ├─ Create AlarmEvent rows for upcoming alarms

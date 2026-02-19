@@ -34,8 +34,8 @@
 ## External Service Integration
 
 - **HTTP Client:** httpx 0.28.1 (async HTTP with timeouts)
-- **Calendar Data:** icalendar 6.1.0 (ICS parsing)
-- **Timezone Support:** pytz 2025.2, dateutil (via icalendar)
+- **Calendar Data:** icalevents 0.1.29 (ICS parsing and recurrence expansion)
+- **Timezone Support:** pytz 2025.2
 - **Retry Logic:** backoff 2.2.1 (exponential backoff for resilient API calls)
 - **Weather API:** Open-Meteo (free, no auth required)
 - **Geocoding:** Nominatim/OpenStreetMap (reverse geocoding for location names)
@@ -73,7 +73,7 @@
 | Scheduling | APScheduler | 3.11.2 | Background job scheduling |
 | Image Processing | Pillow | 11.3.0 | Image resizing/manipulation |
 | HTTP | httpx | 0.28.1 | Async HTTP client |
-| Calendar | icalendar | 6.1.0 | ICS parsing |
+| Calendar | icalevents | 0.1.29 | ICS parsing & recurrence |
 | Retry Logic | backoff | 2.2.1 | Exponential backoff |
 | Testing | pytest | 9.0.2 | Test framework |
 | Linting | Ruff | 0.14.11 | Code formatting/linting |

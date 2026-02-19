@@ -14,7 +14,7 @@ CalendarSource (row with URL)
     ↓ (every 10 minutes via APScheduler)
 CalendarService.sync_calendar_events()
     ├─ Fetch ICS via httpx with backoff retry (exponential, max 5 attempts)
-    ├─ Parse with icalendar library (VEVENT entries, VALARM entries)
+    ├─ Parse with icalevents library (events, recurrence expansion, VALARM extraction)
     ├─ Extract alarm trigger times (TRIGGER property in VALARM)
     ├─ Cache events in CalendarEventCache (1-week sliding window)
     ├─ Create AlarmEvent rows for upcoming alarms
