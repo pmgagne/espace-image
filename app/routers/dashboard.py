@@ -199,10 +199,8 @@ async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None
                     else trigger.replace(tzinfo=UTC)
                 )
 
-            # If this event uses an optional trigger, only show it when its trigger_time has been reached
-            if getattr(event, "optional_trigger", False) and (
-                trigger_aware is None or trigger_aware > utc_now
-            ):
+            # Only show alarms when their trigger_time has been reached
+            if trigger_aware is None or trigger_aware > utc_now:
                 continue
 
             composite_uid = f"{event.calendar_source_id}:{event.uid}"

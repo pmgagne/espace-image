@@ -10,10 +10,15 @@
             <span class="alarm-time alarm-time-small" data-start="{{ alarm.start_iso }}" data-end="{{ alarm.end_iso }}"
                 data-allday="{{ alarm.all_day }}">{{ alarm.fallback_text }}</span>
         </div>
-        <button type="button"
+        <button
+            type="button"
+            class="dismiss-btn-small"
+            aria-label="Dismiss alarm"
             hx-post="/api/alarms/{{ alarm.uid }}/dismiss?mock={{ 'true' if alarm.mock else 'false' }}{{ alarm.tz_query }}"
-            hx-target="#alarm-poller" hx-swap="innerHTML" class="dismiss-btn-small"
-            aria-label="Dismiss alarm">Dismiss</button>
+            hx-target="#alarm-poller"
+            hx-swap="innerHTML">
+            Dismiss
+        </button>
     </div>
     {% endfor %}
 </div>
