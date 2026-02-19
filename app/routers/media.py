@@ -31,6 +31,10 @@ async def get_image(photo_id: int, mode: str = "modern", session: Session = Depe
     preset_name = photo.preset.name if photo.preset else "Default"
     file_path = UPLOAD_DIR / preset_name / photo.filename
 
+    # Security: Prevent path traversal by ensuring resolved path is within UPLOAD_DIR
+    if not file_path.resolve().is_relative_to(UPLOAD_DIR.resolve()):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
 

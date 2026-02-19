@@ -1,8 +1,9 @@
 import logging
+import os
 import random
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
@@ -26,6 +27,13 @@ templates = Jinja2Templates(directory="app/templates")
 logger = logging.getLogger(__name__)
 
 
+def require_debug_mode():
+    """Dependency to protect debug endpoints - only accessible when WEBAPP_DEBUG is enabled."""
+    debug_enabled = os.getenv("WEBAPP_DEBUG", "").lower() in ("true", "1", "yes")
+    if not debug_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 def _isoformat_safe(dt_obj: object, tzid: str | None = None) -> str:
     """
     Return a timezone-aware ISO string for dt_obj or empty string on failure.
@@ -38,11 +46,8 @@ def _isoformat_safe(dt_obj: object, tzid: str | None = None) -> str:
     try:
         return datetime_to_iso_with_tz(ensure_utc_aware(dt_obj), tzid)
     except Exception:
-        try:
-            return datetime_to_iso_with_tz(ensure_utc_aware(dt_obj), tzid)
-        except Exception:
-            logger.debug("Failed to isoformat: %s", dt_obj)
-            return ""
+        logger.debug("Failed to isoformat: %s", dt_obj)
+        return ""
 
 
 @router.get("/")
@@ -73,13 +78,7 @@ async def read_legacy(request: Request, session: Session = Depends(get_session))
         for st in statuses:
             if st.last_synced_at and (latest is None or st.last_synced_at > latest):
                 latest = st.last_synced_at
-        try:
-            last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
-        except Exception:
-            try:
-                last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
-            except Exception:
-                last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
+        last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
     except Exception:
         last_sync_utc = ""
 
@@ -123,20 +122,7 @@ async def get_next_slide(
     request: Request, mode: str = "modern", session: Session = Depends(get_session)
 ):
     settings = session.exec(select(AppSettings)).first()
-    try:
-        statuses = session.exec(select(CalendarSyncStatusEntry)).all()
-        latest = None
-        for st in statuses:
-            if st.last_synced_at and (latest is None or st.last_synced_at > latest):
-                latest = st.last_synced_at
-        try:
-            ensure_utc_aware(latest).isoformat() if latest else ""
-        except Exception:
-            try:
-                ensure_utc_aware(latest).isoformat() if latest else ""
-            except Exception:
-                ensure_utc_aware(latest).isoformat() if latest else ""
-    except Exception:
+    if not settings or settings.active_preset_id is None:
         return templates.TemplateResponse(
             "partials/slide.html",
             {"request": request, "error_msg": "No Preset Active. Please configure in Admin."},
@@ -447,16 +433,21 @@ def _render_alarm_item(
     tz_query: str,
 ) -> str:
     """Render a single alarm item HTML snippet."""
+    from markupsafe import escape
+
     uid = alarm.get("uid")
     name = alarm.get("name", "")
+    # Security: Escape HTML to prevent XSS attacks from calendar event summaries
+    escaped_name = escape(name)
+    escaped_fallback = escape(fallback_text)
     return f"""
         <div class="alarm-item">
             <div class="alarm-header">
                 <span class="alarm-icon">📅</span>
-                <span class="alarm-title">{name}</span>
+                <span class="alarm-title">{escaped_name}</span>
             </div>
             <div class="alarm-body">
-                <span class="alarm-time alarm-time-small" data-start="{start_iso}" data-end="{end_iso}" data-allday="{str(all_day).lower()}">{fallback_text}</span>
+                <span class="alarm-time alarm-time-small" data-start="{start_iso}" data-end="{end_iso}" data-allday="{str(all_day).lower()}">{escaped_fallback}</span>
             </div>
             <button hx-post="/api/alarms/{uid}/dismiss?mock={"true" if mock else "false"}{tz_query}"
                     hx-target="#alarm-poller"
@@ -523,7 +514,7 @@ async def check_alarm(
     )
 
 
-@router.get("/debug/calendar-events", response_class=JSONResponse)
+@router.get("/debug/calendar-events", response_class=JSONResponse, dependencies=[Depends(require_debug_mode)])
 async def debug_calendar_events(session: Session = Depends(get_session)) -> JSONResponse:
     """Return cached calendar events and dismissed alarms for debugging."""
     cached = session.exec(select(CalendarEventCache)).all()
@@ -534,17 +525,11 @@ async def debug_calendar_events(session: Session = Depends(get_session)) -> JSON
         try:
             start_iso = ensure_utc_aware(ev.event_start).isoformat() if ev.event_start else None
         except Exception:
-            try:
-                start_iso = ensure_utc_aware(ev.event_start).isoformat() if ev.event_start else None
-            except Exception:
-                start_iso = ev.event_start.isoformat() if ev.event_start else None
+            start_iso = ev.event_start.isoformat() if ev.event_start else None
         try:
             end_iso = ensure_utc_aware(ev.event_end).isoformat() if ev.event_end else None
         except Exception:
-            try:
-                end_iso = ensure_utc_aware(ev.event_end).isoformat() if ev.event_end else None
-            except Exception:
-                end_iso = ev.event_end.isoformat() if ev.event_end else None
+            end_iso = ev.event_end.isoformat() if ev.event_end else None
         events_out.append(
             {
                 "calendar_source_id": ev.calendar_source_id,
@@ -577,7 +562,7 @@ async def debug_calendar_events(session: Session = Depends(get_session)) -> JSON
     return JSONResponse({"cached_events": events_out, "alarm_events": alarms_out})
 
 
-@router.get("/debug/calendars", response_class=JSONResponse)
+@router.get("/debug/calendars", response_class=JSONResponse, dependencies=[Depends(require_debug_mode)])
 async def debug_calendars(session: Session = Depends(get_session)) -> JSONResponse:
     """Return configured calendar sources and their sync status for debugging."""
     sources = session.exec(select(CalendarSource)).all()
@@ -620,6 +605,14 @@ async def dismiss_alarm(
     session: Session = Depends(get_session),
 ):
     """Dismisses an alarm and returns the updated alarm list."""
+
+    # Security: Validate UID format to prevent injection and DoS
+    import re
+
+    if not re.match(r"^[\w\-:.@]+$", uid):
+        raise HTTPException(status_code=400, detail="Invalid UID format")
+    if len(uid) > 500:
+        raise HTTPException(status_code=400, detail="UID too long")
 
     if not mock:
         # Check if alarm already exists
