@@ -1,6 +1,6 @@
 <div>
     <div class="d-flex justify-between align-center">
-        <h2>Calendar Sources</h2>
+        <h1>Calendar Sources</h1>
         <div class="d-flex align-center flex-gap-10">
             <div id="cal-sync-msg" class="d-none text-success-light text-sm"></div>
             <button type="button" id="btn-sync-calendars" hx-post="/admin/calendars/sync-now" hx-target="#admin-content"
@@ -12,7 +12,7 @@
 
     <div class="mb-30">
         <form hx-post="/admin/calendars" hx-target="#admin-content" class="card">
-            <h3>Add New Calendar</h3>
+            <h2>Add New Calendar</h2>
             <div class="d-flex flex-wrap flex-gap-wrap-10 align-end">
                 <div class="flex-1 min-w-150">
                     <label for="cal-label">Label</label>
@@ -34,16 +34,16 @@
         </form>
     </div>
 
-    <h3>Active Calendars</h3>
+    <h2>Active Calendars</h2>
 
     {% if not sources %}
     <p class="text-gray text-italic">No calendars configured.</p>
     {% else %}
     <div class="d-flex flex-column flex-column-gap-10">
         {% for source in sources %}
-        <!-- Dynamic border-left color requires inline style -->
+        <!-- Dynamic border-left color applied via data attribute -->
         <div class="bg-dark p-15 rounded-md d-flex justify-between align-center border-left-accent"
-            style="border-left-color: {{ source.color }};">
+            data-border-color="{{ source.color }}">
             <div class="flex-1 mr-15">
                 <strong>{{ source.label }}</strong>
                 <div class="text-xs text-muted max-w-500 text-truncate">
@@ -54,10 +54,10 @@
                     {% if status %}
                     <div>Status: <strong>{{ status.sync_status }}</strong></div>
                     <div>Last synced: <span class="last-synced"
-                            data-utc="{{ status.last_synced_at.isoformat() if status.last_synced_at else '' }}">{{
+                            data-utc="{{ status.last_synced_at if status.last_synced_at else '' }}">{{
                             status.last_synced_at or "Never" }}</span></div>
                     <div>Next sync: <span class="next-sync"
-                            data-utc="{{ status.next_sync_at.isoformat() if status.next_sync_at else '' }}">{{
+                            data-utc="{{ status.next_sync_at if status.next_sync_at else '' }}">{{
                             status.next_sync_at or "—" }}</span></div>
                     {% if status.error_message %}
                     <div class="text-error">Error: {{ status.error_message }}</div>
@@ -69,11 +69,35 @@
                 </div>
             </div>
 
-            <button type="button" class="delete-btn" hx-delete="/admin/calendars/{{ source.id }}"
-                hx-target="#admin-content" hx-confirm="Are you sure you want to remove this calendar?">
-                Remove
-            </button>
+            <div class="d-flex flex-column align-end">
+                <label class="text-sm mb-5">
+                    <input type="checkbox" name="default_alarm_for_all_events" value="1" {% if
+                        source.default_alarm_for_all_events %}checked{% endif %}
+                        hx-post="/admin/calendars/{{ source.id }}/defaults" hx-trigger="change"
+                        hx-target="#admin-content">
+                    Display at midnight events without alarm
+                </label>
+
+                <button type="button" class="delete-btn" hx-delete="/admin/calendars/{{ source.id }}"
+                    hx-target="#admin-content" hx-confirm="Are you sure you want to remove this calendar?">
+                    Remove
+                </button>
+            </div>
         </div>
         {% endfor %}
     </div>
     {% endif %}
+
+</div>
+
+<script>
+    // Apply per-source border color using data-border-color to avoid inline styles
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[data-border-color]').forEach(function (el) {
+            var c = el.getAttribute('data-border-color');
+            if (c) {
+                el.style.borderLeftColor = c;
+            }
+        });
+    });
+</script>

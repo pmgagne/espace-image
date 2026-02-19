@@ -1,4 +1,6 @@
 // Main frontend scripts for slideshow, alarms, and time display.
+/* eslint-disable no-console */
+
 (function () {
     'use strict';
 

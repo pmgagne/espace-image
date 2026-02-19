@@ -27,6 +27,12 @@ coding. GPT-5-mini (with the [4.1 Beast Mode](https://raw.githubusercontent.com/
 
 **Note:** As of 2026-02-10, all calendar event parsing and recurrence logic uses the [`icalevents`](https://icalevents.readthedocs.io/en/latest/) library. The previous `icalendar` dependency has been fully removed. See [TASK011](memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md) for migration details.
 
+**Recent Fixes (2026-02-17):**
+
+- Fixed recurring event caching to preserve all occurrences (e.g., biweekly events now show all dates)
+- Fixed all-day event timezone handling to display correct dates in negative UTC offset timezones
+- See [ADR-2026-02-17](docs/ADR/ADR-2026-02-17-recurring-events-allday-timezone-fixes.md) for technical details
+
 ## Quick Start (Local)
 
 Requirements: Python 3.13+, [uv](https://docs.astral.sh/uv/) installed.

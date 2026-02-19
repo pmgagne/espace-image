@@ -56,6 +56,14 @@ async def lifespan(_app: FastAPI):
     create_db_and_tables()
     logger.info("Application startup (LOG_LEVEL=%s)", LOG_LEVEL)
 
+    # Sync calendars on startup
+    logger.info("Performing initial calendar sync on startup")
+    try:
+        await background_sync_calendars()
+        logger.info("Initial calendar sync completed successfully")
+    except Exception as e:
+        logger.error("Initial calendar sync failed: %s", e)
+
     # Start the APScheduler
     scheduler.add_job(
         background_sync_calendars,

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from sqlalchemy import UniqueConstraint
@@ -17,7 +17,7 @@ class CalendarSyncStatus(StrEnum):
 class Preset(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     photos: list["Photo"] = Relationship(back_populates="preset")
 
@@ -26,7 +26,7 @@ class Photo(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     filename: str
     preset_id: int = Field(foreign_key="preset.id")
-    uploaded_at: datetime = Field(default_factory=datetime.now)
+    uploaded_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     preset: Preset = Relationship(back_populates="photos")
 
@@ -36,6 +36,10 @@ class CalendarSource(SQLModel, table=True):
     label: str
     url: str  # WebCal or ICS URL
     color: str | None = Field(default="#3182ce")  # Default blue
+    default_alarm_for_all_events: bool = Field(
+        default=False,
+        description="If true, add a default alarm at midnight for events without VALARM (per-calendar)",
+    )
 
 
 class AppSettings(SQLModel, table=True):
@@ -45,6 +49,10 @@ class AppSettings(SQLModel, table=True):
     weather_longitude: float | None = Field(default=None)
     weather_timezone: str = Field(default="auto")
     slideshow_duration: int = Field(default=30)  # in seconds
+    default_alarm_for_all_events: bool = Field(
+        default=False,
+        description="If true, add a default alarm at midnight for events with no VALARM",
+    )
 
 
 class AlarmEvent(SQLModel, table=True):
@@ -63,12 +71,20 @@ class CalendarEventCache(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     calendar_source_id: int = Field(foreign_key="calendarsource.id", index=True)
     uid: str = Field(index=True)
-    event_start: datetime = Field(index=True)
-    event_end: datetime = Field(index=True)
+    event_start: datetime = Field(index=True)  # Stored in UTC
+    event_end: datetime = Field(index=True)  # Stored in UTC
+    # Original event timezone identifier (e.g. "America/Toronto").
+    # Preserve the source TZID so the application can display and
+    # expand recurrences using the original timezone.
+    event_tz: str | None = Field(default=None, index=True)
     summary: str
     description: str = Field(default="")
     location: str = Field(default="")
-    created_at: datetime = Field(default_factory=datetime.now)
+    trigger_time: datetime | None = Field(default=None, index=True)  # Stored in UTC if set
+    optional_trigger: bool = Field(
+        default=False, index=True, description="True if trigger is a default (not from VALARM)"
+    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class CalendarSyncStatusEntry(SQLModel, table=True):

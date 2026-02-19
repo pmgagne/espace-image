@@ -11,6 +11,8 @@
 
 /* global CONFIG */
 
+/* eslint-disable no-console */
+
 (function () {
     'use strict';
 

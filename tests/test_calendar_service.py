@@ -22,6 +22,11 @@ DTSTAMP:20230101T000000Z
 DTSTART:20260116T100000Z
 DTEND:20260116T110000Z
 SUMMARY:Meeting in 10 mins
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Alarm
+TRIGGER:-PT10M
+END:VALARM
 END:VEVENT
 BEGIN:VEVENT
 UID:event2@example.com
@@ -213,7 +218,19 @@ async def test_fetch_ics_backoff(monkeypatch):
 
 def test_get_upcoming_alarms_naive_event():
     # Event with naive datetime, should attach local tz
-    ics = """BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:uid1\nDTSTART:20260116T100000\nDTEND:20260116T110000\nSUMMARY:Naive Event\nEND:VEVENT\nEND:VCALENDAR"""
+    ics = """BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:uid1
+DTSTART:20260116T100000
+DTEND:20260116T110000
+SUMMARY:Naive Event
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT10M
+END:VALARM
+END:VEVENT
+END:VCALENDAR"""
     now = datetime(2026, 1, 16, 9, 50, 0, tzinfo=UTC)
     alarms = CalendarService.get_upcoming_alarms(ics, now, lookahead_minutes=120)
     assert alarms
@@ -235,7 +252,8 @@ def test_extract_events_from_ics_missing_fields():
 
 
 def test_select_latest_by_uid():
-    # Two events with same UID, different end/start
+    # Two events with same UID, different start/end times on same date
+    # With new deduplication logic, these should be kept (composite key uses date)
     e1 = {
         "uid": "x",
         "event_start": datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
@@ -247,4 +265,12 @@ def test_select_latest_by_uid():
         "event_end": datetime(2026, 1, 1, 13, 0, tzinfo=UTC),
     }
     latest = CalendarService._select_latest_by_uid([e1, e2])
-    assert latest["x"]["event_end"] == datetime(2026, 1, 1, 13, 0, tzinfo=UTC)
+
+    # With new composite key (uid + date), both events are kept
+    # They have the same date, so dedup picks the "latest" (e2)
+    # But the key is now composite
+    assert len(latest) == 1  # Same date, so only latest is kept
+
+    # Get the event value (key is now composite "x#2026-01-01T...")
+    event = next(iter(latest.values()))
+    assert event["event_end"] == datetime(2026, 1, 1, 13, 0, tzinfo=UTC)

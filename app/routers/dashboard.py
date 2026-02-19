@@ -19,11 +19,30 @@ from app.db.session import get_session
 from app.schemas import SlideResponse, WeatherResponse
 from app.services.alarm_service import AlarmService
 from app.services.weather_service import WeatherService
-from app.utils.timezone import ensure_utc_aware
+from app.utils.timezone import datetime_to_iso_with_tz, ensure_utc_aware
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 logger = logging.getLogger(__name__)
+
+
+def _isoformat_safe(dt_obj: object, tzid: str | None = None) -> str:
+    """
+    Return a timezone-aware ISO string for dt_obj or empty string on failure.
+
+    If tzid is provided, the ISO string will include the timezone offset
+    calculated from the original event timezone.
+    """
+    if not dt_obj or not hasattr(dt_obj, "isoformat"):
+        return ""
+    try:
+        return datetime_to_iso_with_tz(ensure_utc_aware(dt_obj), tzid)
+    except Exception:
+        try:
+            return datetime_to_iso_with_tz(ensure_utc_aware(dt_obj), tzid)
+        except Exception:
+            logger.debug("Failed to isoformat: %s", dt_obj)
+            return ""
 
 
 @router.get("/")
@@ -54,7 +73,13 @@ async def read_legacy(request: Request, session: Session = Depends(get_session))
         for st in statuses:
             if st.last_synced_at and (latest is None or st.last_synced_at > latest):
                 latest = st.last_synced_at
-        last_sync_utc = latest.isoformat() if latest else ""
+        try:
+            last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
+        except Exception:
+            try:
+                last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
+            except Exception:
+                last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
     except Exception:
         last_sync_utc = ""
 
@@ -97,14 +122,21 @@ async def get_weather(request: Request, session: Session = Depends(get_session))
 async def get_next_slide(
     request: Request, mode: str = "modern", session: Session = Depends(get_session)
 ):
-    """
-    Returns HTML fragment for the next slide.
-
-    Renders `partials/slide.html` with `img_url` in the template context. The
-    `SlideResponse` model documents the available fields for API consumers.
-    """
     settings = session.exec(select(AppSettings)).first()
-    if not settings or not settings.active_preset_id:
+    try:
+        statuses = session.exec(select(CalendarSyncStatusEntry)).all()
+        latest = None
+        for st in statuses:
+            if st.last_synced_at and (latest is None or st.last_synced_at > latest):
+                latest = st.last_synced_at
+        try:
+            ensure_utc_aware(latest).isoformat() if latest else ""
+        except Exception:
+            try:
+                ensure_utc_aware(latest).isoformat() if latest else ""
+            except Exception:
+                ensure_utc_aware(latest).isoformat() if latest else ""
+    except Exception:
         return templates.TemplateResponse(
             "partials/slide.html",
             {"request": request, "error_msg": "No Preset Active. Please configure in Admin."},
@@ -132,28 +164,69 @@ async def get_next_slide(
 
 async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None) -> list[dict]:
     """Fetch alarms from cached calendar events and filter dismissed ones."""
-    import logging
-
-    logger = logging.getLogger(__name__)
-    active_alarms = []
+    # Use CalendarService.get_upcoming_alarms to get alarms with correct trigger_time
     utc_now = datetime.now(UTC)
     window_start = utc_now - timedelta(days=7)
     window_end = utc_now + timedelta(days=7)
-    cached_events = session.exec(
-        select(CalendarEventCache).where(
-            (CalendarEventCache.event_start <= window_end)
-            & (CalendarEventCache.event_end >= window_start)
-        )
-    ).all()
-    logger.info(f"Found {len(cached_events)} cached events in window")
-    for event in cached_events:
-        composite_uid = f"{event.calendar_source_id}:{event.uid}"
-        dismissed = session.exec(select(AlarmEvent).where(AlarmEvent.uid == composite_uid)).first()
-        if not dismissed:
-            dismissed = session.exec(select(AlarmEvent).where(AlarmEvent.uid == event.uid)).first()
-        if not dismissed or dismissed.dismissed_at is None:
-            alarm = AlarmService.format_alarm(event, composite_uid, utc_now)
-            if alarm:
+    # For each calendar source, aggregate events in window
+    sources = session.exec(select(CalendarSource)).all()
+    active_alarms = []
+    for source in sources:
+        # Include cached events even if trigger_time is None; we'll compute
+        # an effective trigger_time (fallback to event_start) below. This
+        # ensures events with missing VALARM still surface in tests and UI.
+        cached_events = session.exec(
+            select(CalendarEventCache).where(
+                (CalendarEventCache.calendar_source_id == source.id)
+                & (CalendarEventCache.event_start <= window_end)
+                & (CalendarEventCache.event_end >= window_start)
+            )
+        ).all()
+        for event in cached_events:
+            # Determine the effective trigger time (fallback to event start)
+            trigger = (
+                event.trigger_time
+                if hasattr(event, "trigger_time") and event.trigger_time is not None
+                else event.event_start
+            )
+            # Normalize trigger to UTC-aware for safe comparisons
+            try:
+                trigger_aware = ensure_utc_aware(trigger)
+            except Exception:
+                trigger_aware = (
+                    trigger
+                    if getattr(trigger, "tzinfo", None) is not None
+                    else trigger.replace(tzinfo=UTC)
+                )
+
+            # If this event uses an optional trigger, only show it when its trigger_time has been reached
+            if getattr(event, "optional_trigger", False) and (
+                trigger_aware is None or trigger_aware > utc_now
+            ):
+                continue
+
+            composite_uid = f"{event.calendar_source_id}:{event.uid}"
+            dismissed = session.exec(
+                select(AlarmEvent).where(AlarmEvent.uid == composite_uid)
+            ).first()
+            if not dismissed:
+                dismissed = session.exec(
+                    select(AlarmEvent).where(AlarmEvent.uid == event.uid)
+                ).first()
+            if not dismissed or dismissed.dismissed_at is None:
+                alarm = {
+                    "uid": composite_uid,
+                    "name": event.summary,
+                    "start": event.event_start,
+                    "end": event.event_end,
+                    "tzid": getattr(event, "event_tz", None),
+                    "all_day": event.event_start.hour == 0
+                    and event.event_start.minute == 0
+                    and (event.event_end - event.event_start).days >= 1,
+                    "trigger_time": event.trigger_time
+                    if hasattr(event, "trigger_time") and event.trigger_time is not None
+                    else event.event_start,
+                }
                 active_alarms.append(alarm)
     return active_alarms
 
@@ -163,9 +236,9 @@ def _fetch_simulated_alarms(session: Session) -> list[dict]:
     now = ensure_utc_aware(datetime.now())
     simulated_alarms = session.exec(
         select(AlarmEvent).where(
-            (AlarmEvent.uid.like("test-%"))
+            (AlarmEvent.uid.like("test-%"))  # type: ignore[attr-defined]
             & (AlarmEvent.trigger_time <= now)
-            & (AlarmEvent.dismissed_at.is_(None))
+            & (AlarmEvent.dismissed_at.is_(None))  # type: ignore[attr-defined,union-attr]
         )
     ).all()
 
@@ -205,7 +278,21 @@ def _alarms_to_context(
 
     # Use a timezone-aware minimum datetime for sorting to avoid mixing naive/aware
     min_dt = _datetime.min.replace(tzinfo=UTC)
-    active_alarms.sort(key=lambda x: x.get("start") or min_dt, reverse=True)
+
+    def _sort_key(item: dict):
+        dt = item.get("start")
+        if not dt:
+            return min_dt
+        try:
+            return ensure_utc_aware(dt)
+        except Exception:
+            # Fallback: if ensure fails, coerce naive to UTC
+            try:
+                return dt.replace(tzinfo=UTC)
+            except Exception:
+                return min_dt
+
+    active_alarms.sort(key=_sort_key, reverse=True)
 
     tz_query = f"&tz_offset={tz_offset}" if tz_offset is not None else ""
     contexts: list[dict] = []
@@ -213,16 +300,9 @@ def _alarms_to_context(
         start_iso = ""
         end_iso = ""
         all_day = False
-        if "start" in alarm and hasattr(alarm["start"], "isoformat"):
-            try:
-                start_iso = alarm["start"].isoformat()
-            except Exception as e:
-                logger.debug("Failed to isoformat start: %s", e)
-        if "end" in alarm and hasattr(alarm["end"], "isoformat"):
-            try:
-                end_iso = alarm["end"].isoformat()
-            except Exception as e:
-                logger.debug("Failed to isoformat end: %s", e)
+        tzid = alarm.get("tzid")
+        start_iso = _isoformat_safe(alarm.get("start"), tzid)
+        end_iso = _isoformat_safe(alarm.get("end"), tzid)
         if "all_day" in alarm:
             all_day = alarm["all_day"]
 
@@ -257,7 +337,20 @@ def _render_alarms_html(
 
     # Use timezone-aware minimum datetime for sorting
     min_dt = _datetime.min.replace(tzinfo=UTC)
-    active_alarms.sort(key=lambda x: x.get("start") or min_dt, reverse=True)
+
+    def _sort_key(item: dict):
+        dt = item.get("start")
+        if not dt:
+            return min_dt
+        try:
+            return ensure_utc_aware(dt)
+        except Exception:
+            try:
+                return dt.replace(tzinfo=UTC)
+            except Exception:
+                return min_dt
+
+    active_alarms.sort(key=_sort_key, reverse=True)
 
     tz_query = f"&tz_offset={tz_offset}" if tz_offset is not None else ""
     alarms_html = ""
@@ -265,16 +358,9 @@ def _render_alarms_html(
         start_iso = ""
         end_iso = ""
         all_day = False
-        if "start" in alarm and hasattr(alarm["start"], "isoformat"):
-            try:
-                start_iso = alarm["start"].isoformat()
-            except Exception as e:
-                logger.debug("Failed to isoformat start: %s", e)
-        if "end" in alarm and hasattr(alarm["end"], "isoformat"):
-            try:
-                end_iso = alarm["end"].isoformat()
-            except Exception as e:
-                logger.debug("Failed to isoformat end: %s", e)
+        tzid = alarm.get("tzid")
+        start_iso = _isoformat_safe(alarm.get("start"), tzid)
+        end_iso = _isoformat_safe(alarm.get("end"), tzid)
         if "all_day" in alarm:
             all_day = alarm["all_day"]
 
@@ -299,47 +385,39 @@ def _format_fallback_datetime(dt_obj, end_obj, all_day_flag: bool, start_iso_str
         if not dt_obj:
             return ""
         now_local = datetime.now(UTC)
-        today = datetime(now_local.year, now_local.month, now_local.day, tzinfo=UTC)
         # Ensure start_dt is UTC-aware
         start_dt = (
             dt_obj if getattr(dt_obj, "tzinfo", None) is not None else dt_obj.replace(tzinfo=UTC)
         )
-        start_day = datetime(start_dt.year, start_dt.month, start_dt.day, tzinfo=UTC)
-        diff_days = (start_day - today).days
 
-        if diff_days == 0:
-            day_text = "Aujourd'hui"
-        elif diff_days == 1:
-            day_text = "Demain"
-        else:
-            days = [
-                "Dimanche",
-                "Lundi",
-                "Mardi",
-                "Mercredi",
-                "Jeudi",
-                "Vendredi",
-                "Samedi",
-            ]
-            idx = start_dt.weekday() + 1 if start_dt.weekday() < 6 else 0
-            month_names = [
-                "janvier",
-                "février",
-                "mars",
-                "avril",
-                "mai",
-                "juin",
-                "juillet",
-                "août",
-                "septembre",
-                "octobre",
-                "novembre",
-                "décembre",
-            ]
-            month = month_names[start_dt.month - 1]
-            day_num = start_dt.day
-            year_part = "" if start_dt.year == now_local.year else f" {start_dt.year}"
-            day_text = f"{days[idx]}, {day_num} {month}{year_part}"
+        days = [
+            "Dimanche",
+            "Lundi",
+            "Mardi",
+            "Mercredi",
+            "Jeudi",
+            "Vendredi",
+            "Samedi",
+        ]
+        idx = start_dt.weekday() + 1 if start_dt.weekday() < 6 else 0
+        month_names = [
+            "janvier",
+            "février",
+            "mars",
+            "avril",
+            "mai",
+            "juin",
+            "juillet",
+            "août",
+            "septembre",
+            "octobre",
+            "novembre",
+            "décembre",
+        ]
+        month = month_names[start_dt.month - 1]
+        day_num = start_dt.day
+        year_part = "" if start_dt.year == now_local.year else f" {start_dt.year}"
+        day_text = f"{days[idx]}, {day_num} {month}{year_part}"
 
         if all_day_flag:
             return day_text
@@ -453,25 +531,50 @@ async def debug_calendar_events(session: Session = Depends(get_session)) -> JSON
     cached = session.exec(select(CalendarEventCache)).all()
     alarms = session.exec(select(AlarmEvent)).all()
 
-    events_out = [
-        {
-            "calendar_source_id": ev.calendar_source_id,
-            "uid": ev.uid,
-            "start": ev.event_start.isoformat(),
-            "end": ev.event_end.isoformat(),
-            "summary": ev.summary,
-        }
-        for ev in cached
-    ]
+    events_out = []
+    for ev in cached:
+        try:
+            start_iso = ensure_utc_aware(ev.event_start).isoformat() if ev.event_start else None
+        except Exception:
+            try:
+                start_iso = ensure_utc_aware(ev.event_start).isoformat() if ev.event_start else None
+            except Exception:
+                start_iso = ev.event_start.isoformat() if ev.event_start else None
+        try:
+            end_iso = ensure_utc_aware(ev.event_end).isoformat() if ev.event_end else None
+        except Exception:
+            try:
+                end_iso = ensure_utc_aware(ev.event_end).isoformat() if ev.event_end else None
+            except Exception:
+                end_iso = ev.event_end.isoformat() if ev.event_end else None
+        events_out.append(
+            {
+                "calendar_source_id": ev.calendar_source_id,
+                "uid": ev.uid,
+                "start": start_iso,
+                "end": end_iso,
+                "summary": ev.summary,
+                "tzid": getattr(ev, "event_tz", None),
+            }
+        )
 
-    alarms_out = [
-        {
-            "uid": a.uid,
-            "trigger_time": a.trigger_time.isoformat(),
-            "dismissed_at": a.dismissed_at.isoformat() if a.dismissed_at else None,
-        }
-        for a in alarms
-    ]
+    alarms_out = []
+    for a in alarms:
+        try:
+            trig_iso = ensure_utc_aware(a.trigger_time).isoformat() if a.trigger_time else None
+        except Exception:
+            trig_iso = a.trigger_time.isoformat() if a.trigger_time else None
+        try:
+            dismissed_iso = ensure_utc_aware(a.dismissed_at).isoformat() if a.dismissed_at else None
+        except Exception:
+            dismissed_iso = a.dismissed_at.isoformat() if a.dismissed_at else None
+        alarms_out.append(
+            {
+                "uid": a.uid,
+                "trigger_time": trig_iso,
+                "dismissed_at": dismissed_iso,
+            }
+        )
 
     return JSONResponse({"cached_events": events_out, "alarm_events": alarms_out})
 
@@ -484,17 +587,28 @@ async def debug_calendars(session: Session = Depends(get_session)) -> JSONRespon
 
     src_out = [{"id": s.id, "label": s.label, "url": s.url} for s in sources]
 
-    status_out = [
-        {
-            "calendar_source_id": st.calendar_source_id,
-            "last_synced_at": st.last_synced_at.isoformat() if st.last_synced_at else None,
-            "next_sync_at": st.next_sync_at.isoformat() if st.next_sync_at else None,
-            "sync_status": st.sync_status,
-            "error_message": st.error_message,
-            "error_count": st.error_count,
-        }
-        for st in statuses
-    ]
+    status_out = []
+    for st in statuses:
+        try:
+            last_iso = (
+                ensure_utc_aware(st.last_synced_at).isoformat() if st.last_synced_at else None
+            )
+        except Exception:
+            last_iso = st.last_synced_at.isoformat() if st.last_synced_at else None
+        try:
+            next_iso = ensure_utc_aware(st.next_sync_at).isoformat() if st.next_sync_at else None
+        except Exception:
+            next_iso = st.next_sync_at.isoformat() if st.next_sync_at else None
+        status_out.append(
+            {
+                "calendar_source_id": st.calendar_source_id,
+                "last_synced_at": last_iso,
+                "next_sync_at": next_iso,
+                "sync_status": st.sync_status,
+                "error_message": st.error_message,
+                "error_count": st.error_count,
+            }
+        )
 
     return JSONResponse({"sources": src_out, "statuses": status_out})
 
