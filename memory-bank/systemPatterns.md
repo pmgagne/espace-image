@@ -6,6 +6,8 @@
 
 **Pattern**: Monolithic layered architecture with service layer + background jobs
 
+**Database Layer**: SQLite (single-file) with SQLModel ORM. All business entities (photos, presets, calendar sources, events, alarms, sync status) are modeled as SQLModel classes with relationships. All timestamps are stored in UTC. Schema is optimized for fast event, alarm, and photo lookups.
+
 ### Core Layers
 
 ```
@@ -16,6 +18,8 @@ Service Layer (Business Logic)
 Data Layer (SQLModel ORM)
     ↓
 Storage (SQLite + File System)
+
+**DB Schema**: See docs/db/DB.md for full schema. Key tables: AppSettings, Preset, Photo, CalendarSource, CalendarEventCache, AlarmEvent, CalendarSyncStatusEntry. Relationships: Preset 1--* Photo, CalendarSource 1--* CalendarEventCache, CalendarSource 1--1 CalendarSyncStatusEntry.
 ```
 
 ## Design Patterns
@@ -27,18 +31,21 @@ Storage (SQLite + File System)
 **Location**: `app/services/`
 
 **Services**:
+
 - `CalendarService`: ICS fetching, event caching, alarm extraction
 - `ImageService`: Photo optimization, gallery management
 - `WeatherService`: Open-Meteo API integration, geocoding
 - `AlarmService`: Alarm formatting, dismissal tracking, cleanup
 
 **Benefits**:
+
 - Business logic isolated from HTTP concerns
 - Testable without FastAPI dependencies
 - Reusable across multiple route handlers
 - Clear separation of concerns
 
 **Example**:
+
 ```python
 # Router calls service
 @router.post("/calendars/sync-now")
@@ -54,12 +61,14 @@ async def sync_calendars_now(session: Session = Depends(get_session)):
 **Location**: `app/db/session.py`
 
 **Benefits**:
+
 - Automatic session lifecycle management
 - Testable (can inject mock sessions)
 - No global state
 - Transaction boundaries clear
 
 **Example**:
+
 ```python
 @router.get("/")
 async def read_root(
@@ -77,12 +86,14 @@ async def read_root(
 **Location**: `app/routers/admin.py`, `app/templates/partials/`
 
 **Benefits**:
+
 - No client-side state management
 - Minimal JavaScript complexity
 - Progressive enhancement
 - Server-side rendering
 
 **Example**:
+
 ```python
 @router.post("/presets")
 async def create_preset(name: str = Form(...), session: Session = Depends(get_session)):
@@ -100,11 +111,13 @@ async def create_preset(name: str = Form(...), session: Session = Depends(get_se
 **Location**: `app/routers/dashboard.py`
 
 **Decision Points**:
+
 - **Auto-detect**: User-Agent `"ipad"` + `"os 9"` → redirect to `/legacy`
 - **Modern UI**: ES6 JavaScript, CSS Grid, HTMX
 - **Legacy UI**: ES5 JavaScript, basic CSS, XHR (no HTMX)
 
 **Benefits**:
+
 - Maximum hardware compatibility
 - Graceful degradation
 - Single codebase, dual frontendsevidence
@@ -116,15 +129,19 @@ async def create_preset(name: str = Form(...), session: Session = Depends(get_se
 **Location**: `app/main.py` lifespan context
 
 **Jobs**:
-- Calendar sync: every 10 minutes
+
+- Calendar sync: every 3 hours (configurable)
+- Unified index refresh (weather + alarms): every 5 minutes (configurable, via `/components/index-refresh`)
 - (Future): Photo rotation, cleanup tasks
 
 **Pattern**:
+
 ```python
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: register jobs
-    scheduler.add_job(background_sync_calendars, "interval", minutes=10)
+    scheduler.add_job(background_sync_calendars, "interval", minutes=CALENDAR_SYNC_INTERVAL_MINUTES)
+    # Unified index refresh interval is exposed to templates for UI polling
     scheduler.start()
     yield
     # Shutdown: graceful stop
@@ -141,12 +158,21 @@ async def lifespan(app: FastAPI):
 **Pattern**: Define models with relationships, query via SQLModel ORM
 
 **Benefits**:
+
 - Type-safe queries (Pydantic validation)
 - Automatic schema generation
 - Clear relationship mapping
 - Testable with in-memory SQLite
 
+**DB Usage Patterns**:
+
+- Always use UTC-aware datetimes for event and alarm logic.
+- Use composite UIDs (source_id:uid) for event/alarms to namespace across sources.
+- Purge old dismissed alarms and stale events to keep DB lean.
+- Use relationships for efficient photo/event lookup.
+
 **Example**:
+
 ```python
 class Preset(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
@@ -167,6 +193,7 @@ photos = preset.photos  # Lazy-loaded via relationship
 **Security**: HTML auto-escaped by default (XSS protection)
 
 **Pattern**:
+
 ```jinja2
 {# Auto-escaped by default #}
 <span class="alarm-title">{{ alarm.name }}</span>
@@ -183,11 +210,13 @@ html = f"<span>{escape(user_input)}</span>"
 **Location**: `app/utils/timezone.py`, all services
 
 **Benefits**:
+
 - No timezone bugs
 - Unambiguous time comparisons
 - Display timezone conversion happens at template layer
 
 **Pattern**:
+
 ```python
 # Storage: always UTC
 event.event_start = ensure_utc_aware(datetime.now())
@@ -196,6 +225,12 @@ event.event_start = ensure_utc_aware(datetime.now())
 display_time = datetime_to_iso_with_tz(event.event_start, event.event_tz)
 ```
 
+**DB Cleanup**:
+
+- CalendarEventCache: Rolling 1-week window, purged on sync.
+- AlarmEvent: Dismissed alarms >30 days old are purged.
+- Photos: Orphaned photos (no preset) are cleaned up by admin tools.
+
 ### 9. Retry with Exponential Backoff
 
 **Implementation**: `@backoff.on_exception()` decorator
@@ -203,6 +238,7 @@ display_time = datetime_to_iso_with_tz(event.event_start, event.event_tz)
 **Location**: `app/services/calendar_service.py`
 
 **Pattern**:
+
 ```python
 @backoff.on_exception(
     backoff.expo,
@@ -249,6 +285,19 @@ Frontend (HTMX)
     ├─ Poll GET /components/alarm every 10 seconds
     ├─ Swap #alarm-poller innerHTML
     └─ Format timestamps via JavaScript (client timezone)
+```
+
+### Data Flow: DB Cleanup
+
+```
+APScheduler (scheduled intervals)
+    ↓
+AlarmService.cleanup_old_alarms()
+    └── Purge AlarmEvent records >30 days old
+CalendarService.cleanup_stale_events()
+    └── Purge CalendarEventCache entries outside 1-week window
+Admin tools
+    └── Remove orphaned Photo records/files
 ```
 
 ### Data Flow: Image Upload
@@ -305,6 +354,7 @@ HTMX swaps updated gallery HTML
 **Pattern**: FastAPI TestClient + in-memory SQLite + pytest fixtures
 
 **Example**:
+
 ```python
 @pytest.fixture
 def session():

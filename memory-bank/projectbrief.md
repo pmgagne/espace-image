@@ -13,6 +13,26 @@ A FastAPI-based digital photo slideshow application that transforms a tablet (pa
 3. **Weather Display**: Real-time weather information for configured location
 4. **Legacy Device Support**: Full compatibility with iPad 2 (iOS 9.3.5) hardware
 
+### Data Storage & Database
+
+- **Database**: SQLite (single-file, no external DB server)
+- **ORM**: SQLModel (Pydantic + SQLAlchemy)
+- **Schema**: Supports photo presets, photo uploads, calendar sources, cached calendar events, alarms, and admin settings.
+- **Key Tables**:
+ 	- AppSettings: Global config (active preset, weather, slideshow duration)
+ 	- Preset: Photo collections
+ 	- Photo: Uploaded images, linked to presets
+ 	- CalendarSource: ICS/WebCal URLs
+ 	- CalendarEventCache: Cached events (1-week window, recurring events expanded)
+ 	- AlarmEvent: Dismissal/trigger records
+ 	- CalendarSyncStatusEntry: Sync status per calendar source
+- **Relationships**:
+ 	- Preset 1--* Photo
+ 	- CalendarSource 1--* CalendarEventCache
+ 	- CalendarSource 1--1 CalendarSyncStatusEntry
+- **Time Handling**: All datetimes stored in UTC; original timezone preserved for display and recurrence logic.
+- **Rationale**: SQLite is sufficient for single-family/internal use, with no need for external DB or high concurrency. Schema is optimized for fast event/album lookup and reliable alarm display.
+
 ### Target Environment
 
 - **Deployment**: Internal network only (home/office LAN)
@@ -25,8 +45,10 @@ A FastAPI-based digital photo slideshow application that transforms a tablet (pa
 1. iPad 2 can run 24/7 without crashes or memory issues
 2. Calendar alarms display reliably with < 1 minute latency
 3. Photo uploads work seamlessly via admin interface
-4. Weather data refreshes accurately every 15 minutes
+4. Weather and alarm data refresh together every 5 minutes (configurable)
 5. No manual intervention needed after initial setup
+
+6. Database schema supports all core features, with reliable event caching, alarm tracking, and photo management.
 
 ## Scope
 
@@ -56,19 +78,21 @@ A FastAPI-based digital photo slideshow application that transforms a tablet (pa
 - Must run on Python 3.13+
 - Must support Safari on iOS 9.3.5 (WebKit 600.1.4)
 - HEIC/HEIF image format support for iPhone photos
-- SQLite database (single-file, no external DB server)
 - Minimal external dependencies
 
 ### Performance
 
 - Image optimization for iPad 2 memory limits (<1MB per image)
 - Fast page loads on legacy hardware (< 2 seconds)
-- Efficient background sync (10-minute intervals)
+- Efficient background sync (calendar: 3 hours, UI: 5-minute intervals for weather/alarms)
 - Low CPU usage during idle display
+
+- Database queries and writes optimized for low-latency alarm/event/photo access.
 
 ### Deployment
 
 -Container-ready (Docker + Docker Compose)
+
 - File-based storage (no cloud dependencies)
 - Simple configuration via environment variables
 - No internet exposure (internal network only)
@@ -81,6 +105,8 @@ A FastAPI-based digital photo slideshow application that transforms a tablet (pa
 4. **icalevents over icalendar**: Higher-level API, built-in recurrence handling
 5. **No authentication**: Internal network deployment model documented in SECURITY.md
 6. **Dual UI strategy**: Modern SPA + Legacy fallback for maximum compatibility
+
+7. **SQLite for DB**: Chosen for simplicity, reliability, and suitability for single-user/home deployment. Schema designed for extensibility and fast lookups.
 
 ## Success Metrics
 

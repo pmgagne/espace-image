@@ -32,7 +32,7 @@ We adopt a backend-driven dataflow for alarm display, with the following steps:
     - No client-side alarm logic is performed; the frontend simply displays the provided alarms.
 
 5. **Updates**
-    - The frontend may poll or use HTMX to refresh the alarm list periodically, triggering a new backend fetch and render.
+    - The frontend uses a single HTMX poll to `/components/index-refresh` every 5 minutes (configurable) to refresh both alarm and weather widgets. This endpoint returns out-of-band fragments to update the UI. The interval is set in `app/main.py` and exposed to templates.
 
 ## Diagram
 

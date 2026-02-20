@@ -20,6 +20,15 @@
 - **HTTP Client**: httpx 0.28.1 (async HTTP with timeout support)
 - **Retry Logic**: backoff 2.2.1 (exponential backoff for external APIs)
 
+#### Database Schema & Usage
+
+- **Schema**: See docs/db/DB.md for full details. Key tables: AppSettings, Preset, Photo, CalendarSource, CalendarEventCache, AlarmEvent, CalendarSyncStatusEntry.
+- **Relationships**: Preset 1--*Photo, CalendarSource 1--* CalendarEventCache, CalendarSource 1--1 CalendarSyncStatusEntry.
+- **Time Handling**: All datetimes stored in UTC; original timezone preserved for display and recurrence logic.
+- **Composite UIDs**: Used for recurring events and alarms to ensure uniqueness.
+- **Cleanup**: Rolling 1-week window for events, old alarms purged after 30 days.
+- **Rationale**: SQLite is ideal for single-user/home deployment; schema is optimized for fast lookups and reliable alarm/event/photo management.
+
 ### Frontend Stack
 
 - **UI Pattern**: HTMX 1.9+ (HTML fragments, no client-side state)
@@ -207,6 +216,7 @@ dev = [
 ### GitHub Actions Workflows
 
 **On Push/PR**:
+
 - Python linting (ruff check + format)
 - Frontend linting (HTML/CSS/JS validation)
 - Unit tests with coverage reporting
@@ -214,12 +224,14 @@ dev = [
 - Docker build validation
 
 **Manual Triggers**:
+
 - Docker image publish to registry
 - Documentation deployment
 
 ### Quality Gates
 
 All checks must pass before merge to `main`:
+
 - ✓ Ruff linting (no errors)
 - ✓ All tests passing (68 tests)
 - ✓ No security vulnerabilities (Trivy)

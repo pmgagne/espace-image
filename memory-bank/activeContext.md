@@ -17,6 +17,8 @@
 7. Sanitized error messages to prevent credential leakage
 8. Updated all documentation to reflect icalevents migration
 
+9. Verified DB schema and documentation are current (see docs/db/DB.md)
+
 See [ADR-2026-02-19-security-audit-code-quality.md](../docs/ADR/ADR-2026-02-19-security-audit-code-quality.md) for complete details.
 
 ### Documentation Synchronization (2026-02-19)
@@ -41,6 +43,8 @@ Fixed two critical bugs in calendar event caching:
    - Root cause: icalevents returns midnight UTC, converted to previous day in America/Toronto (UTC-5)
    - Solution: Track `all_day` flag, preserve date without timezone conversion
    - Result: All-day events now display on correct calendar date
+
+3. **DB Schema Review**: Confirmed all tables (AppSettings, Preset, Photo, CalendarSource, CalendarEventCache, AlarmEvent, CalendarSyncStatusEntry) are up to date and relationships are correct. All event/alarm times stored in UTC, original timezone preserved for display/recurrence.
 
 ### ical events Migration (2026-02-10)
 
@@ -88,6 +92,8 @@ Migrated from `icalendar` to `icalevents` library:
 - **SQLite is sufficient** for single-family use case (no need for PostgreSQL)
 - **HTMX UI approach validated** — simpler than React/Vue for this use case
 - **Dual UI strategy working well** — modern and legacy modes coexist cleanly
+
+- **SQLModel ORM and UTC time storage**: Continue using SQLModel for DB access and UTC for all timestamps. Schema and cleanup patterns validated as robust for current/future needs.
 
 ### Technical
 
