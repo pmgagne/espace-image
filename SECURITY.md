@@ -53,16 +53,23 @@ Provide remote access via VPN (Tailscale, WireGuard, etc.) while keeping the app
 The application implements defense-in-depth security:
 
 - **Security headers**: X-Content-Type-Options, X-Frame-Options, Referrer-Policy, X-XSS-Protection
-- **File upload validation**: Restricted to image extensions (.jpg, .jpeg, .png, .heic, .heif)
+- **File upload validation**: Restricted to image extensions (.jpg, .jpeg, .png, .heic, .heif) with magic byte validation
+- **XSS protection**: HTML escaping in alarm rendering to prevent malicious calendar summaries
+- **Path traversal protection**: Canonical path validation in image serving
+- **SSRF protection**: URL scheme validation for calendar sources (only http, https, webcal allowed)
 - **Rate limiting**: External API calls (Open-Meteo, Nominatim) are rate-limited
 - **UTC time storage**: All timestamps in UTC to prevent timezone manipulation
 - **SQLModel ORM**: Parameterized queries prevent SQL injection
+- **Input validation**: UID format validation, coordinate validation (including NaN/Infinity checks)
+- **Debug endpoint protection**: Debug routes only accessible when WEBAPP_DEBUG=true
+- **Error message sanitization**: Sensitive information masked in displayed error messages
+- **Race condition handling**: Proper error handling in concurrent sync operations
 
 ## Known Limitations
 
 1. **No authentication** - Acceptable for internal-network deployment
 2. **No CSRF tokens** - Would be needed if cookie-based auth is added
-3. **Extension-only file validation** - No magic byte checking (consider adding if untrusted users)
+3. **Image validation scope** - Extension + magic byte checking; no deep content scan
 4. **Single-user/family focused** - Not designed for multi-tenant scenarios
 5. **In-memory rate limiting** - Per-process only (use Redis for multi-worker)
 

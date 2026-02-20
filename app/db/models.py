@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from enum import StrEnum
+from uuid import UUID, uuid4
 
 from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
@@ -56,10 +57,13 @@ class AppSettings(SQLModel, table=True):
 
 
 class AlarmEvent(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    uid: str = Field(index=True, unique=True)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
     trigger_time: datetime
     dismissed_at: datetime | None = Field(default=None)
+
+    # Optional: Link to calendar event (null for test/simulated alarms)
+    calendar_source_id: int | None = Field(default=None, index=True)
+    calendar_event_uid: str | None = Field(default=None, index=True)
 
 
 class CalendarEventCache(SQLModel, table=True):

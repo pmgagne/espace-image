@@ -33,7 +33,8 @@ def test_check_alarm_empty(client, session):
 
 def test_dismiss_alarm_returns_updated_html(client, session):
     """Verify that dismissing an alarm returns the updated alarm list HTML."""
-    uid = "test-uid-123"
+    # Use a valid UUID string for the alarm id to match current API parsing
+    uid = "00000000-0000-0000-0000-000000000000"
     response = client.post(f"/api/alarms/{uid}/dismiss")
     assert response.status_code == 200
     # Should return empty string if no alarms left, or the container if some remain.
@@ -101,7 +102,7 @@ END:VCALENDAR"""
 def test_purge_old_dismissed_alarms(client, session):
     """Verify dismissed alarms older than 30 days are purged."""
     old_alarm = AlarmEvent(
-        uid="old-dismissed",
+        calendar_event_uid="old-dismissed",
         trigger_time=datetime.now() - timedelta(days=60),
         dismissed_at=datetime.now() - timedelta(days=31),
     )
@@ -111,5 +112,7 @@ def test_purge_old_dismissed_alarms(client, session):
     response = client.get("/components/alarm?tz_offset=0")
     assert response.status_code == 200
 
-    remaining = session.exec(select(AlarmEvent).where(AlarmEvent.uid == "old-dismissed")).all()
+    remaining = session.exec(
+        select(AlarmEvent).where(AlarmEvent.calendar_event_uid == "old-dismissed")
+    ).all()
     assert remaining == []

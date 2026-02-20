@@ -13,78 +13,108 @@
         });
     }
 
-    // Preload image before swapping for smooth fade-in
-    document.body.addEventListener('htmx:beforeSwap', function (evt) {
-        if (evt.detail.target.classList && evt.detail.target.classList.contains('slideshow-container')) {
-            var newHtml = evt.detail.xhr.responseText || "";
-            var tempDiv = document.createElement('div');
-            tempDiv.innerHTML = newHtml;
-            var imgElement = tempDiv.querySelector('img');
-            var imgUrl = imgElement ? imgElement.src : null;
-
-            if (imgUrl) {
-                var preloadImg = new Image();
-                preloadImg.src = imgUrl;
-            }
-        }
-    });
-
-    // Smart swap for alarms to prevent flickering on dismiss
-    var lastAlarmContent = "";
-    var hasAnimated = false;
-    document.body.addEventListener('htmx:beforeSwap', function (evt) {
-        if (evt.detail.target && evt.detail.target.id === 'alarm-poller') {
-            var newHtml = evt.detail.xhr.responseText || "";
-            var normalize = function (html) {
-                return html.replace(/\s/g, '').toLowerCase();
-            };
-
-            var normalizedNew = normalize(newHtml);
-            if (normalizedNew === lastAlarmContent) {
-                evt.detail.shouldSwap = false;
-            } else {
-                lastAlarmContent = normalizedNew;
-            }
-        }
-    });
-
-    // Animate alarm box only on first appearance and format times after swap
-    document.body.addEventListener('htmx:afterSwap', function (evt) {
-        if (evt.detail.target && evt.detail.target.id === 'alarm-poller') {
-            var alarmBox = document.querySelector('.alarm-box-container');
-            if (alarmBox && !hasAnimated) {
-                alarmBox.classList.add('animate-in');
-                hasAnimated = true;
-            }
-            try {
-                formatAlarmTimes();
-            } catch (e) {
-                console.error('formatAlarmTimes error', e);
-            }
-        }
-    });
-
-    function updateTime() {
-        const now = new Date();
-
-        // Time: HH:MM
-        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-        var clockEl = document.getElementById('clock');
-        if (clockEl) clockEl.innerText = timeStr;
-
-        // Date: Month DD, YYYY
-        const options = { year: 'numeric', month: 'long', day: 'numeric' };
-        var dateEl = document.getElementById('date-display');
-        if (dateEl) dateEl.innerText = now.toLocaleDateString(undefined, options);
-    }
-
-    // Update immediately and then every second
+    // Wait for DOM to be ready before adding htmx listeners
     document.addEventListener('DOMContentLoaded', function () {
+        // Preload image before swapping for smooth fade-in
+        document.body.addEventListener('htmx:beforeSwap', function (evt) {
+            if (evt.detail.target.classList && evt.detail.target.classList.contains('slideshow-container')) {
+                var newHtml = evt.detail.xhr.responseText || "";
+                var tempDiv = document.createElement('div');
+                tempDiv.innerHTML = newHtml;
+                var imgElement = tempDiv.querySelector('img');
+                var imgUrl = imgElement ? imgElement.src : null;
+
+                if (imgUrl) {
+                    var preloadImg = new Image();
+                    preloadImg.src = imgUrl;
+                }
+            }
+        });
+
+        // Smart swap for alarms to prevent flickering on dismiss
+        var lastAlarmContent = "";
+        var hasAnimated = false;
+        // Ensure dismiss POST always forces an update: clear the cached content
+        document.body.addEventListener('htmx:beforeRequest', function (evt) {
+            try {
+                var verb = (evt.detail && evt.detail.verb) || '';
+                var path = (evt.detail && evt.detail.path) || '';
+                if (verb && verb.toUpperCase() === 'POST' && /\/api\/alarms\/.+\/dismiss/.test(path)) {
+                    lastAlarmContent = '';
+                }
+            } catch (e) {
+                // Non-fatal - don't block requests
+            }
+        });
+        document.body.addEventListener('htmx:beforeSwap', function (evt) {
+            if (evt.detail.target && evt.detail.target.id === 'alarm-poller') {
+                var newHtml = evt.detail.xhr.responseText || "";
+                var normalize = function (html) {
+                    return html.replace(/\s/g, '').toLowerCase();
+                };
+
+                var normalizedNew = normalize(newHtml);
+                if (normalizedNew === lastAlarmContent) {
+                    evt.detail.shouldSwap = false;
+                } else {
+                    lastAlarmContent = normalizedNew;
+                }
+            }
+        });
+
+        // Animate alarm box only on first appearance and format times after swap
+        document.body.addEventListener('htmx:afterSwap', function (evt) {
+            if (evt.detail.target && evt.detail.target.id === 'alarm-poller') {
+                var alarmBox = document.querySelector('.alarm-box-container');
+                if (alarmBox && !hasAnimated) {
+                    alarmBox.classList.add('animate-in');
+                    hasAnimated = true;
+                }
+                try {
+                    formatAlarmTimes();
+                } catch (e) {
+                    console.error('formatAlarmTimes error', e);
+                }
+            }
+        });
+
+        // Start clock updates
         updateTime();
         setInterval(updateTime, 1000);
         // initial formatting of any alarm times already present
         try { formatAlarmTimes(); } catch (e) { /* ignore */ }
     });
+
+    function updateTime() {
+        const now = new Date();
+
+        // Time: HH:MM with fallback for browser compatibility
+        var timeStr;
+        try {
+            timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        } catch (e) {
+            // Fallback for browsers that don't support the options
+            var h = now.getHours();
+            var m = now.getMinutes();
+            timeStr = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+        }
+
+        var clockEl = document.getElementById('clock');
+        if (clockEl) {
+            clockEl.innerText = timeStr;
+        }
+
+        // Date: Month DD, YYYY
+        var dateEl = document.getElementById('date-display');
+        if (dateEl) {
+            try {
+                const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                dateEl.innerText = now.toLocaleDateString(undefined, options);
+            } catch (e) {
+                dateEl.innerText = now.toDateString();
+            }
+        }
+    }
 
     // Format alarm datetimes inserted by /components/alarm
     function formatAlarmTimes() {

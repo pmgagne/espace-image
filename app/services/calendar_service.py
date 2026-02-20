@@ -17,13 +17,12 @@ from sqlmodel import Session, select
 
 from app.db.models import (
     AlarmEvent,
-    AppSettings,
     CalendarEventCache,
     CalendarSource,
     CalendarSyncStatus,
     CalendarSyncStatusEntry,
 )
-from app.utils.timezone import ensure_aware, ensure_utc_aware, normalize_datetime, to_utc
+from app.utils.timezone import ensure_utc_aware, normalize_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -769,8 +768,20 @@ class CalendarService:
         if not sync_status:
             sync_status = CalendarSyncStatusEntry(calendar_source_id=source_id)
             session.add(sync_status)
-            session.commit()
-            session.refresh(sync_status)
+            try:
+                session.commit()
+                session.refresh(sync_status)
+            except Exception:
+                # Handle race condition: another thread may have created the entry
+                session.rollback()
+                sync_status = session.exec(
+                    select(CalendarSyncStatusEntry).where(
+                        CalendarSyncStatusEntry.calendar_source_id == source_id
+                    )
+                ).first()
+                if not sync_status:
+                    # If still not found, re-raise the original exception
+                    raise
 
         return sync_status
 
@@ -1067,7 +1078,21 @@ class CalendarService:
         sync_status.sync_status = CalendarSyncStatus.FAILED
         sync_status.error_count += 1
         sync_status.last_error_at = utc_now
-        sync_status.error_message = str(e)
+        # Security: Sanitize error message to avoid exposing sensitive information
+        # Full error details are logged above for debugging
+        error_str = str(e)
+        # Remove potential credentials from URLs in error messages
+        import re
+
+        sanitized_error = re.sub(
+            r"(https?://)[^:@/\s]+:[^@/\s]+@",  # Remove user:pass@ from URLs
+            r"\1***:***@",
+            error_str,
+        )
+        # Limit error message length
+        if len(sanitized_error) > 200:
+            sanitized_error = sanitized_error[:197] + "..."
+        sync_status.error_message = sanitized_error
         session.add(sync_status)
         session.commit()
 

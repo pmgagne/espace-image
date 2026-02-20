@@ -12,6 +12,13 @@ A FastAPI-based slideshow that serves a modern UI and a **Legacy UI** optimized 
 - **Legacy Mode:** Specialized frontend for iPad 2 (1024x768, no CSS Grid, resized images).
 - **Calendar Alarms:** Integrates with iCloud Calendar and other ICS feeds to display pop-up alarms for events. All alarm logic is handled server-side using the [`icalevents`](https://icalevents.readthedocs.io/en/latest/) library for robust iCalendar parsing and recurrence support. The frontend displays rendered HTML fragments. See [ADR-2026-02-14-alarm-dataflow.md](docs/ADR/ADR-2026-02-14-alarm-dataflow.md) for architecture.
 - **Weather:** Real-time weather widget.
+- **Unified Index Refresh:** Weather and alarm UI updates are now driven by a single, configurable interval (default 5 minutes) via the `/components/index-refresh` endpoint. This interval is set in `app/main.py` and exposed to templates for both modern and legacy UIs.
+
+## UI Update Mechanism
+
+Weather and alarm widgets are refreshed together every 5 minutes (configurable) using a single HTMX poll to `/components/index-refresh`. This endpoint returns out-of-band fragments to update the relevant UI sections. The interval is set in `app/main.py` (`INDEX_UPDATE_INTERVAL_SECONDS`) and exposed to templates as `index_update_interval_seconds`.
+
+Legacy and modern UIs both use this mechanism for consistent, reliable updates.
 
 ## Agentic Workflow
 

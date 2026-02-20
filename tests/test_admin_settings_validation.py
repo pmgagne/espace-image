@@ -6,13 +6,13 @@ from app.db.models import AppSettings, Preset
 def test_update_settings_invalid_latitude(client):
     response = client.post("/admin/settings", data={"latitude": "999"})
     assert response.status_code == 422
-    assert response.json().get("detail") == "Latitude must be between -90 and 90"
+    assert response.json().get("detail") == "Invalid latitude value"
 
 
 def test_update_settings_invalid_longitude(client):
     response = client.post("/admin/settings", data={"longitude": "999"})
     assert response.status_code == 422
-    assert response.json().get("detail") == "Longitude must be between -180 and 180"
+    assert response.json().get("detail") == "Invalid longitude value"
 
 
 def test_update_settings_invalid_duration(client):

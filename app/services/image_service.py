@@ -210,6 +210,25 @@ class GalleryManager:
                 f"File type {ext or '(no extension)'} not allowed. Supported: {allowed}"
             )
 
+        # Security: Validate file content is actually an image (magic byte validation)
+        # PIL will raise an exception if the file is not a valid image format
+        try:
+            with Image.open(BytesIO(file_content)) as img:
+                img.verify()  # Verify image integrity
+                # Check that detected format matches allowed types
+                detected_format = (img.format or "").upper()
+                allowed_formats = {"JPEG", "PNG", "HEIC", "HEIF"}
+                if detected_format not in allowed_formats:
+                    raise ValueError(
+                        f"Invalid image format detected: {detected_format}. "
+                        f"Expected one of: {', '.join(allowed_formats)}"
+                    )
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.warning("Image validation failed for %s: %s", filename, e)
+            raise ValueError("File validation failed: not a valid image file") from e
+
         optimized_content, stored_filename = ImageOptimizer.optimize_upload(
             file_content,
             filename,

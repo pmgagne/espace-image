@@ -1,8 +1,9 @@
 import logging
+import os
 import random
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
@@ -26,6 +27,13 @@ templates = Jinja2Templates(directory="app/templates")
 logger = logging.getLogger(__name__)
 
 
+def require_debug_mode():
+    """Dependency to protect debug endpoints - only accessible when WEBAPP_DEBUG is enabled."""
+    debug_enabled = os.getenv("WEBAPP_DEBUG", "").lower() in ("true", "1", "yes")
+    if not debug_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 def _isoformat_safe(dt_obj: object, tzid: str | None = None) -> str:
     """
     Return a timezone-aware ISO string for dt_obj or empty string on failure.
@@ -38,11 +46,8 @@ def _isoformat_safe(dt_obj: object, tzid: str | None = None) -> str:
     try:
         return datetime_to_iso_with_tz(ensure_utc_aware(dt_obj), tzid)
     except Exception:
-        try:
-            return datetime_to_iso_with_tz(ensure_utc_aware(dt_obj), tzid)
-        except Exception:
-            logger.debug("Failed to isoformat: %s", dt_obj)
-            return ""
+        logger.debug("Failed to isoformat: %s", dt_obj)
+        return ""
 
 
 @router.get("/")
@@ -73,13 +78,7 @@ async def read_legacy(request: Request, session: Session = Depends(get_session))
         for st in statuses:
             if st.last_synced_at and (latest is None or st.last_synced_at > latest):
                 latest = st.last_synced_at
-        try:
-            last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
-        except Exception:
-            try:
-                last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
-            except Exception:
-                last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
+        last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
     except Exception:
         last_sync_utc = ""
 
@@ -123,20 +122,7 @@ async def get_next_slide(
     request: Request, mode: str = "modern", session: Session = Depends(get_session)
 ):
     settings = session.exec(select(AppSettings)).first()
-    try:
-        statuses = session.exec(select(CalendarSyncStatusEntry)).all()
-        latest = None
-        for st in statuses:
-            if st.last_synced_at and (latest is None or st.last_synced_at > latest):
-                latest = st.last_synced_at
-        try:
-            ensure_utc_aware(latest).isoformat() if latest else ""
-        except Exception:
-            try:
-                ensure_utc_aware(latest).isoformat() if latest else ""
-            except Exception:
-                ensure_utc_aware(latest).isoformat() if latest else ""
-    except Exception:
+    if not settings or settings.active_preset_id is None:
         return templates.TemplateResponse(
             "partials/slide.html",
             {"request": request, "error_msg": "No Preset Active. Please configure in Admin."},
@@ -170,11 +156,8 @@ async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None
     window_end = utc_now + timedelta(days=7)
     # For each calendar source, aggregate events in window
     sources = session.exec(select(CalendarSource)).all()
-    active_alarms = []
+    active_alarms: list[dict] = []
     for source in sources:
-        # Include cached events even if trigger_time is None; we'll compute
-        # an effective trigger_time (fallback to event_start) below. This
-        # ensures events with missing VALARM still surface in tests and UI.
         cached_events = session.exec(
             select(CalendarEventCache).where(
                 (CalendarEventCache.calendar_source_id == source.id)
@@ -182,37 +165,41 @@ async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None
                 & (CalendarEventCache.event_end >= window_start)
             )
         ).all()
+
         for event in cached_events:
-            # Determine the effective trigger time (fallback to event start)
+            # Determine effective trigger time (fallback to event_start)
             trigger = (
                 event.trigger_time
                 if hasattr(event, "trigger_time") and event.trigger_time is not None
                 else event.event_start
             )
+
             # Normalize trigger to UTC-aware for safe comparisons
             try:
-                trigger_aware = ensure_utc_aware(trigger)
+                trigger_aware = ensure_utc_aware(trigger) if trigger is not None else None
             except Exception:
+                if trigger is None:
+                    continue
                 trigger_aware = (
                     trigger
                     if getattr(trigger, "tzinfo", None) is not None
                     else trigger.replace(tzinfo=UTC)
                 )
 
-            # If this event uses an optional trigger, only show it when its trigger_time has been reached
-            if getattr(event, "optional_trigger", False) and (
-                trigger_aware is None or trigger_aware > utc_now
-            ):
+            # Only show alarms when their trigger_time has been reached
+            if trigger_aware is None or trigger_aware > utc_now:
                 continue
 
             composite_uid = f"{event.calendar_source_id}:{event.uid}"
+
+            # Check if alarm was dismissed using calendar relationship
             dismissed = session.exec(
-                select(AlarmEvent).where(AlarmEvent.uid == composite_uid)
+                select(AlarmEvent).where(
+                    AlarmEvent.calendar_source_id == event.calendar_source_id,
+                    AlarmEvent.calendar_event_uid == event.uid,
+                )
             ).first()
-            if not dismissed:
-                dismissed = session.exec(
-                    select(AlarmEvent).where(AlarmEvent.uid == event.uid)
-                ).first()
+
             if not dismissed or dismissed.dismissed_at is None:
                 alarm = {
                     "uid": composite_uid,
@@ -220,24 +207,28 @@ async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None
                     "start": event.event_start,
                     "end": event.event_end,
                     "tzid": getattr(event, "event_tz", None),
-                    "all_day": event.event_start.hour == 0
-                    and event.event_start.minute == 0
-                    and (event.event_end - event.event_start).days >= 1,
-                    "trigger_time": event.trigger_time
-                    if hasattr(event, "trigger_time") and event.trigger_time is not None
-                    else event.event_start,
+                    "all_day": (
+                        event.event_start.hour == 0
+                        and event.event_start.minute == 0
+                        and (event.event_end - event.event_start).days >= 1
+                    ),
+                    "trigger_time": trigger,
                 }
                 active_alarms.append(alarm)
+
     return active_alarms
 
 
 def _fetch_simulated_alarms(session: Session) -> list[dict]:
     """Fetch test/simulated alarms from database."""
-    now = ensure_utc_aware(datetime.now())
+    # Use naive UTC datetime for DB comparison (SQLite stores datetimes as naive)
+    now_naive = datetime.now(UTC).replace(tzinfo=None)
+
+    # Test alarms have no calendar link (NULL calendar_source_id)
     simulated_alarms = session.exec(
         select(AlarmEvent).where(
-            (AlarmEvent.uid.like("test-%"))  # type: ignore[attr-defined]
-            & (AlarmEvent.trigger_time <= now)
+            (AlarmEvent.calendar_source_id.is_(None))  # type: ignore[attr-defined,union-attr]
+            & (AlarmEvent.trigger_time <= now_naive)
             & (AlarmEvent.dismissed_at.is_(None))  # type: ignore[attr-defined,union-attr]
         )
     ).all()
@@ -257,11 +248,12 @@ def _fetch_simulated_alarms(session: Session) -> list[dict]:
 
         alarms.append(
             {
-                "uid": alarm_event.uid,
+                "uid": str(alarm_event.id),  # Use UUID as uid for backwards compatibility
                 "name": "Simulated Event",
                 "start": start_dt,
                 "end": end_dt,
                 "all_day": False,
+                # Don't specify tzid - let frontend/browser handle timezone conversion from UTC
             }
         )
     return alarms
@@ -379,6 +371,43 @@ def _render_alarms_html(
     """
 
 
+def _parse_alarm_id(alarm_id: str) -> tuple[object | None, int | None, str | None]:
+    """Parse an alarm identifier which may be a UUID or a composite "source_id:event_uid".
+
+    Returns: (alarm_uuid, calendar_source_id, calendar_event_uid)
+    Raises: HTTPException(400) on invalid format.
+    """
+    from uuid import UUID
+
+    calendar_source_id = None
+    calendar_event_uid = None
+    alarm_uuid = None
+
+    # Try parsing as UUID first
+    try:
+        alarm_uuid = UUID(alarm_id)
+        return alarm_uuid, None, None
+    except ValueError:
+        # Not a UUID - might be composite format "source_id:event_uid"
+        if ":" in alarm_id:
+            parts = alarm_id.split(":", 1)
+            try:
+                calendar_source_id = int(parts[0])
+                calendar_event_uid = parts[1]
+                # Validate calendar_event_uid format (allow timestamp chars: #, +, -, :, etc.)
+                import re
+
+                if not re.match(r"^[\w\-:.@#+]+$", calendar_event_uid):
+                    raise HTTPException(status_code=400, detail="Invalid alarm ID format")
+                if len(calendar_event_uid) > 500:
+                    raise HTTPException(status_code=400, detail="Alarm ID too long")
+                return None, calendar_source_id, calendar_event_uid
+            except (ValueError, IndexError):
+                raise HTTPException(status_code=400, detail="Invalid alarm ID format") from None
+        else:
+            raise HTTPException(status_code=400, detail="Invalid alarm ID format") from None
+
+
 def _format_fallback_datetime(dt_obj, end_obj, all_day_flag: bool, start_iso_str: str) -> str:
     """Format a human-readable fallback string for an alarm datetime (French)."""
     try:
@@ -449,16 +478,21 @@ def _render_alarm_item(
     tz_query: str,
 ) -> str:
     """Render a single alarm item HTML snippet."""
+    from markupsafe import escape
+
     uid = alarm.get("uid")
     name = alarm.get("name", "")
+    # Security: Escape HTML to prevent XSS attacks from calendar event summaries
+    escaped_name = escape(name)
+    escaped_fallback = escape(fallback_text)
     return f"""
         <div class="alarm-item">
             <div class="alarm-header">
                 <span class="alarm-icon">📅</span>
-                <span class="alarm-title">{name}</span>
+                <span class="alarm-title">{escaped_name}</span>
             </div>
             <div class="alarm-body">
-                <span class="alarm-time alarm-time-small" data-start="{start_iso}" data-end="{end_iso}" data-allday="{str(all_day).lower()}">{fallback_text}</span>
+                <span class="alarm-time alarm-time-small" data-start="{start_iso}" data-end="{end_iso}" data-allday="{str(all_day).lower()}">{escaped_fallback}</span>
             </div>
             <button hx-post="/api/alarms/{uid}/dismiss?mock={"true" if mock else "false"}{tz_query}"
                     hx-target="#alarm-poller"
@@ -466,6 +500,54 @@ def _render_alarm_item(
                     class="dismiss-btn-small">Dismiss</button>
         </div>
         """
+
+
+@router.get("/components/index-refresh", response_class=HTMLResponse)
+async def components_index_refresh(request: Request, session: Session = Depends(get_session)):
+    """Return out-of-band fragments to refresh main index components.
+
+    This endpoint returns HTML fragments with `hx-swap-oob` attributes so
+    HTMX will update the corresponding wrappers on the client without
+    replacing the triggering element.
+    """
+    settings = session.exec(select(AppSettings)).first()
+    out_parts: list[str] = []
+
+    # Weather fragment (if location configured)
+    if (
+        settings
+        and settings.weather_latitude is not None
+        and settings.weather_longitude is not None
+    ):
+        try:
+            weather = await WeatherService.get_current_weather(
+                settings.weather_latitude, settings.weather_longitude
+            )
+            weather_html = templates.env.get_template("partials/weather.html").render(
+                request=request, has_location=True, weather=weather
+            )
+            out_parts.append(f'<div hx-swap-oob="innerHTML:#weather-wrapper">{weather_html}</div>')
+        except Exception:
+            logger.exception("Failed to render weather fragment for index-refresh")
+
+    # Alarm fragment
+    try:
+        AlarmService.purge_old_dismissed_alarms(session)
+        calendar_alarms = await _fetch_calendar_alarms(session, None)
+        simulated_alarms = _fetch_simulated_alarms(session)
+        active_alarms = calendar_alarms + simulated_alarms
+        alarm_contexts = _alarms_to_context(active_alarms, mock=False, tz_offset=None)
+        if alarm_contexts:
+            alarm_html = templates.env.get_template("partials/alarms.html").render(
+                alarms=alarm_contexts
+            )
+            out_parts.append(f'<div hx-swap-oob="innerHTML:#alarm-poller">{alarm_html}</div>')
+        else:
+            out_parts.append('<div hx-swap-oob="innerHTML:#alarm-poller"></div>')
+    except Exception:
+        logger.exception("Failed to render alarm fragment for index-refresh")
+
+    return HTMLResponse("\n".join(out_parts))
 
 
 @router.get("/components/alarm", response_class=HTMLResponse)
@@ -525,7 +607,11 @@ async def check_alarm(
     )
 
 
-@router.get("/debug/calendar-events", response_class=JSONResponse)
+@router.get(
+    "/debug/calendar-events",
+    response_class=JSONResponse,
+    dependencies=[Depends(require_debug_mode)],
+)
 async def debug_calendar_events(session: Session = Depends(get_session)) -> JSONResponse:
     """Return cached calendar events and dismissed alarms for debugging."""
     cached = session.exec(select(CalendarEventCache)).all()
@@ -536,17 +622,11 @@ async def debug_calendar_events(session: Session = Depends(get_session)) -> JSON
         try:
             start_iso = ensure_utc_aware(ev.event_start).isoformat() if ev.event_start else None
         except Exception:
-            try:
-                start_iso = ensure_utc_aware(ev.event_start).isoformat() if ev.event_start else None
-            except Exception:
-                start_iso = ev.event_start.isoformat() if ev.event_start else None
+            start_iso = ev.event_start.isoformat() if ev.event_start else None
         try:
             end_iso = ensure_utc_aware(ev.event_end).isoformat() if ev.event_end else None
         except Exception:
-            try:
-                end_iso = ensure_utc_aware(ev.event_end).isoformat() if ev.event_end else None
-            except Exception:
-                end_iso = ev.event_end.isoformat() if ev.event_end else None
+            end_iso = ev.event_end.isoformat() if ev.event_end else None
         events_out.append(
             {
                 "calendar_source_id": ev.calendar_source_id,
@@ -570,7 +650,9 @@ async def debug_calendar_events(session: Session = Depends(get_session)) -> JSON
             dismissed_iso = a.dismissed_at.isoformat() if a.dismissed_at else None
         alarms_out.append(
             {
-                "uid": a.uid,
+                "id": str(a.id),  # Convert UUID to string
+                "calendar_source_id": a.calendar_source_id,
+                "calendar_event_uid": a.calendar_event_uid,
                 "trigger_time": trig_iso,
                 "dismissed_at": dismissed_iso,
             }
@@ -579,7 +661,9 @@ async def debug_calendar_events(session: Session = Depends(get_session)) -> JSON
     return JSONResponse({"cached_events": events_out, "alarm_events": alarms_out})
 
 
-@router.get("/debug/calendars", response_class=JSONResponse)
+@router.get(
+    "/debug/calendars", response_class=JSONResponse, dependencies=[Depends(require_debug_mode)]
+)
 async def debug_calendars(session: Session = Depends(get_session)) -> JSONResponse:
     """Return configured calendar sources and their sync status for debugging."""
     sources = session.exec(select(CalendarSource)).all()
@@ -613,59 +697,88 @@ async def debug_calendars(session: Session = Depends(get_session)) -> JSONRespon
     return JSONResponse({"sources": src_out, "statuses": status_out})
 
 
-@router.post("/api/alarms/{uid}/dismiss", response_class=HTMLResponse)
+@router.post("/api/alarms/{alarm_id}/dismiss", response_class=HTMLResponse)
 async def dismiss_alarm(
     request: Request,
-    uid: str,
+    alarm_id: str,
     mock: bool = False,
     tz_offset: int | None = None,
     session: Session = Depends(get_session),
 ):
     """Dismisses an alarm and returns the updated alarm list."""
+    from uuid import uuid4
+
+    # Parse alarm_id - could be UUID or composite uid (calendar_source_id:event_uid)
+    calendar_source_id = None
+    calendar_event_uid = None
+    alarm_uuid = None
+
+    # If this is a mock request, bypass strict alarm_id validation and return
+    # the mock alarm list immediately. Mock IDs (e.g. "mock-1") are allowed
+    # and should not be treated as errors.
+    if mock:
+        return await check_alarm(request, mock=True, tz_offset=tz_offset, session=session)
+
+    # Parse alarm_id into components
+    alarm_uuid, calendar_source_id, calendar_event_uid = _parse_alarm_id(alarm_id)
 
     if not mock:
-        # Check if alarm already exists
-        existing = session.exec(select(AlarmEvent).where(AlarmEvent.uid == uid)).first()
+        existing = None
+
+        if alarm_uuid:
+            # Direct UUID lookup
+            existing = session.exec(select(AlarmEvent).where(AlarmEvent.id == alarm_uuid)).first()
+        else:
+            # Lookup by calendar relationship
+            existing = session.exec(
+                select(AlarmEvent).where(
+                    AlarmEvent.calendar_source_id == calendar_source_id,
+                    AlarmEvent.calendar_event_uid == calendar_event_uid,
+                )
+            ).first()
+
         if existing:
             # Update existing alarm record with dismissal time (UTC-aware)
             existing.dismissed_at = ensure_utc_aware(datetime.now())
             session.add(existing)
         else:
-            # Create new alarm record (for alarms from calendar that haven't been seen yet)
-            # Try to find a matching cached calendar event to preserve the event's start time
+            # Create new alarm record for calendar event dismissal
             trigger_time = ensure_utc_aware(datetime.now())
-            try:
-                # CalendarEventCache stores events with calendar_source_id + uid as composite in the UI
-                # Try both composite and raw uid lookups
-                cached = session.exec(
-                    select(CalendarEventCache).where(CalendarEventCache.uid == uid)
-                ).first()
-                if not cached and uid and ":" in uid:
-                    # Try to split composite UID and lookup by raw uid
-                    _src, raw_uid = uid.split(":", 1)
-                    cached = session.exec(
-                        select(CalendarEventCache).where(CalendarEventCache.uid == raw_uid)
-                    ).first()
 
-                if cached:
-                    trigger_time = cached.event_start
-            except Exception as e:
-                logger.exception(
-                    "DB lookup error while finding cached event for uid %s: %s", uid, e
-                )
-                # Fall back to now on any DB lookup error
-                trigger_time = ensure_utc_aware(datetime.now())
+            # Try to find cached event for accurate trigger time
+            if calendar_source_id and calendar_event_uid:
+                try:
+                    cached = session.exec(
+                        select(CalendarEventCache).where(
+                            CalendarEventCache.calendar_source_id == calendar_source_id,
+                            CalendarEventCache.uid == calendar_event_uid,
+                        )
+                    ).first()
+                    if cached:
+                        trigger_time = cached.event_start
+                except Exception as e:
+                    logger.exception(
+                        "DB lookup error while finding cached event for calendar_source_id=%s, uid=%s: %s",
+                        calendar_source_id,
+                        calendar_event_uid,
+                        e,
+                    )
+                    # Fall back to now on any DB lookup error
+                    trigger_time = ensure_utc_aware(datetime.now())
 
             alarm_event = AlarmEvent(
-                uid=uid,
+                id=uuid4(),  # Generate new UUID
                 trigger_time=trigger_time,
                 dismissed_at=ensure_utc_aware(datetime.now()),
+                calendar_source_id=calendar_source_id,
+                calendar_event_uid=calendar_event_uid,
             )
             session.add(alarm_event)
+
         session.commit()
         # Refresh session to ensure we get updated data
         session.expunge_all()
 
     # Return the updated list immediately
-    logger.info("Alarm dismissed uid=%s (mock=%s, tz_offset=%s)", uid, mock, tz_offset)
+    logger.info("Alarm dismissed id=%s (mock=%s, tz_offset=%s)", alarm_id, mock, tz_offset)
     return await check_alarm(request, mock=mock, tz_offset=tz_offset, session=session)

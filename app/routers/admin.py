@@ -130,10 +130,16 @@ async def update_settings(
     session: Session = Depends(get_session),
 ):
     # Basic validation for form inputs
-    if latitude is not None and not (-90.0 <= latitude <= 90.0):
-        raise HTTPException(status_code=422, detail="Latitude must be between -90 and 90")
-    if longitude is not None and not (-180.0 <= longitude <= 180.0):
-        raise HTTPException(status_code=422, detail="Longitude must be between -180 and 180")
+    import math
+
+    if latitude is not None and (
+        math.isnan(latitude) or math.isinf(latitude) or not (-90.0 <= latitude <= 90.0)
+    ):
+        raise HTTPException(status_code=422, detail="Invalid latitude value")
+    if longitude is not None and (
+        math.isnan(longitude) or math.isinf(longitude) or not (-180.0 <= longitude <= 180.0)
+    ):
+        raise HTTPException(status_code=422, detail="Invalid longitude value")
     if duration is not None and duration <= 0:
         raise HTTPException(status_code=422, detail="Duration must be a positive integer")
 
@@ -193,9 +199,7 @@ async def get_calendars_partial(request: Request, session: Session = Depends(get
                             )
                         except Exception:
                             last_synced = (
-                                ensure_utc_aware(status.last_synced_at).isoformat()
-                                if status.last_synced_at
-                                else None
+                                status.last_synced_at.isoformat() if status.last_synced_at else None
                             )
                         if getattr(status, "next_sync_at", None):
                             try:
@@ -205,18 +209,9 @@ async def get_calendars_partial(request: Request, session: Session = Depends(get
                                     else None
                                 )
                             except Exception:
-                                try:
-                                    next_sync = (
-                                        ensure_utc_aware(status.next_sync_at).isoformat()
-                                        if status.next_sync_at
-                                        else None
-                                    )
-                                except Exception:
-                                    next_sync = (
-                                        ensure_utc_aware(status.next_sync_at).isoformat()
-                                        if status.next_sync_at
-                                        else None
-                                    )
+                                next_sync = (
+                                    status.next_sync_at.isoformat() if status.next_sync_at else None
+                                )
                     sync_statuses[source.id] = {
                         "calendar_source_id": status.calendar_source_id,
                         "last_synced_at": last_synced,
@@ -244,6 +239,20 @@ async def add_calendar(
     color: str = Form("#3182ce"),
     session: Session = Depends(get_session),
 ):
+    # Security: Validate URL to prevent SSRF attacks
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    # Only allow http, https, and webcal schemes
+    if parsed.scheme not in ("http", "https", "webcal"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid URL scheme: {parsed.scheme}. Only http, https, and webcal are allowed.",
+        )
+    # Ensure URL has a network location (domain)
+    if not parsed.netloc:
+        raise HTTPException(status_code=400, detail="Invalid URL: missing domain")
+
     source = CalendarSource(label=label, url=url, color=color)
     session.add(source)
     session.commit()
@@ -415,17 +424,17 @@ async def simulate_alarm(
     session: Session = Depends(get_session),
 ):
     """Create a simulated alarm that appears after the specified delay."""
-    from datetime import datetime, timedelta
+    from datetime import UTC, datetime, timedelta
     from uuid import uuid4
 
-    # Calculate trigger time (UTC-aware)
-    from app.utils.timezone import ensure_utc_aware
+    # Calculate trigger time in UTC
+    # Use datetime.now().astimezone(UTC) to get local time, then convert to UTC properly
+    trigger_time = datetime.now(UTC) + timedelta(seconds=delay_seconds)
 
-    trigger_time = ensure_utc_aware(datetime.now() + timedelta(seconds=delay_seconds))
-
-    # Create alarm event with unique UID
+    # Create alarm event with UUID primary key
+    # Test alarms have NULL calendar_source_id and calendar_event_uid
     alarm = AlarmEvent(
-        uid=f"test-{uuid4()}",
+        id=uuid4(),
         trigger_time=trigger_time,
     )
 
