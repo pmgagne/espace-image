@@ -83,6 +83,26 @@
         setInterval(updateTime, 1000);
         // initial formatting of any alarm times already present
         try { formatAlarmTimes(); } catch (e) { /* ignore */ }
+        // Ensure a short client-side index-refresh to pick up new alarms
+        // quickly (uses HTMX to request /components/index-refresh which
+        // returns out-of-band fragments). This complements the server-side
+        // configured interval and helps surface new alarms faster.
+        (function () {
+            var INDEX_AUTO_REFRESH_MS = 30 * 1000; // 30 seconds
+            if (window.htmx && typeof window.setInterval === 'function') {
+                try {
+                    setInterval(function () {
+                        try {
+                            htmx.ajax('GET', '/components/index-refresh');
+                        } catch (e) {
+                            console.error('htmx ajax error', e);
+                        }
+                    }, INDEX_AUTO_REFRESH_MS);
+                } catch (e) {
+                    console.error('Failed to start index auto-refresh', e);
+                }
+            }
+        })();
     });
 
     function updateTime() {
