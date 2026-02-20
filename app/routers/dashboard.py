@@ -371,6 +371,43 @@ def _render_alarms_html(
     """
 
 
+def _parse_alarm_id(alarm_id: str) -> tuple[object | None, int | None, str | None]:
+    """Parse an alarm identifier which may be a UUID or a composite "source_id:event_uid".
+
+    Returns: (alarm_uuid, calendar_source_id, calendar_event_uid)
+    Raises: HTTPException(400) on invalid format.
+    """
+    from uuid import UUID
+
+    calendar_source_id = None
+    calendar_event_uid = None
+    alarm_uuid = None
+
+    # Try parsing as UUID first
+    try:
+        alarm_uuid = UUID(alarm_id)
+        return alarm_uuid, None, None
+    except ValueError:
+        # Not a UUID - might be composite format "source_id:event_uid"
+        if ":" in alarm_id:
+            parts = alarm_id.split(":", 1)
+            try:
+                calendar_source_id = int(parts[0])
+                calendar_event_uid = parts[1]
+                # Validate calendar_event_uid format (allow timestamp chars: #, +, -, :, etc.)
+                import re
+
+                if not re.match(r"^[\w\-:.@#+]+$", calendar_event_uid):
+                    raise HTTPException(status_code=400, detail="Invalid alarm ID format")
+                if len(calendar_event_uid) > 500:
+                    raise HTTPException(status_code=400, detail="Alarm ID too long")
+                return None, calendar_source_id, calendar_event_uid
+            except (ValueError, IndexError):
+                raise HTTPException(status_code=400, detail="Invalid alarm ID format") from None
+        else:
+            raise HTTPException(status_code=400, detail="Invalid alarm ID format") from None
+
+
 def _format_fallback_datetime(dt_obj, end_obj, all_day_flag: bool, start_iso_str: str) -> str:
     """Format a human-readable fallback string for an alarm datetime (French)."""
     try:
@@ -669,34 +706,21 @@ async def dismiss_alarm(
     session: Session = Depends(get_session),
 ):
     """Dismisses an alarm and returns the updated alarm list."""
-    from uuid import UUID, uuid4
+    from uuid import uuid4
 
     # Parse alarm_id - could be UUID or composite uid (calendar_source_id:event_uid)
     calendar_source_id = None
     calendar_event_uid = None
     alarm_uuid = None
 
-    # Try parsing as UUID first
-    try:
-        alarm_uuid = UUID(alarm_id)
-    except ValueError:
-        # Not a UUID - might be composite format "source_id:event_uid"
-        if ":" in alarm_id:
-            parts = alarm_id.split(":", 1)
-            try:
-                calendar_source_id = int(parts[0])
-                calendar_event_uid = parts[1]
-                # Validate calendar_event_uid format (allow timestamp chars: #, +, -, :, etc.)
-                import re
+    # If this is a mock request, bypass strict alarm_id validation and return
+    # the mock alarm list immediately. Mock IDs (e.g. "mock-1") are allowed
+    # and should not be treated as errors.
+    if mock:
+        return await check_alarm(request, mock=True, tz_offset=tz_offset, session=session)
 
-                if not re.match(r"^[\w\-:.@#+]+$", calendar_event_uid):
-                    raise HTTPException(status_code=400, detail="Invalid alarm ID format")
-                if len(calendar_event_uid) > 500:
-                    raise HTTPException(status_code=400, detail="Alarm ID too long")
-            except (ValueError, IndexError):
-                raise HTTPException(status_code=400, detail="Invalid alarm ID format")
-        else:
-            raise HTTPException(status_code=400, detail="Invalid alarm ID format")
+    # Parse alarm_id into components
+    alarm_uuid, calendar_source_id, calendar_event_uid = _parse_alarm_id(alarm_id)
 
     if not mock:
         existing = None

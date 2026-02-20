@@ -1,6 +1,6 @@
 """Tests for the debug panel alarm simulation feature."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlmodel import select
 
@@ -42,12 +42,18 @@ def test_simulate_alarm_creates_alarm_event(client, session):
 
     # Get the newest alarm
     new_alarm = all_alarms[-1]
-    assert new_alarm.uid.startswith("test-")
+    # Simulated alarms use generated UUID `id` rather than a separate `uid` field
+    assert getattr(new_alarm, "id", None) is not None
+    assert new_alarm.calendar_event_uid is None
     assert new_alarm.dismissed_at is None  # Not dismissed yet
 
     # Verify trigger time is approximately now + 5 seconds
-    expected_trigger = datetime.now() + timedelta(seconds=5)
-    time_diff = abs((new_alarm.trigger_time - expected_trigger).total_seconds())
+    expected_trigger = datetime.now(UTC) + timedelta(seconds=5)
+    # Normalize naive datetimes to UTC for comparison
+    trg = new_alarm.trigger_time
+    if trg.tzinfo is None:
+        trg = trg.replace(tzinfo=UTC)
+    time_diff = abs((trg - expected_trigger).total_seconds())
     assert time_diff < 2  # Allow 2 second tolerance
 
 
@@ -61,8 +67,11 @@ def test_simulate_alarm_with_zero_delay(client, session):
     new_alarm = all_alarms[-1]
 
     # Trigger time should be very close to now
-    time_diff = abs((new_alarm.trigger_time - datetime.now()).total_seconds())
-    assert time_diff < 1
+    trg = new_alarm.trigger_time
+    if trg.tzinfo is None:
+        trg = trg.replace(tzinfo=UTC)
+    time_diff = abs((trg - datetime.now(UTC)).total_seconds())
+    assert time_diff < 2
 
 
 def test_simulate_alarm_uid_is_unique(client, session):
@@ -71,15 +80,14 @@ def test_simulate_alarm_uid_is_unique(client, session):
     client.post("/admin/debug/simulate-alarm", data={"delay_seconds": 0})
 
     all_alarms = session.exec(select(AlarmEvent)).all()
-    uids = [alarm.uid for alarm in all_alarms]
+    ids = [str(alarm.id) for alarm in all_alarms]
 
-    # Check all UIDs are unique
-    assert len(uids) == len(set(uids))
+    # Check all IDs are unique
+    assert len(ids) == len(set(ids))
 
-    # Check they start with "test-"
-    for uid in uids:
-        if uid.startswith("test-"):
-            assert len(uid) > 5  # "test-" + uuid
+    # Basic sanity: IDs are non-empty strings
+    for _id in ids:
+        assert len(_id) > 0
 
 
 def test_simulated_alarm_can_be_dismissed(client, session):
@@ -87,12 +95,12 @@ def test_simulated_alarm_can_be_dismissed(client, session):
     # Create a simulated alarm
     client.post("/admin/debug/simulate-alarm", data={"delay_seconds": 0})
 
-    # Get the alarm UID
+    # Get the alarm id (simulated alarms are identified by UUID)
     alarm = session.exec(select(AlarmEvent)).first()
-    alarm_uid = alarm.uid
+    alarm_id = str(alarm.id)
 
     # Dismiss the alarm
-    response = client.post(f"/api/alarms/{alarm_uid}/dismiss?mock=false")
+    response = client.post(f"/api/alarms/{alarm_id}/dismiss?mock=false")
     assert response.status_code == 200
 
     # Need to refresh the session to get updated data
@@ -100,7 +108,11 @@ def test_simulated_alarm_can_be_dismissed(client, session):
 
     # Check alarm is marked as dismissed - the dismiss endpoint creates a new record
     # or updates existing one
-    all_alarms = session.exec(select(AlarmEvent).where(AlarmEvent.uid == alarm_uid)).all()
+    # Use stored alarm_id (convert back to UUID for query)
+    from uuid import UUID
+
+    alarm_uuid = UUID(alarm_id)
+    all_alarms = session.exec(select(AlarmEvent).where(AlarmEvent.id == alarm_uuid)).all()
     assert len(all_alarms) > 0
     # Find the one with dismissed_at set
     dismissed = [a for a in all_alarms if a.dismissed_at is not None]

@@ -21,7 +21,7 @@ def test_format_alarm_all_day():
 
 def test_purge_old_dismissed_alarms(session):
     old_alarm = AlarmEvent(
-        uid="old-to-purge",
+        calendar_event_uid="old-to-purge",
         trigger_time=datetime.now() - timedelta(days=60),
         dismissed_at=datetime.now() - timedelta(days=31),
     )
@@ -30,5 +30,7 @@ def test_purge_old_dismissed_alarms(session):
 
     AlarmService.purge_old_dismissed_alarms(session)
 
-    remaining = session.exec(select(AlarmEvent).where(AlarmEvent.uid == "old-to-purge")).all()
+    remaining = session.exec(
+        select(AlarmEvent).where(AlarmEvent.calendar_event_uid == "old-to-purge")
+    ).all()
     assert remaining == []

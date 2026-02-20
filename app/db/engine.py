@@ -15,7 +15,7 @@ connect_args = {"check_same_thread": False}
 engine = create_engine(sqlite_url, connect_args=connect_args)
 
 
-def migrate_database() -> None:
+def migrate_database() -> None:  # noqa: C901
     """
     Perform database migrations for schema changes.
     SQLModel.metadata.create_all() only creates new tables, not new columns.
@@ -139,7 +139,7 @@ def migrate_database() -> None:
 
             from uuid import uuid4
 
-            for old_id, uid, trigger_time, dismissed_at in existing_alarms:
+            for _old_id, uid, trigger_time, dismissed_at in existing_alarms:
                 new_uuid = str(uuid4())
 
                 # Parse composite UID to extract calendar relationship
