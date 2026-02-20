@@ -28,6 +28,14 @@ logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler()
 
+# Sync interval constants (can be overridden via env vars)
+# Calendar sync interval: default 3 hours (in minutes)
+CALENDAR_SYNC_INTERVAL_MINUTES = int(os.getenv("CALENDAR_SYNC_INTERVAL_MINUTES", 180))
+# Meteo (weather) sync interval: default 15 minutes (in minutes)
+METEO_SYNC_INTERVAL_MINUTES = int(os.getenv("METEO_SYNC_INTERVAL_MINUTES", 15))
+# Index auto-update interval: default 5 minutes (in seconds)
+INDEX_UPDATE_INTERVAL_SECONDS = int(os.getenv("INDEX_UPDATE_INTERVAL_SECONDS", 300))
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Middleware to add security headers to all responses."""
@@ -42,7 +50,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 async def background_sync_calendars():
-    """Background task to sync calendar events every 10 minutes."""
+    """Background task to sync calendar events on configured interval."""
     with Session(engine) as session:
         try:
             await CalendarService.sync_calendar_events(session)
@@ -68,13 +76,15 @@ async def lifespan(_app: FastAPI):
     scheduler.add_job(
         background_sync_calendars,
         "interval",
-        minutes=10,
+        minutes=CALENDAR_SYNC_INTERVAL_MINUTES,
         id="calendar_sync",
-        name="Sync calendar events every 10 minutes",
+        name=f"Sync calendar events every {CALENDAR_SYNC_INTERVAL_MINUTES} minutes",
         next_run_time=datetime.now(UTC),
     )
     scheduler.start()
-    logger.info("Scheduler started (calendar sync every 10 minutes)")
+    logger.info(
+        "Scheduler started (calendar sync every %s minutes)", CALENDAR_SYNC_INTERVAL_MINUTES
+    )
 
     yield
 
@@ -98,6 +108,12 @@ templates = Jinja2Templates(directory="app/templates")
 # Debug mode flag
 DEBUG_MODE = os.getenv("WEBAPP_DEBUG", "").lower() in ("true", "1", "yes")
 templates.env.globals["debug_mode"] = DEBUG_MODE
+# Expose intervals to templates so front-end uses same configuration
+templates.env.globals["weather_interval_seconds"] = METEO_SYNC_INTERVAL_MINUTES * 60
+templates.env.globals["legacy_weather_interval_ms"] = METEO_SYNC_INTERVAL_MINUTES * 60 * 1000
+templates.env.globals["calendar_sync_interval_minutes"] = CALENDAR_SYNC_INTERVAL_MINUTES
+templates.env.globals["index_update_interval_seconds"] = INDEX_UPDATE_INTERVAL_SECONDS
+templates.env.globals["legacy_index_update_interval_ms"] = INDEX_UPDATE_INTERVAL_SECONDS * 1000
 
 # Include Routers
 app.include_router(dashboard.router)

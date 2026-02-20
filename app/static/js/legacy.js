@@ -45,7 +45,12 @@
                 // Returns updated content
                 var html = xhr.responseText;
                 document.getElementById(targetId).innerHTML = html;
-                lastAlarmHtml = html.trim(); // Update tracker
+                // Normalize tracker the same way `checkAlarm` compares updates
+                try {
+                    lastAlarmHtml = html.replace(/\s/g, '').toLowerCase();
+                } catch (e) {
+                    lastAlarmHtml = html.trim();
+                }
                 bindDismissButtons(); // Re-bind after update
                 try { formatAlarmTimesLegacy(); } catch (e) { console.error(e); }
             }

@@ -318,15 +318,18 @@
     <div id="clock">00:00</div>
     <div id="date-display">Monday, January 1</div>
 
-    <!-- Weather Widget (Updates every 10m) -->
-    <div hx-get="/components/weather" hx-trigger="load, every 600s" hx-swap="innerHTML">
+    <!-- Weather Widget (initial load only - refreshed by index refresh) -->
+    <div hx-get="/components/weather" hx-trigger="load" hx-swap="innerHTML">
         <div class="weather-info">Loading...</div>
     </div>
 </div>
 
-<!-- Alarm Poller (Updates every 10s for responsiveness) -->
-<div id="alarm-poller" hx-get="/components/alarm" hx-trigger="load, every 10s" hx-swap="innerHTML"
-    hx-vals="js:{tz_offset: (new Date()).getTimezoneOffset()}">
+<!-- Alarm Poller (initial load only - refreshed by index refresh) -->
+<div id="alarm-poller" hx-get="/components/alarm" hx-trigger="load" hx-swap="innerHTML">
 </div>
+
+<!-- Central index refresh (updates multiple fragments every configured interval) -->
+<div id="index-refresh" hx-get="/components/index-refresh" hx-trigger="load, every {{ index_update_interval_seconds }}s"
+    hx-swap="none"></div>
 
 {% endblock %}

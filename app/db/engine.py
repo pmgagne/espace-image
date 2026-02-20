@@ -105,6 +105,80 @@ def migrate_database() -> None:
                 "default_alarm_for_all_events column already exists on calendarsource, no migration needed"
             )
 
+        # Migration: Convert AlarmEvent to use UUID primary key
+        cursor.execute("PRAGMA table_info(alarmevent)")
+        alarm_columns = [row[1] for row in cursor.fetchall()]
+
+        if "uid" in alarm_columns:
+            logger.info("Migrating AlarmEvent table to UUID primary key")
+
+            # Step 1: Create new table with UUID schema
+            cursor.execute("""
+                CREATE TABLE alarmevent_new (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    trigger_time TIMESTAMP NOT NULL,
+                    dismissed_at TIMESTAMP,
+                    calendar_source_id INTEGER,
+                    calendar_event_uid TEXT
+                )
+            """)
+
+            # Step 2: Create indexes
+            cursor.execute(
+                "CREATE INDEX ix_alarmevent_new_calendar_source_id "
+                "ON alarmevent_new(calendar_source_id)"
+            )
+            cursor.execute(
+                "CREATE INDEX ix_alarmevent_new_calendar_event_uid "
+                "ON alarmevent_new(calendar_event_uid)"
+            )
+
+            # Step 3: Migrate existing data with UUID generation
+            cursor.execute("SELECT id, uid, trigger_time, dismissed_at FROM alarmevent")
+            existing_alarms = cursor.fetchall()
+
+            from uuid import uuid4
+
+            for old_id, uid, trigger_time, dismissed_at in existing_alarms:
+                new_uuid = str(uuid4())
+
+                # Parse composite UID to extract calendar relationship
+                calendar_source_id = None
+                calendar_event_uid = None
+
+                if (
+                    uid
+                    and ":" in uid
+                    and not uid.startswith("test-")
+                    and not uid.startswith("mock-")
+                ):
+                    # Parse composite format: "source_id:event_uid"
+                    parts = uid.split(":", 1)
+                    try:
+                        calendar_source_id = int(parts[0])
+                        calendar_event_uid = parts[1]
+                    except (ValueError, IndexError):
+                        # Invalid format, leave as NULL
+                        pass
+
+                cursor.execute(
+                    """
+                    INSERT INTO alarmevent_new (id, trigger_time, dismissed_at,
+                                                 calendar_source_id, calendar_event_uid)
+                    VALUES (?, ?, ?, ?, ?)
+                """,
+                    (new_uuid, trigger_time, dismissed_at, calendar_source_id, calendar_event_uid),
+                )
+
+            # Step 4: Drop old table and rename new table
+            cursor.execute("DROP TABLE alarmevent")
+            cursor.execute("ALTER TABLE alarmevent_new RENAME TO alarmevent")
+
+            conn.commit()
+            logger.info("Migration completed: AlarmEvent now uses UUID primary key")
+        else:
+            logger.debug("AlarmEvent table already migrated to UUID, skipping")
+
     except Exception as e:
         logger.error("Migration failed: %s", e)
         conn.rollback()

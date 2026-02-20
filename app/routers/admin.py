@@ -199,9 +199,7 @@ async def get_calendars_partial(request: Request, session: Session = Depends(get
                             )
                         except Exception:
                             last_synced = (
-                                status.last_synced_at.isoformat()
-                                if status.last_synced_at
-                                else None
+                                status.last_synced_at.isoformat() if status.last_synced_at else None
                             )
                         if getattr(status, "next_sync_at", None):
                             try:
@@ -212,9 +210,7 @@ async def get_calendars_partial(request: Request, session: Session = Depends(get
                                 )
                             except Exception:
                                 next_sync = (
-                                    status.next_sync_at.isoformat()
-                                    if status.next_sync_at
-                                    else None
+                                    status.next_sync_at.isoformat() if status.next_sync_at else None
                                 )
                     sync_statuses[source.id] = {
                         "calendar_source_id": status.calendar_source_id,
@@ -428,17 +424,17 @@ async def simulate_alarm(
     session: Session = Depends(get_session),
 ):
     """Create a simulated alarm that appears after the specified delay."""
-    from datetime import datetime, timedelta
+    from datetime import UTC, datetime, timedelta
     from uuid import uuid4
 
-    # Calculate trigger time (UTC-aware)
-    from app.utils.timezone import ensure_utc_aware
+    # Calculate trigger time in UTC
+    # Use datetime.now().astimezone(UTC) to get local time, then convert to UTC properly
+    trigger_time = datetime.now(UTC) + timedelta(seconds=delay_seconds)
 
-    trigger_time = ensure_utc_aware(datetime.now() + timedelta(seconds=delay_seconds))
-
-    # Create alarm event with unique UID
+    # Create alarm event with UUID primary key
+    # Test alarms have NULL calendar_source_id and calendar_event_uid
     alarm = AlarmEvent(
-        uid=f"test-{uuid4()}",
+        id=uuid4(),
         trigger_time=trigger_time,
     )
 
