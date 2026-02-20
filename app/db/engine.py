@@ -88,6 +88,20 @@ def migrate_database() -> None:  # noqa: C901
         else:
             logger.debug("event_tz column already exists, no migration needed")
 
+        # Migration: Add all_day column to calendar_event_cache if missing
+        cursor.execute("PRAGMA table_info(calendar_event_cache)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "all_day" not in columns:
+            logger.info("Adding all_day column to calendar_event_cache table")
+            cursor.execute("ALTER TABLE calendar_event_cache ADD COLUMN all_day BOOLEAN DEFAULT 0")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS ix_calendar_event_cache_all_day ON calendar_event_cache (all_day)"
+            )
+            conn.commit()
+            logger.info("Migration completed: all_day column added")
+        else:
+            logger.debug("all_day column already exists, no migration needed")
+
         # Migration: Add default_alarm_for_all_events column to calendarsource if missing
         cursor.execute("PRAGMA table_info(calendarsource)")
         cs_columns = [row[1] for row in cursor.fetchall()]
