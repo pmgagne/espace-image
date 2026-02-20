@@ -93,7 +93,7 @@
                 try {
                     setInterval(function () {
                         try {
-                            htmx.ajax('GET', '/components/index-refresh');
+                            window.htmx.ajax('GET', '/components/index-refresh');
                         } catch (e) {
                             console.error('htmx ajax error', e);
                         }
