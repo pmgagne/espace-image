@@ -84,6 +84,8 @@ class CalendarEventCache(SQLModel, table=True):
     summary: str
     description: str = Field(default="")
     location: str = Field(default="")
+    # Whether the original event was an all-day event (DATE type in ICS)
+    all_day: bool = Field(default=False, index=True)
     trigger_time: datetime | None = Field(default=None, index=True)  # Stored in UTC if set
     optional_trigger: bool = Field(
         default=False, index=True, description="True if trigger is a default (not from VALARM)"

@@ -207,9 +207,14 @@ async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None
                     "start": event.event_start,
                     "end": event.event_end,
                     "tzid": getattr(event, "event_tz", None),
-                    "all_day": (
-                        event.event_start.hour == 0
-                        and event.event_start.minute == 0
+                    # Prefer explicit all_day flag stored in the cache when available;
+                    # fallback to duration/midnight heuristic for backwards compatibility.
+                    "all_day": getattr(event, "all_day", False)
+                    or (
+                        getattr(event, "event_start", None) is not None
+                        and getattr(event, "event_end", None) is not None
+                        and getattr(event, "event_start", None).hour == 0
+                        and getattr(event, "event_start", None).minute == 0
                         and (event.event_end - event.event_start).days >= 1
                     ),
                     "trigger_time": trigger,

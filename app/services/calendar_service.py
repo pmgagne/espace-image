@@ -1011,6 +1011,11 @@ class CalendarService:
                     existing.summary = event["summary"]
                     existing.description = event["description"]
                     existing.location = event["location"]
+                    # Persist whether this was an all-day event
+                    try:
+                        existing.all_day = bool(event.get("all_day", False))
+                    except Exception:
+                        existing.all_day = False
                     existing.trigger_time = trigger_time
                     existing.optional_trigger = optional_trigger_flag
                     session.add(existing)
@@ -1025,6 +1030,7 @@ class CalendarService:
                         summary=event["summary"],
                         description=event["description"],
                         location=event["location"],
+                        all_day=bool(event.get("all_day", False)),
                         trigger_time=trigger_time,
                         optional_trigger=optional_trigger_flag,
                     )
