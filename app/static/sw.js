@@ -1,5 +1,5 @@
 // Espace-Image PWA Service Worker
-const CACHE_NAME = 'espaceimage-cache-v2';  // Bumped version to force refresh
+const CACHE_NAME = 'espaceimage-cache-v3';  // Bumped to force refresh after template fix
 const urlsToCache = [
     '/static/espaceimage-192.png',
     '/static/espaceimage-512.png',
