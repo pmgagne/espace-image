@@ -5,7 +5,6 @@ import os
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
 from app.db.models import (
@@ -20,10 +19,10 @@ from app.db.session import get_session
 from app.services.calendar_service import CalendarService
 from app.services.image_service import GalleryManager
 from app.services.weather_service import WeatherService
+from app.template_config import templates
 from app.utils.timezone import get_local_timezone_name
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-templates = Jinja2Templates(directory="app/templates")
 logger = logging.getLogger(__name__)
 gallery_manager = GalleryManager()
 

@@ -5,7 +5,6 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
 from app.db.models import (
@@ -20,10 +19,10 @@ from app.db.session import get_session
 from app.schemas import SlideResponse, WeatherResponse
 from app.services.alarm_service import AlarmService
 from app.services.weather_service import WeatherService
+from app.template_config import templates
 from app.utils.timezone import datetime_to_iso_with_tz, ensure_utc_aware
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
 logger = logging.getLogger(__name__)
 
 
