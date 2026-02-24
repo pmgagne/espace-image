@@ -6,10 +6,11 @@ from datetime import UTC, datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
 from starlette.middleware.base import BaseHTTPMiddleware
 
+# Import configuration constants
+from app.config import CALENDAR_SYNC_INTERVAL_MINUTES
 from app.db.engine import create_db_and_tables, engine
 from app.routers import admin, dashboard, media
 from app.services.calendar_service import CalendarService
@@ -27,14 +28,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler()
-
-# Sync interval constants (can be overridden via env vars)
-# Calendar sync interval: default 3 hours (in minutes)
-CALENDAR_SYNC_INTERVAL_MINUTES = int(os.getenv("CALENDAR_SYNC_INTERVAL_MINUTES", 180))
-# Meteo (weather) sync interval: default 15 minutes (in minutes)
-METEO_SYNC_INTERVAL_MINUTES = int(os.getenv("METEO_SYNC_INTERVAL_MINUTES", 15))
-# Index auto-update interval: default 5 minutes (in seconds)
-INDEX_UPDATE_INTERVAL_SECONDS = int(os.getenv("INDEX_UPDATE_INTERVAL_SECONDS", 300))
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -103,17 +96,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 os.makedirs("app/static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-templates = Jinja2Templates(directory="app/templates")
-
-# Debug mode flag
-DEBUG_MODE = os.getenv("WEBAPP_DEBUG", "").lower() in ("true", "1", "yes")
-templates.env.globals["debug_mode"] = DEBUG_MODE
-# Expose intervals to templates so front-end uses same configuration
-templates.env.globals["weather_interval_seconds"] = METEO_SYNC_INTERVAL_MINUTES * 60
-templates.env.globals["legacy_weather_interval_ms"] = METEO_SYNC_INTERVAL_MINUTES * 60 * 1000
-templates.env.globals["calendar_sync_interval_minutes"] = CALENDAR_SYNC_INTERVAL_MINUTES
-templates.env.globals["index_update_interval_seconds"] = INDEX_UPDATE_INTERVAL_SECONDS
-templates.env.globals["legacy_index_update_interval_ms"] = INDEX_UPDATE_INTERVAL_SECONDS * 1000
+# Import centralized template configuration with all globals
 
 # Include Routers
 app.include_router(dashboard.router)

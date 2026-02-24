@@ -57,6 +57,8 @@ class AppSettings(SQLModel, table=True):
 
 
 class AlarmEvent(SQLModel, table=True):
+    __mapper_args__ = {"confirm_deleted_rows": False}
+
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     trigger_time: datetime
     dismissed_at: datetime | None = Field(default=None)

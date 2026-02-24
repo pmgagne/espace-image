@@ -48,25 +48,33 @@ def test_comprehensive_calendar_parsing_and_alarms(session):
 
     # Force the single event and proximity event to be visible now
     now = datetime.now(UTC)
-    # The simplest reliable approach: update by uid via raw SQL through session.get
+    # UIDs in cache include occurrence IDs (e.g., "single-alarm@example.com#2026-02-15T10:00:00+00:00")
+    # so we need to search for UIDs that start with the base UID
     try:
         from app.db.models import CalendarEventCache
 
-        single_row = session.exec(
-            select(CalendarEventCache).where(CalendarEventCache.uid == "single-alarm@example.com")
-        ).first()
-        prox_row = session.exec(
-            select(CalendarEventCache).where(
-                CalendarEventCache.uid == "proximity-alarm@example.com"
-            )
-        ).first()
+        # Find rows where UID starts with the base UID (accounts for occurrence IDs)
+        all_rows = session.exec(
+            select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == 1)
+        ).all()
+
+        single_row = None
+        prox_row = None
+        for row in all_rows:
+            if row.uid.startswith("single-alarm@example.com"):
+                single_row = row
+            elif row.uid.startswith("proximity-alarm@example.com"):
+                prox_row = row
+
         if single_row:
             single_row.event_start = now - timedelta(minutes=5)
             single_row.event_end = now + timedelta(hours=1)
+            single_row.trigger_time = now - timedelta(minutes=10)  # Trigger in the past
             session.add(single_row)
         if prox_row:
             prox_row.event_start = now - timedelta(minutes=10)
             prox_row.event_end = now + timedelta(hours=1)
+            prox_row.trigger_time = now - timedelta(minutes=15)  # Trigger in the past
             session.add(prox_row)
         session.commit()
     except Exception:

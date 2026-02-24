@@ -24,7 +24,7 @@
     "github.copilot.enable": {
         "*": false,
         "plaintext": true,
-        "markdown": true,
+        "markdown": false,
         "scminput": false
     },
     "python.analysis.typeCheckingMode": "strict",
