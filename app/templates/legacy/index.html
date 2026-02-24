@@ -250,8 +250,8 @@
     var CONFIG = {
         slideInterval: {{ settings.slideshow_duration or 30 }} * 1000,
             // Weather and alarm updates are driven by central index refresh interval
-            weatherInterval: { { legacy_weather_interval_ms } },
-    alarmInterval: { { legacy_index_update_interval_ms } }
+            weatherInterval: {{ legacy_weather_interval_ms }},
+    alarmInterval: {{ legacy_index_update_interval_ms }}
     };
 </script>
 
