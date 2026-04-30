@@ -1,9 +1,11 @@
 """Media module service implementation."""
 
 from pathlib import Path
+from typing import Any
 
 from fastapi import UploadFile
-from sqlmodel import Session
+from sqlalchemy.orm import selectinload
+from sqlmodel import Session, select
 
 from app.db.models import Photo, Preset
 from app.modules.media.api.interfaces import IMediaService
@@ -83,6 +85,50 @@ class MediaModuleService(IMediaService):
         session.delete(photo)
         session.commit()
         return True
+
+    async def get_gallery_for_ui(
+        self, session: Session, preset_id: int | None = None
+    ) -> dict[str, Any]:
+        """Get presets and photos formatted for gallery UI rendering."""
+        presets = session.exec(select(Preset)).all()
+        selected_preset = None
+        photos = []
+
+        if preset_id:
+            selected_preset = session.get(Preset, preset_id)
+            if selected_preset:
+                photos = selected_preset.photos
+        elif presets:
+            # Default to first preset if available
+            selected_preset = presets[0]
+            photos = selected_preset.photos
+
+        return {
+            "presets": presets,
+            "selected_preset": selected_preset,
+            "photos": photos,
+        }
+
+    async def get_photo_for_download(self, session: Session, photo_id: int) -> dict[str, Any]:
+        """Get photo with eager-loaded preset relationship for download."""
+        statement = select(Photo).where(Photo.id == photo_id).options(selectinload(Photo.preset))
+        photo = session.exec(statement).first()
+
+        if not photo:
+            raise ValueError(f"Photo {photo_id} not found")
+
+        preset_name = photo.preset.name if photo.preset else "Default"
+        file_path = f"data/uploads/{preset_name}/{photo.filename}"
+
+        return {
+            "photo": photo,
+            "preset_name": preset_name,
+            "file_path": file_path,
+        }
+
+    async def get_photo_by_id(self, session: Session, photo_id: int) -> Photo | None:
+        """Get a photo by ID without eager-loading (for validation)."""
+        return session.get(Photo, photo_id)
 
 
 def create_media_service() -> IMediaService:

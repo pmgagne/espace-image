@@ -91,7 +91,7 @@ class ICalendarService(Protocol):
         """
         ...
 
-    async def get_sync_status(self, session: Session) -> list[dict[str, Any]]:
+    async def get_sync_status(self, session: Session) -> list[dict[str, Any]]:  # noqa: ARG002
         """
         Get synchronization status for all calendar sources.
 
@@ -102,6 +102,18 @@ class ICalendarService(Protocol):
             List of sync status dictionaries.
         """
         ...
+
+        async def get_calendars_for_ui(self, session: Session) -> dict[str, Any]:
+            """
+            Get calendar sources and their sync status formatted for UI rendering.
+
+            Args:
+                session: Database session.
+
+            Returns:
+                Dictionary with 'sources' and 'sync_statuses' for template rendering.
+            """
+            ...
 
     async def get_debug_calendar_state(self, session: Session) -> dict[str, Any]:
         """

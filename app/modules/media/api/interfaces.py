@@ -1,7 +1,7 @@
 """Public interfaces for the media module."""
 
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from fastapi import UploadFile
 from sqlmodel import Session
@@ -58,7 +58,7 @@ class IMediaService(Protocol):
         """
         ...
 
-    async def delete_photo_from_db(self, session: Session, photo_id: int) -> bool:
+    async def delete_photo_from_db(self, session: Session, photo_id: int) -> bool:  # noqa: ARG002
         """
         Delete a photo record from database.
 
@@ -70,6 +70,47 @@ class IMediaService(Protocol):
             True if deleted, False if not found.
         """
         ...
+
+        async def get_gallery_for_ui(
+            self, session: Session, preset_id: int | None = None
+        ) -> dict[str, Any]:
+            """
+            Get presets and photos formatted for gallery UI rendering.
+
+            Args:
+                session: Database session.
+                preset_id: Optional preset ID to select by default.
+
+            Returns:
+                Dictionary with 'presets', 'selected_preset', and 'photos' for template.
+            """
+            ...
+
+        async def get_photo_for_download(self, session: Session, photo_id: int) -> dict[str, Any]:
+            """
+            Get photo with eager-loaded preset relationship for download.
+
+            Args:
+                session: Database session.
+                photo_id: Photo ID.
+
+            Returns:
+                Dictionary with 'photo', 'preset_name', and 'file_path'.
+            """
+            ...
+
+        async def get_photo_by_id(self, session: Session, photo_id: int) -> Photo | None:
+            """
+            Get a photo by ID without eager-loading (for validation).
+
+            Args:
+                session: Database session.
+                photo_id: Photo ID.
+
+            Returns:
+                Photo record or None if not found.
+            """
+            ...
 
 
 def get_media_service() -> IMediaService:

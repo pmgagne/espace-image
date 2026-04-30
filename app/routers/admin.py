@@ -4,14 +4,10 @@ import os
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.db.models import (
     AppSettings,
-    CalendarSource,
-    CalendarSyncStatusEntry,
-    Photo,
-    Preset,
 )
 from app.db.session import get_session
 from app.modules.alarms.api.interfaces import IAlarmsService, get_alarms_service
@@ -165,120 +161,21 @@ async def update_settings(
 
 # --- Partials: Calendars ---
 @router.get("/partials/calendars", response_class=HTMLResponse)
-async def get_calendars_partial(request: Request, session: Session = Depends(get_session)):
-    sources = session.exec(select(CalendarSource)).all()
-    sync_statuses = {}
-    for source in sources:
-        if source.id:
-            status = session.exec(
-                select(CalendarSyncStatusEntry).where(
-                    CalendarSyncStatusEntry.calendar_source_id == source.id
-                )
-            ).first()
-            if status:
-                try:
-                    last_synced = None
-                    next_sync = None
-                    if getattr(status, "last_synced_at", None):
-                        from app.utils.timezone import ensure_utc_aware
-
-                        try:
-                            last_synced = (
-                                ensure_utc_aware(status.last_synced_at).isoformat()
-                                if status.last_synced_at
-                                else None
-                            )
-                        except Exception:
-                            last_synced = (
-                                status.last_synced_at.isoformat() if status.last_synced_at else None
-                            )
-                        if getattr(status, "next_sync_at", None):
-                            try:
-                                next_sync = (
-                                    ensure_utc_aware(status.next_sync_at).isoformat()
-                                    if status.next_sync_at
-                                    else None
-                                )
-                            except Exception:
-                                next_sync = (
-                                    status.next_sync_at.isoformat() if status.next_sync_at else None
-                                )
-                    sync_statuses[source.id] = {
-                        "calendar_source_id": status.calendar_source_id,
-                        "last_synced_at": last_synced,
-                        "next_sync_at": next_sync,
-                        "sync_status": status.sync_status,
-                        "error_message": status.error_message,
-                        "error_count": status.error_count,
-                    }
-                except Exception:
-                    sync_statuses[source.id] = status
-            else:
-                sync_statuses[source.id] = status
+async def get_calendars_partial(
+    request: Request,
+    session: Session = Depends(get_session),
+    calendar_service: ICalendarService = Depends(get_calendar_service),
+):
+    data = await calendar_service.get_calendars_for_ui(session)
     return templates.TemplateResponse(
         request,
         "partials/calendars.html",
-        {"sources": sources, "sync_statuses": sync_statuses},
+        data,
     )
 
 
 @router.post("/calendars", response_class=HTMLResponse)
 async def add_calendar(
-    request: Request,
-    label: str = Form(...),
-    url: str = Form(...),
-    color: str = Form("#3182ce"),
-    session: Session = Depends(get_session),
-    calendar_service: ICalendarService = Depends(get_calendar_service),
-):
-    # Security: Validate URL to prevent SSRF attacks
-    from urllib.parse import urlparse
-
-    parsed = urlparse(url)
-    # Only allow http, https, and webcal schemes
-    if parsed.scheme not in ("http", "https", "webcal"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid URL scheme: {parsed.scheme}. Only http, https, and webcal are allowed.",
-        )
-    # Ensure URL has a network location (domain)
-    if not parsed.netloc:
-        raise HTTPException(status_code=400, detail="Invalid URL: missing domain")
-
-    await calendar_service.create_source(session, label, url, color)
-    return await get_calendars_partial(request, session)
-
-
-@router.delete("/calendars/{source_id}", response_class=HTMLResponse)
-async def delete_calendar(
-    request: Request,
-    source_id: int,
-    session: Session = Depends(get_session),
-    calendar_service: ICalendarService = Depends(get_calendar_service),
-):
-    await calendar_service.delete_source(session, source_id)
-    return await get_calendars_partial(request, session)
-
-
-@router.post("/calendars/{source_id}/defaults", response_class=HTMLResponse)
-async def update_calendar_defaults(
-    request: Request,
-    source_id: int,
-    default_alarm_for_all_events: str | None = Form(None),
-    session: Session = Depends(get_session),
-    calendar_service: ICalendarService = Depends(get_calendar_service),
-):
-    """Toggle per-calendar default alarm setting (immediate, no save button required)."""
-    with contextlib.suppress(ValueError):
-        await calendar_service.update_source_defaults(
-            session, source_id, default_alarm_for_all_events is not None
-        )
-
-    return await get_calendars_partial(request, session)
-
-
-@router.post("/calendars/sync-now", response_class=HTMLResponse)
-async def sync_calendars_now(
     request: Request,
     session: Session = Depends(get_session),
     calendar_service: ICalendarService = Depends(get_calendar_service),
@@ -292,7 +189,7 @@ async def sync_calendars_now(
     with contextlib.suppress(Exception):
         await calendar_service.sync_calendars(session)
 
-    return await get_calendars_partial(request, session)
+    return await get_calendars_partial(request, session, calendar_service)
 
 
 # --- Partials: Gallery ---
@@ -301,28 +198,13 @@ async def get_gallery_partial(
     request: Request,
     preset_id: int | None = None,
     session: Session = Depends(get_session),
+    media_service: IMediaService = Depends(get_media_service),
 ):
-    presets = session.exec(select(Preset)).all()
-    selected_preset = None
-    photos = []
-
-    if preset_id:
-        selected_preset = session.get(Preset, preset_id)
-        if selected_preset:
-            photos = selected_preset.photos
-    elif presets:
-        # Default to first preset if available
-        selected_preset = presets[0]
-        photos = selected_preset.photos
-
+    data = await media_service.get_gallery_for_ui(session, preset_id)
     return templates.TemplateResponse(
         request,
         "partials/gallery.html",
-        {
-            "presets": presets,
-            "selected_preset": selected_preset,
-            "photos": photos,
-        },
+        data,
     )
 
 
@@ -335,7 +217,7 @@ async def create_preset(
 ):
     await media_service.create_preset(session, name)
     # Refresh gallery showing new preset
-    return await get_gallery_partial(request, None, session)
+    return await get_gallery_partial(request, None, session, media_service)
 
 
 @router.post("/upload", response_class=HTMLResponse)
@@ -350,21 +232,14 @@ async def upload_photos(
         await media_service.upload_photos(session, preset_id, files)
     except ValueError as ve:
         # Build gallery context and show user-friendly error message
-        presets = session.exec(select(Preset)).all()
-        preset = session.get(Preset, preset_id)
-        photos = preset.photos if preset else []
+        data = await media_service.get_gallery_for_ui(session, preset_id)
         return templates.TemplateResponse(
             request,
             "partials/gallery.html",
-            {
-                "presets": presets,
-                "selected_preset": preset,
-                "photos": photos,
-                "error_message": str(ve),
-            },
+            {**data, "error_message": str(ve)},
         )
 
-    return await get_gallery_partial(request, preset_id, session)
+        return await get_gallery_partial(request, preset_id, session, media_service)
 
 
 @router.delete("/photos/{photo_id}", response_class=HTMLResponse)
@@ -374,14 +249,14 @@ async def delete_photo(
     session: Session = Depends(get_session),
     media_service: IMediaService = Depends(get_media_service),
 ):
-    photo = session.get(Photo, photo_id)
+    photo = await media_service.get_photo_by_id(session, photo_id)
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
 
     preset_id = photo.preset_id
     await media_service.delete_photo_from_db(session, photo_id)
 
-    return await get_gallery_partial(request, preset_id, session)
+    return await get_gallery_partial(request, preset_id, session, media_service)
 
 
 # --- Debug Panel ---

@@ -175,6 +175,50 @@ class CalendarService:
 
         return {"sources": src_out, "statuses": status_out}
 
+    async def get_calendars_for_ui(self, session: Session) -> dict[str, Any]:
+        """Get calendar sources and sync status formatted for UI rendering."""
+        from app.utils.timezone import ensure_utc_aware
+
+        sources = session.exec(select(CalendarSource)).all()
+        sync_statuses = {}
+
+        for source in sources:
+            if source.id:
+                status = session.exec(
+                    select(CalendarSyncStatusEntry).where(
+                        CalendarSyncStatusEntry.calendar_source_id == source.id
+                    )
+                ).first()
+                if status:
+                    try:
+                        last_synced = (
+                            ensure_utc_aware(status.last_synced_at).isoformat()
+                            if status.last_synced_at
+                            else ""
+                        )
+                    except Exception:
+                        last_synced = ""
+                    try:
+                        next_sync = (
+                            ensure_utc_aware(status.next_sync_at).isoformat()
+                            if status.next_sync_at
+                            else ""
+                        )
+                    except Exception:
+                        next_sync = ""
+                    sync_statuses[source.id] = {
+                        "calendar_source_id": status.calendar_source_id,
+                        "last_synced_at": last_synced,
+                        "next_sync_at": next_sync,
+                        "sync_status": status.sync_status.value,
+                        "error_message": status.error_message,
+                        "error_count": status.error_count,
+                    }
+                else:
+                    sync_statuses[source.id] = None
+
+        return {"sources": sources, "sync_statuses": sync_statuses}
+
 
 def create_calendar_service() -> CalendarService:
     """Factory that returns the calendar service implementation."""
