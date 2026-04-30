@@ -1,18 +1,21 @@
 import logging
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 # Import configuration constants
 from app.config import CALENDAR_SYNC_INTERVAL_MINUTES
 from app.db.engine import create_db_and_tables, engine
-from app.modules.calendar.internal.application.service import CalendarService as CalendarServiceImpl
+from app.modules.calendar.internal.application.service import (
+    CalendarService as CalendarServiceImpl,
+)
 from app.modules.loader import app_init, app_post_init, app_teardown
 from app.routers import admin, dashboard, media
 
@@ -34,7 +37,11 @@ scheduler = AsyncIOScheduler()
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Middleware to add security headers to all responses."""
 
-    async def dispatch(self, request, call_next):
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
@@ -43,7 +50,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
-async def background_sync_calendars():
+async def background_sync_calendars() -> None:
     """Background task to sync calendar events on configured interval."""
     with Session(engine) as session:
         try:
@@ -55,7 +62,7 @@ async def background_sync_calendars():
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Startup
     create_db_and_tables()
     await app_init(_app)
@@ -80,7 +87,8 @@ async def lifespan(_app: FastAPI):
     )
     scheduler.start()
     logger.info(
-        "Scheduler started (calendar sync every %s minutes)", CALENDAR_SYNC_INTERVAL_MINUTES
+        "Scheduler started (calendar sync every %s minutes)",
+        CALENDAR_SYNC_INTERVAL_MINUTES,
     )
 
     yield
@@ -111,5 +119,5 @@ app.include_router(admin.router)
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict[str, str]:
     return {"status": "ok"}

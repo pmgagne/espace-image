@@ -17,7 +17,9 @@ class SlideSelectionResult:
 class ISlideshowService(Protocol):
     """Public interface for slideshow selection operations."""
 
-    def select_next_slide(self, session: Session, mode: str = "modern") -> SlideSelectionResult:
+    def select_next_slide(
+        self, session: Session, mode: str = "modern"
+    ) -> SlideSelectionResult:
         """Return next slide URL or an error message."""
 
 

@@ -27,7 +27,9 @@ async def get_image(
     If mode='legacy', resizes it on the fly.
     """
     # Eager-load the preset relationship to avoid N+1 queries
-    statement = select(Photo).where(Photo.id == photo_id).options(selectinload(Photo.preset))
+    statement = (
+        select(Photo).where(Photo.id == photo_id).options(selectinload(Photo.preset))
+    )
     photo = session.exec(statement).first()
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")

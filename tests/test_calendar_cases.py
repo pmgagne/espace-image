@@ -13,11 +13,13 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from app.services.calendar_service import CalendarService
 from sqlmodel import Session, select
 
 from app.db.models import CalendarEventCache
 from app.modules.alarms.internal.application.service import AlarmsService
+from app.modules.calendar.internal.infrastructure.calendar_sync import (
+    CalendarService,
+)
 
 # Use a fixed reference time to make calendar tests deterministic
 FIXED_NOW = datetime(2026, 2, 16, 0, 0, tzinfo=UTC)
@@ -33,7 +35,10 @@ def load_and_cache_events(
     window_start = now - timedelta(days=1)
     window_end = now + timedelta(days=window_days)
     events = CalendarService.extract_events_from_ics(
-        ics_content, source_id=source_id, window_start=window_start, window_end=window_end
+        ics_content,
+        source_id=source_id,
+        window_start=window_start,
+        window_end=window_end,
     )
     latest_by_uid = CalendarService._select_latest_by_uid(events)
     CalendarService._add_cache_entries(session, latest_by_uid, source_id)
@@ -77,7 +82,10 @@ def get_alarm(session: Session, uid: str, ics_path: str | None = None) -> dict[s
 
 
 def alarm_field_checks(
-    alarm: dict[str, Any], expected_title: str, expected_time: datetime, expected_uid: str
+    alarm: dict[str, Any],
+    expected_title: str,
+    expected_time: datetime,
+    expected_uid: str,
 ) -> None:
     """Check that alarm fields match expected event info."""
     # Use standardized field names from get_upcoming_alarms()

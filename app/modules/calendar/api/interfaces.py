@@ -4,6 +4,8 @@ from typing import Any, Protocol
 
 from sqlmodel import Session
 
+from app.db.models import CalendarSource
+
 
 class ICalendarService(Protocol):
     """Public interface for calendar operations."""
@@ -40,6 +42,76 @@ class ICalendarService(Protocol):
 
         Returns:
             ICS content string or None if fetch failed.
+        """
+        ...
+
+    async def create_source(
+        self, session: Session, label: str, url: str, color: str
+    ) -> CalendarSource:
+        """
+        Create a new calendar source.
+
+        Args:
+            session: Database session.
+            label: Display label for the calendar.
+            url: WebCal or ICS URL.
+            color: Hex color code (e.g., "#3182ce").
+
+        Returns:
+            Created CalendarSource.
+        """
+        ...
+
+    async def update_source_defaults(
+        self, session: Session, source_id: int, default_alarm: bool
+    ) -> CalendarSource:
+        """
+        Update calendar source default alarm setting.
+
+        Args:
+            session: Database session.
+            source_id: Calendar source ID.
+            default_alarm: Whether to add default alarms for events.
+
+        Returns:
+            Updated CalendarSource.
+        """
+        ...
+
+    async def delete_source(self, session: Session, source_id: int) -> bool:
+        """
+        Delete a calendar source.
+
+        Args:
+            session: Database session.
+            source_id: Calendar source ID.
+
+        Returns:
+            True if source was deleted, False if not found.
+        """
+        ...
+
+    async def get_sync_status(self, session: Session) -> list[dict[str, Any]]:
+        """
+        Get synchronization status for all calendar sources.
+
+        Args:
+            session: Database session.
+
+        Returns:
+            List of sync status dictionaries.
+        """
+        ...
+
+    async def get_debug_calendar_state(self, session: Session) -> dict[str, Any]:
+        """
+        Get calendar sources and sync status for debugging.
+
+        Args:
+            session: Database session.
+
+        Returns:
+            Dictionary with 'sources' and 'statuses' keys.
         """
         ...
 

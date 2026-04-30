@@ -1,6 +1,11 @@
 """Public weather module API."""
 
-from .interfaces import IWeatherService, WeatherData, WeatherLocationResult, get_weather_service
+from .interfaces import (
+    IWeatherService,
+    WeatherData,
+    WeatherLocationResult,
+    get_weather_service,
+)
 
 __all__ = [
     "IWeatherService",

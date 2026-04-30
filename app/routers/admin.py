@@ -2,13 +2,11 @@ import contextlib
 import logging
 import os
 
-import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from sqlmodel import Session, select
 
 from app.db.models import (
-    AlarmEvent,
     AppSettings,
     CalendarSource,
     CalendarSyncStatusEntry,
@@ -16,6 +14,7 @@ from app.db.models import (
     Preset,
 )
 from app.db.session import get_session
+from app.modules.alarms.api.interfaces import IAlarmsService, get_alarms_service
 from app.modules.calendar.api.interfaces import ICalendarService, get_calendar_service
 from app.modules.media.api.interfaces import IMediaService, get_media_service
 from app.modules.settings.api.exceptions import PresetNotFoundError
@@ -42,6 +41,7 @@ async def get_settings_partial(
     request: Request,
     session: Session = Depends(get_session),
     settings_service: ISettingsService = Depends(get_settings_service),
+    weather_service: IWeatherService = Depends(get_weather_service),
 ):
     settings = settings_service.get_settings(session)
     presets = settings_service.list_presets(session)
@@ -49,25 +49,13 @@ async def get_settings_partial(
     location_name = ""
     if settings and settings.weather_latitude and settings.weather_longitude:
         try:
-            # Simple reverse geocode for Admin UI context
-            url = (
-                f"https://nominatim.openstreetmap.org/reverse?"
-                f"lat={settings.weather_latitude}&"
-                f"lon={settings.weather_longitude}&format=json"
+            location_name = (
+                await weather_service.reverse_geocode(
+                    settings.weather_latitude,
+                    settings.weather_longitude,
+                )
+                or ""
             )
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(url, headers={"User-Agent": "Espace-Image/1.0"})
-                if resp.status_code == 200:
-                    data = resp.json()
-                    address = data.get("address", {})
-                    city = (
-                        address.get("city")
-                        or address.get("town")
-                        or address.get("village")
-                        or "Unknown"
-                    )
-                    state = address.get("state") or address.get("region") or ""
-                    location_name = f"{city}, {state}" if state else city
         except Exception:
             logger.exception("Geocoding error while reverse geocoding")
 
@@ -241,6 +229,7 @@ async def add_calendar(
     url: str = Form(...),
     color: str = Form("#3182ce"),
     session: Session = Depends(get_session),
+    calendar_service: ICalendarService = Depends(get_calendar_service),
 ):
     # Security: Validate URL to prevent SSRF attacks
     from urllib.parse import urlparse
@@ -256,20 +245,18 @@ async def add_calendar(
     if not parsed.netloc:
         raise HTTPException(status_code=400, detail="Invalid URL: missing domain")
 
-    source = CalendarSource(label=label, url=url, color=color)
-    session.add(source)
-    session.commit()
+    await calendar_service.create_source(session, label, url, color)
     return await get_calendars_partial(request, session)
 
 
 @router.delete("/calendars/{source_id}", response_class=HTMLResponse)
 async def delete_calendar(
-    request: Request, source_id: int, session: Session = Depends(get_session)
+    request: Request,
+    source_id: int,
+    session: Session = Depends(get_session),
+    calendar_service: ICalendarService = Depends(get_calendar_service),
 ):
-    source = session.get(CalendarSource, source_id)
-    if source:
-        session.delete(source)
-        session.commit()
+    await calendar_service.delete_source(session, source_id)
     return await get_calendars_partial(request, session)
 
 
@@ -279,16 +266,13 @@ async def update_calendar_defaults(
     source_id: int,
     default_alarm_for_all_events: str | None = Form(None),
     session: Session = Depends(get_session),
+    calendar_service: ICalendarService = Depends(get_calendar_service),
 ):
     """Toggle per-calendar default alarm setting (immediate, no save button required)."""
-    source = session.get(CalendarSource, source_id)
-    if not source:
-        # Re-render calendars partial to show current state (no change)
-        return await get_calendars_partial(request, session)
-
-    source.default_alarm_for_all_events = default_alarm_for_all_events is not None
-    session.add(source)
-    session.commit()
+    with contextlib.suppress(ValueError):
+        await calendar_service.update_source_defaults(
+            session, source_id, default_alarm_for_all_events is not None
+        )
 
     return await get_calendars_partial(request, session)
 
@@ -347,12 +331,11 @@ async def create_preset(
     request: Request,
     name: str = Form(...),
     session: Session = Depends(get_session),
+    media_service: IMediaService = Depends(get_media_service),
 ):
-    preset = Preset(name=name)
-    session.add(preset)
-    session.commit()
+    await media_service.create_preset(session, name)
     # Refresh gallery showing new preset
-    return await get_gallery_partial(request, preset.id, session)
+    return await get_gallery_partial(request, None, session)
 
 
 @router.post("/upload", response_class=HTMLResponse)
@@ -363,34 +346,24 @@ async def upload_photos(
     session: Session = Depends(get_session),
     media_service: IMediaService = Depends(get_media_service),
 ):
-    preset = session.get(Preset, preset_id)
-    if not preset:
-        raise HTTPException(status_code=404, detail="Preset not found")
+    try:
+        await media_service.upload_photos(session, preset_id, files)
+    except ValueError as ve:
+        # Build gallery context and show user-friendly error message
+        presets = session.exec(select(Preset)).all()
+        preset = session.get(Preset, preset_id)
+        photos = preset.photos if preset else []
+        return templates.TemplateResponse(
+            request,
+            "partials/gallery.html",
+            {
+                "presets": presets,
+                "selected_preset": preset,
+                "photos": photos,
+                "error_message": str(ve),
+            },
+        )
 
-    for file in files:
-        if not file.filename:
-            continue
-        try:
-            content = await file.read()
-            _path, stored_filename = media_service.save_upload(content, file.filename, preset.name)
-            photo = Photo(filename=stored_filename, preset_id=preset.id)
-            session.add(photo)
-        except ValueError as ve:
-            # Build gallery context and show user-friendly error message
-            presets = session.exec(select(Preset)).all()
-            photos = preset.photos if preset else []
-            return templates.TemplateResponse(
-                request,
-                "partials/gallery.html",
-                {
-                    "presets": presets,
-                    "selected_preset": preset,
-                    "photos": photos,
-                    "error_message": str(ve),
-                },
-            )
-
-    session.commit()
     return await get_gallery_partial(request, preset_id, session)
 
 
@@ -405,13 +378,8 @@ async def delete_photo(
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
 
-    # Delete from disk
-    preset_name = photo.preset.name if photo.preset else "Default"
-    media_service.delete_photo(photo.filename, preset_name)
-
     preset_id = photo.preset_id
-    session.delete(photo)
-    session.commit()
+    await media_service.delete_photo_from_db(session, photo_id)
 
     return await get_gallery_partial(request, preset_id, session)
 
@@ -428,24 +396,10 @@ async def simulate_alarm(
     request: Request,
     delay_seconds: int = Form(...),
     session: Session = Depends(get_session),
+    alarms_service: IAlarmsService = Depends(get_alarms_service),
 ):
     """Create a simulated alarm that appears after the specified delay."""
-    from datetime import UTC, datetime, timedelta
-    from uuid import uuid4
-
-    # Calculate trigger time in UTC
-    # Use datetime.now().astimezone(UTC) to get local time, then convert to UTC properly
-    trigger_time = datetime.now(UTC) + timedelta(seconds=delay_seconds)
-
-    # Create alarm event with UUID primary key
-    # Test alarms have NULL calendar_source_id and calendar_event_uid
-    alarm = AlarmEvent(
-        id=uuid4(),
-        trigger_time=trigger_time,
-    )
-
-    session.add(alarm)
-    session.commit()
+    await alarms_service.create_simulated_alarm(delay_seconds, session)
 
     return templates.TemplateResponse(
         request,

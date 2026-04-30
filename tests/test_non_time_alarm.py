@@ -30,7 +30,10 @@ def test_extract_events_detects_proximity():
     ics = _build_ics_with_proximity(start, end)
 
     events = CalendarService.extract_events_from_ics(
-        ics, source_id=1, window_start=now - timedelta(days=1), window_end=now + timedelta(days=1)
+        ics,
+        source_id=1,
+        window_start=now - timedelta(days=1),
+        window_end=now + timedelta(days=1),
     )
 
     assert len(events) == 1

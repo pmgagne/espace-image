@@ -21,7 +21,9 @@ def make_icon(size, filename, bg="#000000", fg="#00d1ff"):
         font = ImageFont.load_default()
     text = "G"
     w, h = draw.textsize(text, font=font)
-    draw.text(((size - w) / 2, (size - h) / 2 - size * 0.03), text, font=font, fill="white")
+    draw.text(
+        ((size - w) / 2, (size - h) / 2 - size * 0.03), text, font=font, fill="white"
+    )
     out_path = os.path.join(OUT_DIR, filename)
     img.save(out_path)
     print("Wrote", out_path)

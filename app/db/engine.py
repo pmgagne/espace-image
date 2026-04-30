@@ -35,14 +35,20 @@ def migrate_database() -> None:  # noqa: C901
         cursor.execute("PRAGMA table_info(appsettings)")
         appsettings_columns = [row[1] for row in cursor.fetchall()]
         if "default_alarm_for_all_events" not in appsettings_columns:
-            logger.info("Adding default_alarm_for_all_events column to appsettings table")
+            logger.info(
+                "Adding default_alarm_for_all_events column to appsettings table"
+            )
             cursor.execute(
                 "ALTER TABLE appsettings ADD COLUMN default_alarm_for_all_events BOOLEAN DEFAULT 0"
             )
             conn.commit()
-            logger.info("Migration completed: default_alarm_for_all_events column added")
+            logger.info(
+                "Migration completed: default_alarm_for_all_events column added"
+            )
         else:
-            logger.debug("default_alarm_for_all_events column already exists, no migration needed")
+            logger.debug(
+                "default_alarm_for_all_events column already exists, no migration needed"
+            )
 
         # Migration: Add trigger_time and optional_trigger columns to calendar_event_cache if they don't exist
         cursor.execute("PRAGMA table_info(calendar_event_cache)")
@@ -51,7 +57,9 @@ def migrate_database() -> None:  # noqa: C901
         # Add trigger_time column if missing
         if "trigger_time" not in columns:
             logger.info("Adding trigger_time column to calendar_event_cache table")
-            cursor.execute("ALTER TABLE calendar_event_cache ADD COLUMN trigger_time TIMESTAMP")
+            cursor.execute(
+                "ALTER TABLE calendar_event_cache ADD COLUMN trigger_time TIMESTAMP"
+            )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS ix_calendar_event_cache_trigger_time "
                 "ON calendar_event_cache (trigger_time)"
@@ -93,7 +101,9 @@ def migrate_database() -> None:  # noqa: C901
         columns = [row[1] for row in cursor.fetchall()]
         if "all_day" not in columns:
             logger.info("Adding all_day column to calendar_event_cache table")
-            cursor.execute("ALTER TABLE calendar_event_cache ADD COLUMN all_day BOOLEAN DEFAULT 0")
+            cursor.execute(
+                "ALTER TABLE calendar_event_cache ADD COLUMN all_day BOOLEAN DEFAULT 0"
+            )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS ix_calendar_event_cache_all_day ON calendar_event_cache (all_day)"
             )
@@ -106,7 +116,9 @@ def migrate_database() -> None:  # noqa: C901
         cursor.execute("PRAGMA table_info(calendarsource)")
         cs_columns = [row[1] for row in cursor.fetchall()]
         if "default_alarm_for_all_events" not in cs_columns:
-            logger.info("Adding default_alarm_for_all_events column to calendarsource table")
+            logger.info(
+                "Adding default_alarm_for_all_events column to calendarsource table"
+            )
             cursor.execute(
                 "ALTER TABLE calendarsource ADD COLUMN default_alarm_for_all_events BOOLEAN DEFAULT 0"
             )
@@ -181,7 +193,13 @@ def migrate_database() -> None:  # noqa: C901
                                                  calendar_source_id, calendar_event_uid)
                     VALUES (?, ?, ?, ?, ?)
                 """,
-                    (new_uuid, trigger_time, dismissed_at, calendar_source_id, calendar_event_uid),
+                    (
+                        new_uuid,
+                        trigger_time,
+                        dismissed_at,
+                        calendar_source_id,
+                        calendar_event_uid,
+                    ),
                 )
 
             # Step 4: Drop old table and rename new table

@@ -35,6 +35,19 @@ class AlarmsService:
         alarms.extend(self._fetch_simulated_alarms(session))
         return alarms
 
+    async def create_simulated_alarm(self, delay_seconds: int, session: Session) -> AlarmEvent:
+        """Create a simulated alarm that appears after the specified delay."""
+        from uuid import uuid4
+
+        trigger_time = datetime.now(UTC) + timedelta(seconds=delay_seconds)
+        alarm = AlarmEvent(
+            id=uuid4(),
+            trigger_time=trigger_time,
+        )
+        session.add(alarm)
+        session.commit()
+        return alarm
+
     async def _fetch_calendar_alarms(self, session: Session) -> list[dict[str, Any]]:
         """Fetch alarms from cached calendar events and filter dismissed ones."""
         utc_now = datetime.now(UTC)
@@ -250,6 +263,58 @@ class AlarmsService:
                 session.commit()
         except Exception as e:
             logger.error(f"Error purging old dismissed alarms: {e}")
+
+    async def get_debug_alarm_state(self, session: Session) -> dict[str, Any]:
+        """Get cached calendar events and alarm events for debugging."""
+        from app.utils.timezone import ensure_utc_aware
+
+        cached = session.exec(select(CalendarEventCache)).all()
+        alarms = session.exec(select(AlarmEvent)).all()
+
+        events_out = []
+        for ev in cached:
+            try:
+                start_iso = ensure_utc_aware(ev.event_start).isoformat() if ev.event_start else None
+            except Exception:
+                start_iso = ev.event_start.isoformat() if ev.event_start else None
+            try:
+                end_iso = ensure_utc_aware(ev.event_end).isoformat() if ev.event_end else None
+            except Exception:
+                end_iso = ev.event_end.isoformat() if ev.event_end else None
+            events_out.append(
+                {
+                    "calendar_source_id": ev.calendar_source_id,
+                    "uid": ev.uid,
+                    "start": start_iso,
+                    "end": end_iso,
+                    "summary": ev.summary,
+                    "tzid": getattr(ev, "event_tz", None),
+                }
+            )
+
+        alarms_out = []
+        for a in alarms:
+            try:
+                trig_iso = ensure_utc_aware(a.trigger_time).isoformat() if a.trigger_time else None
+            except Exception:
+                trig_iso = a.trigger_time.isoformat() if a.trigger_time else None
+            try:
+                dismissed_iso = (
+                    ensure_utc_aware(a.dismissed_at).isoformat() if a.dismissed_at else None
+                )
+            except Exception:
+                dismissed_iso = a.dismissed_at.isoformat() if a.dismissed_at else None
+            alarms_out.append(
+                {
+                    "id": str(a.id),  # Convert UUID to string
+                    "calendar_source_id": a.calendar_source_id,
+                    "calendar_event_uid": a.calendar_event_uid,
+                    "trigger_time": trig_iso,
+                    "dismissed_at": dismissed_iso,
+                }
+            )
+
+        return {"cached_events": events_out, "alarm_events": alarms_out}
 
 
 def create_alarms_service() -> AlarmsService:

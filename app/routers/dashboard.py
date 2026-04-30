@@ -4,18 +4,16 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from sqlmodel import Session, select
+from sqlmodel import Session
 
-from app.db.models import (
-    AlarmEvent,
-    CalendarEventCache,
-    CalendarSource,
-    CalendarSyncStatusEntry,
-)
 from app.db.session import get_session
 from app.modules.alarms.api.interfaces import IAlarmsService, get_alarms_service
+from app.modules.calendar.api.interfaces import ICalendarService, get_calendar_service
 from app.modules.settings.api.interfaces import ISettingsService, get_settings_service
-from app.modules.slideshow.api.interfaces import ISlideshowService, get_slideshow_service
+from app.modules.slideshow.api.interfaces import (
+    ISlideshowService,
+    get_slideshow_service,
+)
 from app.modules.weather.api.interfaces import IWeatherService, get_weather_service
 from app.schemas import SlideResponse, WeatherResponse
 from app.template_config import templates
@@ -74,16 +72,19 @@ async def read_legacy(
     request: Request,
     session: Session = Depends(get_session),
     settings_service: ISettingsService = Depends(get_settings_service),
+    calendar_service: ICalendarService = Depends(get_calendar_service),
 ):
     """Legacy Slideshow View (iPad 2)"""
     settings = settings_service.get_settings(session)
     # Determine the most recent calendar sync time (if any) to display in legacy UI
     try:
-        statuses = session.exec(select(CalendarSyncStatusEntry)).all()
+        statuses = await calendar_service.get_sync_status(session)
         latest = None
-        for st in statuses:
-            if st.last_synced_at and (latest is None or st.last_synced_at > latest):
-                latest = st.last_synced_at
+        for status_dict in statuses:
+            if status_dict.get("last_synced_at") and (
+                latest is None or status_dict["last_synced_at"] > latest
+            ):
+                latest = status_dict["last_synced_at"]
         last_sync_utc = ensure_utc_aware(latest).isoformat() if latest else ""
     except Exception:
         last_sync_utc = ""
@@ -428,89 +429,27 @@ async def check_alarm(
     response_class=JSONResponse,
     dependencies=[Depends(require_debug_mode)],
 )
-async def debug_calendar_events(session: Session = Depends(get_session)) -> JSONResponse:
+async def debug_calendar_events(
+    session: Session = Depends(get_session),
+    alarms_service: IAlarmsService = Depends(get_alarms_service),
+) -> JSONResponse:
     """Return cached calendar events and dismissed alarms for debugging."""
-    cached = session.exec(select(CalendarEventCache)).all()
-    alarms = session.exec(select(AlarmEvent)).all()
-
-    events_out = []
-    for ev in cached:
-        try:
-            start_iso = ensure_utc_aware(ev.event_start).isoformat() if ev.event_start else None
-        except Exception:
-            start_iso = ev.event_start.isoformat() if ev.event_start else None
-        try:
-            end_iso = ensure_utc_aware(ev.event_end).isoformat() if ev.event_end else None
-        except Exception:
-            end_iso = ev.event_end.isoformat() if ev.event_end else None
-        events_out.append(
-            {
-                "calendar_source_id": ev.calendar_source_id,
-                "uid": ev.uid,
-                "start": start_iso,
-                "end": end_iso,
-                "summary": ev.summary,
-                "tzid": getattr(ev, "event_tz", None),
-            }
-        )
-
-    alarms_out = []
-    for a in alarms:
-        try:
-            trig_iso = ensure_utc_aware(a.trigger_time).isoformat() if a.trigger_time else None
-        except Exception:
-            trig_iso = a.trigger_time.isoformat() if a.trigger_time else None
-        try:
-            dismissed_iso = ensure_utc_aware(a.dismissed_at).isoformat() if a.dismissed_at else None
-        except Exception:
-            dismissed_iso = a.dismissed_at.isoformat() if a.dismissed_at else None
-        alarms_out.append(
-            {
-                "id": str(a.id),  # Convert UUID to string
-                "calendar_source_id": a.calendar_source_id,
-                "calendar_event_uid": a.calendar_event_uid,
-                "trigger_time": trig_iso,
-                "dismissed_at": dismissed_iso,
-            }
-        )
-
-    return JSONResponse({"cached_events": events_out, "alarm_events": alarms_out})
+    debug_state = await alarms_service.get_debug_alarm_state(session)
+    return JSONResponse(debug_state)
 
 
 @router.get(
-    "/debug/calendars", response_class=JSONResponse, dependencies=[Depends(require_debug_mode)]
+    "/debug/calendars",
+    response_class=JSONResponse,
+    dependencies=[Depends(require_debug_mode)],
 )
-async def debug_calendars(session: Session = Depends(get_session)) -> JSONResponse:
+async def debug_calendars(
+    session: Session = Depends(get_session),
+    calendar_service: ICalendarService = Depends(get_calendar_service),
+) -> JSONResponse:
     """Return configured calendar sources and their sync status for debugging."""
-    sources = session.exec(select(CalendarSource)).all()
-    statuses = session.exec(select(CalendarSyncStatusEntry)).all()
-
-    src_out = [{"id": s.id, "label": s.label, "url": s.url} for s in sources]
-
-    status_out = []
-    for st in statuses:
-        try:
-            last_iso = (
-                ensure_utc_aware(st.last_synced_at).isoformat() if st.last_synced_at else None
-            )
-        except Exception:
-            last_iso = st.last_synced_at.isoformat() if st.last_synced_at else None
-        try:
-            next_iso = ensure_utc_aware(st.next_sync_at).isoformat() if st.next_sync_at else None
-        except Exception:
-            next_iso = st.next_sync_at.isoformat() if st.next_sync_at else None
-        status_out.append(
-            {
-                "calendar_source_id": st.calendar_source_id,
-                "last_synced_at": last_iso,
-                "next_sync_at": next_iso,
-                "sync_status": st.sync_status,
-                "error_message": st.error_message,
-                "error_count": st.error_count,
-            }
-        )
-
-    return JSONResponse({"sources": src_out, "statuses": status_out})
+    debug_state = await calendar_service.get_debug_calendar_state(session)
+    return JSONResponse(debug_state)
 
 
 @router.post("/api/alarms/{alarm_id}/dismiss", response_class=HTMLResponse)
@@ -528,7 +467,11 @@ async def dismiss_alarm(
     # and should not be treated as errors.
     if mock:
         return await check_alarm(
-            request, mock=True, tz_offset=tz_offset, session=session, alarms_service=alarms_service
+            request,
+            mock=True,
+            tz_offset=tz_offset,
+            session=session,
+            alarms_service=alarms_service,
         )
 
     # Use service to dismiss the alarm (handles UUID and composite UID parsing)
@@ -537,5 +480,9 @@ async def dismiss_alarm(
     # Return the updated list immediately
     logger.info("Alarm dismissed id=%s (tz_offset=%s)", alarm_id, tz_offset)
     return await check_alarm(
-        request, mock=False, tz_offset=tz_offset, session=session, alarms_service=alarms_service
+        request,
+        mock=False,
+        tz_offset=tz_offset,
+        session=session,
+        alarms_service=alarms_service,
     )

@@ -98,7 +98,9 @@ def test_sync_calendar_events_success(session):
         CalendarService.fetch_ics = original_fetch
 
     cached = session.exec(
-        select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == source.id)
+        select(CalendarEventCache).where(
+            CalendarEventCache.calendar_source_id == source.id
+        )
     ).all()
 
     assert len(cached) == 1
@@ -152,7 +154,9 @@ def test_parse_ics_events_empty():
 def test_parse_ics_events_malformed():
     now = datetime(2026, 1, 16, 9, 0, 0, tzinfo=UTC)
     # Malformed ICS should not raise, just return []
-    events = CalendarService.parse_ics_events("NOT AN ICS FILE", now, now + timedelta(days=1))
+    events = CalendarService.parse_ics_events(
+        "NOT AN ICS FILE", now, now + timedelta(days=1)
+    )
     assert events == []
 
 
@@ -367,7 +371,10 @@ END:VCALENDAR"""
     ) as mock_data:
         mock_data.return_value = ics_content
 
-        sources = [(1, "http://example.com/cal1.ics"), (2, "webcal://example.com/cal2.ics")]
+        sources = [
+            (1, "http://example.com/cal1.ics"),
+            (2, "webcal://example.com/cal2.ics"),
+        ]
         await CalendarService.get_all_alarms(sources)
 
         # We expect the downloader to be called twice
@@ -387,7 +394,10 @@ def load_and_cache_events(
     window_start = now - timedelta(days=1)
     window_end = now + timedelta(days=window_days)
     events = CalendarService.extract_events_from_ics(
-        ics_content, source_id=source_id, window_start=window_start, window_end=window_end
+        ics_content,
+        source_id=source_id,
+        window_start=window_start,
+        window_end=window_end,
     )
     latest_by_uid = CalendarService._select_latest_by_uid(events)
     CalendarService._add_cache_entries(session, latest_by_uid, source_id)
@@ -399,7 +409,9 @@ def set_event_time(session: Session, uid: str, start: datetime, end: datetime) -
     """Update cached event time."""
     from app.db.models import CalendarEventCache
 
-    row = session.exec(select(CalendarEventCache).where(CalendarEventCache.uid == uid)).first()
+    row = session.exec(
+        select(CalendarEventCache).where(CalendarEventCache.uid == uid)
+    ).first()
     if row:
         row.event_start = start
         row.event_end = end
@@ -407,7 +419,9 @@ def set_event_time(session: Session, uid: str, start: datetime, end: datetime) -
         session.commit()
 
 
-def get_alarm(session: Session, uid: str, ics_path: str | None = None) -> dict[str, Any] | None:
+def get_alarm(
+    session: Session, uid: str, ics_path: str | None = None
+) -> dict[str, Any] | None:
     """Fetch alarm by UID using ICS parsing or DB cache."""
     if ics_path is not None:
         with open(ics_path, encoding="utf-8") as fh:
@@ -431,7 +445,10 @@ def get_alarm(session: Session, uid: str, ics_path: str | None = None) -> dict[s
 
 
 def alarm_field_checks(
-    alarm: dict[str, Any], expected_title: str, expected_time: datetime, expected_uid: str
+    alarm: dict[str, Any],
+    expected_title: str,
+    expected_time: datetime,
+    expected_uid: str,
 ) -> None:
     """Check that alarm fields match expected event info."""
     assert alarm["name"] == expected_title, (
@@ -440,7 +457,9 @@ def alarm_field_checks(
     assert abs((alarm["begin"] - expected_time).total_seconds()) < 60, (
         f"Expected time {expected_time}, got {alarm['begin']}"
     )
-    assert expected_uid in alarm["uid"], f"Expected UID '{expected_uid}' in '{alarm['uid']}'"
+    assert expected_uid in alarm["uid"], (
+        f"Expected UID '{expected_uid}' in '{alarm['uid']}'"
+    )
 
 
 def test_single_alarm_fields(session: Session) -> None:
@@ -502,7 +521,9 @@ def test_recurring_multi_alarm_fields(session: Session) -> None:
     set_event_time(session, uid, event["event_start"], event["event_end"])
     alarm = get_alarm(session, uid, ics_path="tests/data/recurring_multi_alarm.ics")
     assert alarm is not None, f"No alarm found for UID {uid}"
-    alarm_field_checks(alarm, "Recurring Event With Multiple Alarms", event["event_start"], uid)
+    alarm_field_checks(
+        alarm, "Recurring Event With Multiple Alarms", event["event_start"], uid
+    )
 
 
 def test_proximity_alarm_location_aware_fields(session: Session) -> None:
@@ -559,7 +580,9 @@ def test_comprehensive_calendar_parsing_and_alarms(session):
     """Integration test for calendar parsing and alarm extraction."""
     from app.db.models import CalendarSource
 
-    source = CalendarSource(id=1, label="Test Source", url="https://example.com/test.ics")
+    source = CalendarSource(
+        id=1, label="Test Source", url="https://example.com/test.ics"
+    )
     session.add(source)
     session.commit()
 
@@ -622,7 +645,8 @@ def test_comprehensive_calendar_parsing_and_alarms(session):
         for uid in alarm_uids
     ), f"single-alarm@example.com not found in {alarm_uids}"
     assert any(
-        "proximity-alarm@example.com" in uid or uid.endswith("proximity-alarm@example.com")
+        "proximity-alarm@example.com" in uid
+        or uid.endswith("proximity-alarm@example.com")
         for uid in alarm_uids
     ), f"proximity-alarm@example.com not found in {alarm_uids}"
 

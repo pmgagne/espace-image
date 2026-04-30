@@ -1,6 +1,10 @@
 """Weather module service implementation."""
 
-from app.modules.weather.api.interfaces import IWeatherService, WeatherData, WeatherLocationResult
+from app.modules.weather.api.interfaces import (
+    IWeatherService,
+    WeatherData,
+    WeatherLocationResult,
+)
 from app.modules.weather.internal.infrastructure.weather_api import (
     WeatherService as LegacyWeatherService,
 )
@@ -28,6 +32,10 @@ class WeatherModuleService(IWeatherService):
             lon=float(data["lon"]),
             name=str(data["name"]),
         )
+
+    async def reverse_geocode(self, lat: float, lon: float) -> str | None:
+        """Return a human-readable location name for coordinates."""
+        return await LegacyWeatherService.reverse_geocode(lat, lon)
 
 
 def create_weather_service() -> IWeatherService:

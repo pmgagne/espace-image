@@ -138,3 +138,30 @@ class WeatherService:
                 "Geocoding error in geocode_location",
             )
             return None
+
+    @staticmethod
+    async def reverse_geocode(lat: float, lon: float) -> str | None:
+        """Resolve coordinates to a short location label for the admin UI."""
+        try:
+            url = "https://nominatim.openstreetmap.org/reverse"
+            params: dict[str, float | str] = {
+                "lat": lat,
+                "lon": lon,
+                "format": "json",
+            }
+            headers = {"User-Agent": "Espace-Image/1.0"}
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params, headers=headers, timeout=5.0)
+                response.raise_for_status()
+                data = response.json()
+
+            address = data.get("address", {})
+            city = address.get("city") or address.get("town") or address.get("village")
+            state = address.get("state") or address.get("region")
+
+            if city and state:
+                return f"{city}, {state}"
+            return city or state
+        except Exception:
+            logger.exception("Reverse geocoding error in reverse_geocode")
+            return None

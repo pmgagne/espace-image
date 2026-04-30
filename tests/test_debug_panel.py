@@ -112,7 +112,9 @@ def test_simulated_alarm_can_be_dismissed(client, session):
     from uuid import UUID
 
     alarm_uuid = UUID(alarm_id)
-    all_alarms = session.exec(select(AlarmEvent).where(AlarmEvent.id == alarm_uuid)).all()
+    all_alarms = session.exec(
+        select(AlarmEvent).where(AlarmEvent.id == alarm_uuid)
+    ).all()
     assert len(all_alarms) > 0
     # Find the one with dismissed_at set
     dismissed = [a for a in all_alarms if a.dismissed_at is not None]

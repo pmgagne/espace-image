@@ -1,10 +1,12 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-from app.services.calendar_service import CalendarService
 from sqlmodel import select
 
 from app.modules.alarms.internal.application.service import AlarmsService
+from app.modules.calendar.internal.infrastructure.calendar_sync import (
+    CalendarService,
+)
 
 # Fixed reference time for deterministic calendar parsing tests
 FIXED_NOW = datetime(2026, 2, 16, 12, 0, tzinfo=UTC)
