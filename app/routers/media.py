@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 from app.db.models import Photo
 from app.db.session import get_session
-from app.services.image_service import ImageOptimizer
+from app.modules.media.api.interfaces import IMediaService, get_media_service
 
 router = APIRouter()
 
@@ -16,7 +16,12 @@ UPLOAD_DIR = Path("data/uploads")
 
 
 @router.get("/images/{photo_id}")
-async def get_image(photo_id: int, mode: str = "modern", session: Session = Depends(get_session)):
+async def get_image(
+    photo_id: int,
+    mode: str = "modern",
+    session: Session = Depends(get_session),
+    media_service: IMediaService = Depends(get_media_service),
+):
     """
     Serves the image file.
     If mode='legacy', resizes it on the fly.
@@ -38,7 +43,7 @@ async def get_image(photo_id: int, mode: str = "modern", session: Session = Depe
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
 
-    optimized_bytes = ImageOptimizer.optimize_path(file_path)
+    optimized_bytes = media_service.optimize_path(file_path)
     if mode == "legacy":
         return StreamingResponse(BytesIO(optimized_bytes), media_type="image/jpeg")
 

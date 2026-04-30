@@ -13,11 +13,11 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from app.services.calendar_service import CalendarService
 from sqlmodel import Session, select
 
 from app.db.models import CalendarEventCache
-from app.routers import dashboard
-from app.services.calendar_service import CalendarService
+from app.modules.alarms.internal.application.service import AlarmsService
 
 # Use a fixed reference time to make calendar tests deterministic
 FIXED_NOW = datetime(2026, 2, 16, 0, 0, tzinfo=UTC)
@@ -53,7 +53,7 @@ def set_event_time(session: Session, uid: str, start: datetime, end: datetime) -
 def get_alarm(session: Session, uid: str, ics_path: str | None = None) -> dict[str, Any] | None:
     """
     If ics_path is provided, use CalendarService.get_upcoming_alarms directly on the ICS file for robust alarm extraction.
-    Otherwise, fallback to dashboard._fetch_calendar_alarms (DB cache).
+    Otherwise, fallback to the alarms module service over the DB cache.
     """
     if ics_path is not None:
         with open(ics_path, encoding="utf-8") as fh:
@@ -69,8 +69,7 @@ def get_alarm(session: Session, uid: str, ics_path: str | None = None) -> dict[s
             if uid in alarm["uid"]:
                 return alarm
         return None
-    # Fallback: use dashboard logic (DB cache)
-    alarms = asyncio.run(dashboard._fetch_calendar_alarms(session))
+    alarms = asyncio.run(AlarmsService().get_active_alarms(session))
     for alarm in alarms:
         if uid in alarm["uid"]:
             return alarm

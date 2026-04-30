@@ -1,6 +1,5 @@
 import logging
 import os
-import random
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -9,16 +8,16 @@ from sqlmodel import Session, select
 
 from app.db.models import (
     AlarmEvent,
-    AppSettings,
     CalendarEventCache,
     CalendarSource,
     CalendarSyncStatusEntry,
-    Photo,
 )
 from app.db.session import get_session
+from app.modules.alarms.api.interfaces import IAlarmsService, get_alarms_service
+from app.modules.settings.api.interfaces import ISettingsService, get_settings_service
+from app.modules.slideshow.api.interfaces import ISlideshowService, get_slideshow_service
+from app.modules.weather.api.interfaces import IWeatherService, get_weather_service
 from app.schemas import SlideResponse, WeatherResponse
-from app.services.alarm_service import AlarmService
-from app.services.weather_service import WeatherService
 from app.template_config import templates
 from app.utils.timezone import datetime_to_iso_with_tz, ensure_utc_aware
 
@@ -50,7 +49,11 @@ def _isoformat_safe(dt_obj: object, tzid: str | None = None) -> str:
 
 
 @router.get("/")
-async def read_root(request: Request, session: Session = Depends(get_session)):
+async def read_root(
+    request: Request,
+    session: Session = Depends(get_session),
+    settings_service: ISettingsService = Depends(get_settings_service),
+):
     """Modern Slideshow View"""
     user_agent = request.headers.get("user-agent", "").lower()
     logger.debug("Incoming User-Agent: %s", user_agent)
@@ -60,16 +63,20 @@ async def read_root(request: Request, session: Session = Depends(get_session)):
     if "ipad" in user_agent and "os 9" in user_agent:
         return RedirectResponse(url="/legacy", status_code=302)
 
-    settings = session.exec(select(AppSettings)).first()
+    settings = settings_service.get_settings(session)
     return templates.TemplateResponse(
         request, "index.html", {"mode": "modern", "settings": settings}
     )
 
 
 @router.get("/legacy")
-async def read_legacy(request: Request, session: Session = Depends(get_session)):
+async def read_legacy(
+    request: Request,
+    session: Session = Depends(get_session),
+    settings_service: ISettingsService = Depends(get_settings_service),
+):
     """Legacy Slideshow View (iPad 2)"""
-    settings = session.exec(select(AppSettings)).first()
+    settings = settings_service.get_settings(session)
     # Determine the most recent calendar sync time (if any) to display in legacy UI
     try:
         statuses = session.exec(select(CalendarSyncStatusEntry)).all()
@@ -89,7 +96,12 @@ async def read_legacy(request: Request, session: Session = Depends(get_session))
 
 
 @router.get("/components/weather", response_class=HTMLResponse, response_model=WeatherResponse)
-async def get_weather(request: Request, session: Session = Depends(get_session)):
+async def get_weather(
+    request: Request,
+    session: Session = Depends(get_session),
+    settings_service: ISettingsService = Depends(get_settings_service),
+    weather_service: IWeatherService = Depends(get_weather_service),
+):
     """
     Returns HTML fragment for weather widget.
 
@@ -97,7 +109,7 @@ async def get_weather(request: Request, session: Session = Depends(get_session))
     documents the structured weather data used by API consumers; the route
     itself renders HTML for the UI.
     """
-    settings = session.exec(select(AppSettings)).first()
+    settings = settings_service.get_settings(session)
 
     if not settings or settings.weather_latitude is None or settings.weather_longitude is None:
         return templates.TemplateResponse(
@@ -108,7 +120,12 @@ async def get_weather(request: Request, session: Session = Depends(get_session))
     lat = settings.weather_latitude
     lon = settings.weather_longitude
 
-    weather = await WeatherService.get_current_weather(lat, lon)
+    weather_data = await weather_service.get_current_weather(lat, lon)
+    weather = {
+        "temp": weather_data.temp,
+        "condition": weather_data.condition,
+        "location": weather_data.location,
+    }
 
     return templates.TemplateResponse(
         "partials/weather.html",
@@ -118,149 +135,22 @@ async def get_weather(request: Request, session: Session = Depends(get_session))
 
 @router.get("/components/slide", response_class=HTMLResponse, response_model=SlideResponse)
 async def get_next_slide(
-    request: Request, mode: str = "modern", session: Session = Depends(get_session)
+    request: Request,
+    mode: str = "modern",
+    session: Session = Depends(get_session),
+    slideshow_service: ISlideshowService = Depends(get_slideshow_service),
 ):
-    settings = session.exec(select(AppSettings)).first()
-    if not settings or settings.active_preset_id is None:
+    selection = slideshow_service.select_next_slide(session, mode)
+    if selection.error_msg:
         return templates.TemplateResponse(
             "partials/slide.html",
-            {"request": request, "error_msg": "No Preset Active. Please configure in Admin."},
+            {"request": request, "error_msg": selection.error_msg},
         )
-
-    photos = session.exec(select(Photo).where(Photo.preset_id == settings.active_preset_id)).all()
-
-    if not photos:
-        return templates.TemplateResponse(
-            "partials/slide.html",
-            {"request": request, "error_msg": "No Photos found in the active preset."},
-        )
-
-    photo = random.choice(photos)
-    img_url = f"/images/{photo.id}?mode={mode}"
 
     return templates.TemplateResponse(
         "partials/slide.html",
-        {"request": request, "img_url": img_url},
+        {"request": request, "img_url": selection.img_url},
     )
-
-
-# Alarm formatting and purge logic moved to AlarmService in app/services/alarm_service.py
-
-
-async def _fetch_calendar_alarms(session: Session, _tz_offset: int | None = None) -> list[dict]:
-    """Fetch alarms from cached calendar events and filter dismissed ones."""
-    # Use CalendarService.get_upcoming_alarms to get alarms with correct trigger_time
-    utc_now = datetime.now(UTC)
-    window_start = utc_now - timedelta(days=7)
-    window_end = utc_now + timedelta(days=7)
-    # For each calendar source, aggregate events in window
-    sources = session.exec(select(CalendarSource)).all()
-    active_alarms: list[dict] = []
-    for source in sources:
-        cached_events = session.exec(
-            select(CalendarEventCache).where(
-                (CalendarEventCache.calendar_source_id == source.id)
-                & (CalendarEventCache.event_start <= window_end)
-                & (CalendarEventCache.event_end >= window_start)
-            )
-        ).all()
-
-        for event in cached_events:
-            # Determine effective trigger time (fallback to event_start)
-            trigger = (
-                event.trigger_time
-                if hasattr(event, "trigger_time") and event.trigger_time is not None
-                else event.event_start
-            )
-
-            # Normalize trigger to UTC-aware for safe comparisons
-            try:
-                trigger_aware = ensure_utc_aware(trigger) if trigger is not None else None
-            except Exception:
-                if trigger is None:
-                    continue
-                trigger_aware = (
-                    trigger
-                    if getattr(trigger, "tzinfo", None) is not None
-                    else trigger.replace(tzinfo=UTC)
-                )
-
-            # Only show alarms when their trigger_time has been reached
-            if trigger_aware is None or trigger_aware > utc_now:
-                continue
-
-            composite_uid = f"{event.calendar_source_id}:{event.uid}"
-
-            # Check if alarm was dismissed using calendar relationship
-            dismissed = session.exec(
-                select(AlarmEvent).where(
-                    AlarmEvent.calendar_source_id == event.calendar_source_id,
-                    AlarmEvent.calendar_event_uid == event.uid,
-                )
-            ).first()
-
-            if not dismissed or dismissed.dismissed_at is None:
-                alarm = {
-                    "uid": composite_uid,
-                    "name": event.summary,
-                    "start": event.event_start,
-                    "end": event.event_end,
-                    "tzid": getattr(event, "event_tz", None),
-                    # Prefer explicit all_day flag stored in the cache when available;
-                    # fallback to duration/midnight heuristic for backwards compatibility.
-                    "all_day": getattr(event, "all_day", False)
-                    or (
-                        getattr(event, "event_start", None) is not None
-                        and getattr(event, "event_end", None) is not None
-                        and getattr(event, "event_start", None).hour == 0
-                        and getattr(event, "event_start", None).minute == 0
-                        and (event.event_end - event.event_start).days >= 1
-                    ),
-                    "trigger_time": trigger,
-                }
-                active_alarms.append(alarm)
-
-    return active_alarms
-
-
-def _fetch_simulated_alarms(session: Session) -> list[dict]:
-    """Fetch test/simulated alarms from database."""
-    # Use naive UTC datetime for DB comparison (SQLite stores datetimes as naive)
-    now_naive = datetime.now(UTC).replace(tzinfo=None)
-
-    # Test alarms have no calendar link (NULL calendar_source_id)
-    simulated_alarms = session.exec(
-        select(AlarmEvent).where(
-            (AlarmEvent.calendar_source_id.is_(None))  # type: ignore[attr-defined,union-attr]
-            & (AlarmEvent.trigger_time <= now_naive)
-            & (AlarmEvent.dismissed_at.is_(None))  # type: ignore[attr-defined,union-attr]
-        )
-    ).all()
-
-    alarms = []
-    for alarm_event in simulated_alarms:
-        # Ensure trigger_time is timezone-aware (DB may contain legacy naive datetimes)
-        try:
-            start_dt = ensure_utc_aware(alarm_event.trigger_time)
-        except Exception:
-            start_dt = alarm_event.trigger_time
-
-        try:
-            end_dt = ensure_utc_aware(alarm_event.trigger_time + timedelta(hours=1))
-        except Exception:
-            end_dt = alarm_event.trigger_time + timedelta(hours=1)
-
-        alarms.append(
-            {
-                "uid": str(alarm_event.id),  # Use UUID as uid for backwards compatibility
-                "name": "Simulated Event",
-                "start": start_dt,
-                "end": end_dt,
-                "all_day": False,
-                # Don't specify tzid - let frontend/browser handle timezone conversion from UTC
-            }
-        )
-    return alarms
 
 
 def _alarms_to_context(
@@ -320,59 +210,6 @@ def _alarms_to_context(
         )
 
     return contexts
-
-
-def _render_alarms_html(
-    active_alarms: list[dict], mock: bool = False, tz_offset: int | None = None
-) -> str:
-    """Generate HTML for alarm list (backwards-compatible helper used in tests)."""
-    if not active_alarms:
-        return ""
-
-    from datetime import datetime as _datetime
-
-    # Use timezone-aware minimum datetime for sorting
-    min_dt = _datetime.min.replace(tzinfo=UTC)
-
-    def _sort_key(item: dict):
-        dt = item.get("start")
-        if not dt:
-            return min_dt
-        try:
-            return ensure_utc_aware(dt)
-        except Exception:
-            try:
-                return dt.replace(tzinfo=UTC)
-            except Exception:
-                return min_dt
-
-    active_alarms.sort(key=_sort_key, reverse=True)
-
-    tz_query = f"&tz_offset={tz_offset}" if tz_offset is not None else ""
-    alarms_html = ""
-    for alarm in active_alarms:
-        start_iso = ""
-        end_iso = ""
-        all_day = False
-        tzid = alarm.get("tzid")
-        start_iso = _isoformat_safe(alarm.get("start"), tzid)
-        end_iso = _isoformat_safe(alarm.get("end"), tzid)
-        if "all_day" in alarm:
-            all_day = alarm["all_day"]
-
-        fallback_text = _format_fallback_datetime(
-            alarm.get("start"), alarm.get("end"), all_day, start_iso
-        )
-
-        alarms_html += _render_alarm_item(
-            alarm, fallback_text, start_iso, end_iso, all_day, mock, tz_query
-        )
-
-    return f"""
-    <div id="alarm-box" class="alarm-box-container">
-        {alarms_html}
-    </div>
-    """
 
 
 def _parse_alarm_id(alarm_id: str) -> tuple[object | None, int | None, str | None]:
@@ -472,49 +309,21 @@ def _format_fallback_datetime(dt_obj, end_obj, all_day_flag: bool, start_iso_str
         return start_iso_str or ""
 
 
-def _render_alarm_item(
-    alarm: dict,
-    fallback_text: str,
-    start_iso: str,
-    end_iso: str,
-    all_day: bool,
-    mock: bool,
-    tz_query: str,
-) -> str:
-    """Render a single alarm item HTML snippet."""
-    from markupsafe import escape
-
-    uid = alarm.get("uid")
-    name = alarm.get("name", "")
-    # Security: Escape HTML to prevent XSS attacks from calendar event summaries
-    escaped_name = escape(name)
-    escaped_fallback = escape(fallback_text)
-    return f"""
-        <div class="alarm-item">
-            <div class="alarm-header">
-                <span class="alarm-icon">📅</span>
-                <span class="alarm-title">{escaped_name}</span>
-            </div>
-            <div class="alarm-body">
-                <span class="alarm-time alarm-time-small" data-start="{start_iso}" data-end="{end_iso}" data-allday="{str(all_day).lower()}">{escaped_fallback}</span>
-            </div>
-            <button hx-post="/api/alarms/{uid}/dismiss?mock={"true" if mock else "false"}{tz_query}"
-                    hx-target="#alarm-poller"
-                    hx-swap="innerHTML"
-                    class="dismiss-btn-small">Dismiss</button>
-        </div>
-        """
-
-
 @router.get("/components/index-refresh", response_class=HTMLResponse)
-async def components_index_refresh(request: Request, session: Session = Depends(get_session)):
+async def components_index_refresh(
+    request: Request,
+    session: Session = Depends(get_session),
+    settings_service: ISettingsService = Depends(get_settings_service),
+    weather_service: IWeatherService = Depends(get_weather_service),
+    alarms_service: IAlarmsService = Depends(get_alarms_service),
+):
     """Return out-of-band fragments to refresh main index components.
 
     This endpoint returns HTML fragments with `hx-swap-oob` attributes so
     HTMX will update the corresponding wrappers on the client without
     replacing the triggering element.
     """
-    settings = session.exec(select(AppSettings)).first()
+    settings = settings_service.get_settings(session)
     out_parts: list[str] = []
 
     # Weather fragment (if location configured)
@@ -524,9 +333,14 @@ async def components_index_refresh(request: Request, session: Session = Depends(
         and settings.weather_longitude is not None
     ):
         try:
-            weather = await WeatherService.get_current_weather(
+            weather_data = await weather_service.get_current_weather(
                 settings.weather_latitude, settings.weather_longitude
             )
+            weather = {
+                "temp": weather_data.temp,
+                "condition": weather_data.condition,
+                "location": weather_data.location,
+            }
             weather_html = templates.env.get_template("partials/weather.html").render(
                 request=request, has_location=True, weather=weather
             )
@@ -536,10 +350,8 @@ async def components_index_refresh(request: Request, session: Session = Depends(
 
     # Alarm fragment
     try:
-        AlarmService.purge_old_dismissed_alarms(session)
-        calendar_alarms = await _fetch_calendar_alarms(session, None)
-        simulated_alarms = _fetch_simulated_alarms(session)
-        active_alarms = calendar_alarms + simulated_alarms
+        await alarms_service.purge_old_dismissed_alarms(session)
+        active_alarms = await alarms_service.get_active_alarms(session)
         alarm_contexts = _alarms_to_context(active_alarms, mock=False, tz_offset=None)
         if alarm_contexts:
             alarm_html = templates.env.get_template("partials/alarms.html").render(
@@ -560,10 +372,10 @@ async def check_alarm(
     mock: bool = False,
     tz_offset: int | None = None,
     session: Session = Depends(get_session),
+    alarms_service: IAlarmsService = Depends(get_alarms_service),
 ):
     """Checks for active alarms and returns a list of them if any exist."""
     logger.info("Alarm refresh requested (mock=%s, tz_offset=%s)", mock, tz_offset)
-    AlarmService.purge_old_dismissed_alarms(session)
 
     if mock:
         # Provide ISO datetimes so client-side can format using browser locale
@@ -594,10 +406,10 @@ async def check_alarm(
             },
         ]
     else:
-        # Fetch real alarms from calendars and simulated alarms
-        calendar_alarms = await _fetch_calendar_alarms(session, tz_offset)
-        simulated_alarms = _fetch_simulated_alarms(session)
-        active_alarms = calendar_alarms + simulated_alarms
+        # Purge old alarms before fetching
+        await alarms_service.purge_old_dismissed_alarms(session)
+        # Fetch active alarms from service
+        active_alarms = await alarms_service.get_active_alarms(session)
 
     # Convert to template context and render partial
     alarm_contexts = _alarms_to_context(active_alarms, mock, tz_offset)
@@ -708,81 +520,22 @@ async def dismiss_alarm(
     mock: bool = False,
     tz_offset: int | None = None,
     session: Session = Depends(get_session),
+    alarms_service: IAlarmsService = Depends(get_alarms_service),
 ):
     """Dismisses an alarm and returns the updated alarm list."""
-    from uuid import uuid4
-
-    # Parse alarm_id - could be UUID or composite uid (calendar_source_id:event_uid)
-    calendar_source_id = None
-    calendar_event_uid = None
-    alarm_uuid = None
-
     # If this is a mock request, bypass strict alarm_id validation and return
     # the mock alarm list immediately. Mock IDs (e.g. "mock-1") are allowed
     # and should not be treated as errors.
     if mock:
-        return await check_alarm(request, mock=True, tz_offset=tz_offset, session=session)
+        return await check_alarm(
+            request, mock=True, tz_offset=tz_offset, session=session, alarms_service=alarms_service
+        )
 
-    # Parse alarm_id into components
-    alarm_uuid, calendar_source_id, calendar_event_uid = _parse_alarm_id(alarm_id)
-
-    if not mock:
-        existing = None
-
-        if alarm_uuid:
-            # Direct UUID lookup
-            existing = session.exec(select(AlarmEvent).where(AlarmEvent.id == alarm_uuid)).first()
-        else:
-            # Lookup by calendar relationship
-            existing = session.exec(
-                select(AlarmEvent).where(
-                    AlarmEvent.calendar_source_id == calendar_source_id,
-                    AlarmEvent.calendar_event_uid == calendar_event_uid,
-                )
-            ).first()
-
-        if existing:
-            # Update existing alarm record with dismissal time (UTC-aware)
-            existing.dismissed_at = ensure_utc_aware(datetime.now())
-            session.add(existing)
-        else:
-            # Create new alarm record for calendar event dismissal
-            trigger_time = ensure_utc_aware(datetime.now())
-
-            # Try to find cached event for accurate trigger time
-            if calendar_source_id and calendar_event_uid:
-                try:
-                    cached = session.exec(
-                        select(CalendarEventCache).where(
-                            CalendarEventCache.calendar_source_id == calendar_source_id,
-                            CalendarEventCache.uid == calendar_event_uid,
-                        )
-                    ).first()
-                    if cached:
-                        trigger_time = cached.event_start
-                except Exception as e:
-                    logger.exception(
-                        "DB lookup error while finding cached event for calendar_source_id=%s, uid=%s: %s",
-                        calendar_source_id,
-                        calendar_event_uid,
-                        e,
-                    )
-                    # Fall back to now on any DB lookup error
-                    trigger_time = ensure_utc_aware(datetime.now())
-
-            alarm_event = AlarmEvent(
-                id=uuid4(),  # Generate new UUID
-                trigger_time=trigger_time,
-                dismissed_at=ensure_utc_aware(datetime.now()),
-                calendar_source_id=calendar_source_id,
-                calendar_event_uid=calendar_event_uid,
-            )
-            session.add(alarm_event)
-
-        session.commit()
-        # Refresh session to ensure we get updated data
-        session.expunge_all()
+    # Use service to dismiss the alarm (handles UUID and composite UID parsing)
+    await alarms_service.dismiss_alarm(alarm_id, session)
 
     # Return the updated list immediately
-    logger.info("Alarm dismissed id=%s (mock=%s, tz_offset=%s)", alarm_id, mock, tz_offset)
-    return await check_alarm(request, mock=mock, tz_offset=tz_offset, session=session)
+    logger.info("Alarm dismissed id=%s (tz_offset=%s)", alarm_id, tz_offset)
+    return await check_alarm(
+        request, mock=False, tz_offset=tz_offset, session=session, alarms_service=alarms_service
+    )

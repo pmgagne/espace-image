@@ -4,7 +4,7 @@ import pytest
 from sqlmodel import select
 
 from app.db.models import AlarmEvent, CalendarSource
-from app.services.calendar_service import CalendarService
+from app.modules.calendar.internal.infrastructure.calendar_sync import CalendarService
 
 
 def test_check_alarm_mock(client):

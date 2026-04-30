@@ -1,6 +1,6 @@
 # Active Context
 
-**Last Updated**: 2026-02-19
+**Last Updated**: 2026-04-30
 
 ## Current Work Focus
 
@@ -29,6 +29,83 @@ See [ADR-2026-02-19-security-audit-code-quality.md](../docs/ADR/ADR-2026-02-19-s
 - Verified all ADRs reflect current architecture
 
 ## Recent Changes
+
+### Modularization Kickoff (2026-04-30)
+
+Started implementation of Talos-style modular monolith patterns without changing endpoint contracts:
+
+1. Added composition root loader in `app/modules/loader.py` and wired lifecycle hooks in `app/main.py`
+2. Created first module skeleton: `app/modules/weather/` with `api`, `internal/application`, and `loader`
+3. Introduced weather DI token (`get_weather_service`) and Protocol-based interface
+4. Updated existing weather call sites in dashboard/admin routes to use dependency injection via module API
+5. Verified no regressions in lint and targeted tests (`test_app`, `test_admin_settings_validation`, `test_index_auto_refresh`)
+
+This is the first migration slice from static service calls to module API boundaries.
+
+### Media Module Migration Slice (2026-04-30)
+
+Continued Talos-style migration with media boundaries while preserving routes:
+
+1. Added `app/modules/media/` module skeleton with `api`, `internal/application`, and `loader`
+2. Introduced media DI token (`get_media_service`) and Protocol-based media interface
+3. Registered media module in composition root lifecycle (`app/modules/loader.py`)
+4. Updated `app/routers/media.py` and admin upload/delete handlers to depend on module API
+5. Verified with lint + targeted tests (`test_image_service`, `test_routers`, `test_app`)
+
+Current migration status:
+- Weather and Media are now behind module API dependency boundaries.
+- Route contracts and endpoint paths remain unchanged.
+
+### Settings + Slideshow Migration Slice (2026-04-30)
+
+Continued migration of router-embedded business logic into module boundaries:
+
+1. Added `app/modules/settings/` with API interface, repository, service, and loader wiring
+2. Added `app/modules/slideshow/` with API interface, repository, service, and loader wiring
+3. Registered both modules in composition root (`app/modules/loader.py`)
+4. Updated dashboard routes to consume settings/slideshow services via DI
+5. Updated admin settings handlers to use settings module service for persistence and preset validation
+6. Preserved endpoint behavior and compatibility message for invalid preset validation
+
+Current migration status:
+- Weather, Media, Settings, and Slideshow now use module API dependency boundaries.
+- High-risk calendar/alarms slice remains next.
+
+### Calendar + Alarms Migration Slice (Phase 4 - 2026-04-30)
+
+**COMPLETED**: Final high-complexity module slice successfully migrated to modular monolith pattern
+
+1. Created `app/modules/calendar/` with ICalendarService protocol, CalendarService wrapper, and loader wiring
+   - Wraps existing OriginalCalendarService static methods for backward compatibility
+   - Provides async methods: sync_calendars, get_calendar_events_in_window, fetch_ics
+   - Registered in composition root with lifecycle hooks (init, post_init, teardown)
+
+2. Created `app/modules/alarms/` with IAlarmsService protocol, AlarmsService implementation, and loader wiring
+   - Dual-fetch pattern: calendar events + test/simulated alarms
+   - Dismissal logic with composite UID parsing (source_id:event_uid) and UUID support
+   - Purge logic (30-day retention) for dismissed alarms
+   - Dismissal creates new AlarmEvent record if alarm doesn't exist (idempotency)
+   - Registered in composition root with lifecycle hooks
+
+3. **Dashboard Route Refactoring** (100% complete):
+   - `check_alarm` endpoint: Injects IAlarmsService, calls get_active_alarms + purge_old_dismissed_alarms
+   - `dismiss_alarm` endpoint: Simplified to inject IAlarmsService, delegates to dismiss_alarm service method
+
+4. **Admin Route Refactoring** (100% complete):
+   - Removed direct CalendarService static method calls
+   - `sync_calendars_now` endpoint now injects ICalendarService, calls sync_calendars
+
+5. **Main Scheduler Refactoring** (100% complete):
+   - `background_sync_calendars` background task now resolves calendar_service via get_calendar_service()
+   - Calls calendar_service.sync_calendars(session) instead of static method
+
+6. **Validation Results**:
+   - All 69 tests passing (cumulative from all phases)
+   - 61% overall code coverage
+   - Zero linting violations (Ruff clean)
+   - 100% backward compatibility maintained (all endpoint contracts unchanged)
+
+Next Migration: Complete Phase 5 if additional services need encapsulation.
 
 ### Alarm System (2026-02-17)
 

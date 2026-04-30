@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
-from app.routers import dashboard
-from app.services.calendar_service import CalendarService
+from app.modules.calendar.internal.infrastructure.calendar_sync import CalendarService
+from app.routers.dashboard import _alarms_to_context
 
 
 def _build_ics_with_proximity(start: datetime, end: datetime) -> str:
@@ -40,7 +40,7 @@ def test_extract_events_detects_proximity():
     assert ev.get("has_non_time_alarm") is True
 
 
-def test_render_alarms_sorted_newest_first():
+def test_alarm_contexts_sorted_newest_first():
     # Create two alarms with different start times
     now = datetime.now(UTC)
     a1 = {
@@ -58,11 +58,6 @@ def test_render_alarms_sorted_newest_first():
         "all_day": False,
     }
 
-    # Provide in older-first order
-    html = dashboard._render_alarms_html([a1, a2], mock=False, tz_offset=None)
+    contexts = _alarms_to_context([a1, a2], mock=False, tz_offset=None)
 
-    # Newer should appear before Older in the produced HTML
-    idx_newer = html.find("Newer")
-    idx_older = html.find("Older")
-    assert idx_newer != -1 and idx_older != -1
-    assert idx_newer < idx_older
+    assert [context["name"] for context in contexts] == ["Newer", "Older"]

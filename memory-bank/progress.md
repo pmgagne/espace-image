@@ -1,6 +1,6 @@
 # Progress — Espace-Image
 
-**Last Updated**: 2026-02-19
+**Last Updated**: 2026-04-30
 
 ## What Works
 
@@ -81,6 +81,28 @@
 - Linting (Ruff, htmlhint, stylelint, eslint)
 - Security scanning (Trivy)
 - Documentation (ADRs, README, CONTRIBUTING)
+
+✅ **Architecture Modernization (In Progress)**
+
+- Composition root introduced for module lifecycle wiring (`app/modules/loader.py`)
+- First Talos-style module slice implemented for weather (`api` + `internal/application` + DI token)
+- Existing dashboard/admin weather routes now consume module API via `Depends(get_weather_service)`
+- Lint and targeted regression tests pass after migration kickoff
+- Media module slice added with module API dependency wiring
+- `media` and `admin` routes now consume `Depends(get_media_service)` for upload/delete/optimize operations
+- Additional targeted media/router regression tests pass after migration
+- Settings module slice added with module API persistence service and preset validation
+- Slideshow selection extracted into slideshow module service and consumed via DI
+- Dashboard and admin settings routes now use module interfaces (`Depends(get_settings_service)`, `Depends(get_slideshow_service)`)
+- Compatibility regression fixed to preserve existing validation error detail text
+- **Phase 4**: Calendar and Alarms modules now migrated to modular monolith pattern
+  - Calendar module: ICalendarService protocol with sync_calendars, get_calendar_events_in_window, fetch_ics methods
+  - Alarms module: IAlarmsService protocol with get_active_alarms, dismiss_alarm, purge_old_dismissed_alarms methods
+  - Dashboard routes refactored to inject and use IAlarmsService (check_alarm, dismiss_alarm endpoints)
+  - Admin calendar endpoints refactored to inject and use ICalendarService (sync_calendars_now)
+  - Background scheduler (main.py) refactored to use calendar service DI
+  - All 69 tests passing (61% coverage) with 100% backward compatibility
+  - Linting clean (0 violations)
 
 ## What's Left to Build
 

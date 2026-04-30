@@ -16,15 +16,16 @@ from app.db.models import (
     Preset,
 )
 from app.db.session import get_session
-from app.services.calendar_service import CalendarService
-from app.services.image_service import GalleryManager
-from app.services.weather_service import WeatherService
+from app.modules.calendar.api.interfaces import ICalendarService, get_calendar_service
+from app.modules.media.api.interfaces import IMediaService, get_media_service
+from app.modules.settings.api.exceptions import PresetNotFoundError
+from app.modules.settings.api.interfaces import ISettingsService, get_settings_service
+from app.modules.weather.api.interfaces import IWeatherService, get_weather_service
 from app.template_config import templates
 from app.utils.timezone import get_local_timezone_name
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
-gallery_manager = GalleryManager()
 
 
 # --- Main Shell ---
@@ -37,9 +38,13 @@ async def admin_shell(request: Request):
 
 # --- Partials: Settings ---
 @router.get("/partials/settings", response_class=HTMLResponse)
-async def get_settings_partial(request: Request, session: Session = Depends(get_session)):
-    settings = session.exec(select(AppSettings)).first()
-    presets = session.exec(select(Preset)).all()
+async def get_settings_partial(
+    request: Request,
+    session: Session = Depends(get_session),
+    settings_service: ISettingsService = Depends(get_settings_service),
+):
+    settings = settings_service.get_settings(session)
+    presets = settings_service.list_presets(session)
 
     location_name = ""
     if settings and settings.weather_latitude and settings.weather_longitude:
@@ -85,19 +90,28 @@ async def search_location(
     request: Request,
     location_query: str = Form(...),
     session: Session = Depends(get_session),
+    settings_service: ISettingsService = Depends(get_settings_service),
+    weather_service: IWeatherService = Depends(get_weather_service),
 ):
     """
     Geocodes the location query and returns the settings form
     pre-filled with the new coordinates (not saved yet).
     """
-    settings = session.exec(select(AppSettings)).first()
+    settings = settings_service.get_settings(session)
     if not settings:
-        settings = AppSettings()  # default
+        settings = AppSettings()
 
-    presets = session.exec(select(Preset)).all()
+    presets = settings_service.list_presets(session)
 
     # Perform Geocoding
-    result = await WeatherService.geocode_location(location_query)
+    result_data = await weather_service.geocode_location(location_query)
+    result = None
+    if result_data is not None:
+        result = {
+            "lat": result_data.lat,
+            "lon": result_data.lon,
+            "name": result_data.name,
+        }
     location_name = "Location not found"
 
     if result:
@@ -127,6 +141,7 @@ async def update_settings(
     duration: int | None = Form(None),
     default_alarm_for_all_events: str | None = Form(None),
     session: Session = Depends(get_session),
+    settings_service: ISettingsService = Depends(get_settings_service),
 ):
     # Basic validation for form inputs
     import math
@@ -142,28 +157,17 @@ async def update_settings(
     if duration is not None and duration <= 0:
         raise HTTPException(status_code=422, detail="Duration must be a positive integer")
 
-    settings = session.exec(select(AppSettings)).first()
-    if not settings:
-        settings = AppSettings()
-
-    # Validate active_preset_id if provided
-    if active_preset_id is not None:
-        preset = session.get(Preset, active_preset_id)
-        if not preset:
-            raise HTTPException(status_code=422, detail="Active preset not found")
-
-    settings.active_preset_id = active_preset_id
-    settings.weather_latitude = latitude
-    settings.weather_longitude = longitude
-    if duration is not None:
-        settings.slideshow_duration = duration
-    # Checkbox: presence indicates enabled
-    if default_alarm_for_all_events is not None:
-        settings.default_alarm_for_all_events = True
-    else:
-        settings.default_alarm_for_all_events = False
-    session.add(settings)
-    session.commit()
+    try:
+        settings_service.save_settings(
+            session=session,
+            active_preset_id=active_preset_id,
+            latitude=latitude,
+            longitude=longitude,
+            duration=duration,
+            default_alarm_for_all_events=default_alarm_for_all_events is not None,
+        )
+    except PresetNotFoundError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     # Redirect to the main slideshow using HTMX
     response = HTMLResponse()
@@ -293,6 +297,7 @@ async def update_calendar_defaults(
 async def sync_calendars_now(
     request: Request,
     session: Session = Depends(get_session),
+    calendar_service: ICalendarService = Depends(get_calendar_service),
 ):
     """Manually trigger calendar synchronization."""
 
@@ -301,9 +306,7 @@ async def sync_calendars_now(
     # actual work. Run sync but suppress exceptions to avoid bubbling
     # errors to the admin UI
     with contextlib.suppress(Exception):
-        await CalendarService.sync_calendar_events(session)
-
-    # CalendarService.sync_calendar_events now assigns per-source next_sync_at
+        await calendar_service.sync_calendars(session)
 
     return await get_calendars_partial(request, session)
 
@@ -358,6 +361,7 @@ async def upload_photos(
     preset_id: int = Form(...),
     files: list[UploadFile] = File(...),
     session: Session = Depends(get_session),
+    media_service: IMediaService = Depends(get_media_service),
 ):
     preset = session.get(Preset, preset_id)
     if not preset:
@@ -368,9 +372,7 @@ async def upload_photos(
             continue
         try:
             content = await file.read()
-            _path, stored_filename = gallery_manager.save_upload(
-                content, file.filename, preset.name
-            )
+            _path, stored_filename = media_service.save_upload(content, file.filename, preset.name)
             photo = Photo(filename=stored_filename, preset_id=preset.id)
             session.add(photo)
         except ValueError as ve:
@@ -393,14 +395,19 @@ async def upload_photos(
 
 
 @router.delete("/photos/{photo_id}", response_class=HTMLResponse)
-async def delete_photo(request: Request, photo_id: int, session: Session = Depends(get_session)):
+async def delete_photo(
+    request: Request,
+    photo_id: int,
+    session: Session = Depends(get_session),
+    media_service: IMediaService = Depends(get_media_service),
+):
     photo = session.get(Photo, photo_id)
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
 
     # Delete from disk
     preset_name = photo.preset.name if photo.preset else "Default"
-    gallery_manager.delete_photo(photo.filename, preset_name)
+    media_service.delete_photo(photo.filename, preset_name)
 
     preset_id = photo.preset_id
     session.delete(photo)

@@ -12,8 +12,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 # Import configuration constants
 from app.config import CALENDAR_SYNC_INTERVAL_MINUTES
 from app.db.engine import create_db_and_tables, engine
+from app.modules.calendar.internal.application.service import CalendarService as CalendarServiceImpl
+from app.modules.loader import app_init, app_post_init, app_teardown
 from app.routers import admin, dashboard, media
-from app.services.calendar_service import CalendarService
 
 # Security Note: This application has NO authentication and is designed for
 # internal-network-only deployment. See SECURITY.md for details.
@@ -46,7 +47,9 @@ async def background_sync_calendars():
     """Background task to sync calendar events on configured interval."""
     with Session(engine) as session:
         try:
-            await CalendarService.sync_calendar_events(session)
+            # Create calendar service directly (outside FastAPI DI context)
+            calendar_service = CalendarServiceImpl()
+            await calendar_service.sync_calendars(session)
         except Exception as e:
             logger.exception("Error in background calendar sync: %s", e)
 
@@ -55,6 +58,7 @@ async def background_sync_calendars():
 async def lifespan(_app: FastAPI):
     # Startup
     create_db_and_tables()
+    await app_init(_app)
     logger.info("Application startup (LOG_LEVEL=%s)", LOG_LEVEL)
 
     # Sync calendars on startup
@@ -85,9 +89,11 @@ async def lifespan(_app: FastAPI):
     if scheduler.running:
         scheduler.shutdown()
         logger.info("Scheduler shutdown complete")
+    await app_teardown(_app)
 
 
 app = FastAPI(title="Espace-Image", lifespan=lifespan)
+app_post_init(app)
 
 # Add security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)

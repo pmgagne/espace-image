@@ -3,7 +3,7 @@ from io import BytesIO
 import pytest
 from PIL import Image
 
-from app.services.image_service import GalleryManager, ImageOptimizer
+from app.modules.media.internal.infrastructure.image_ops import GalleryManager, ImageOptimizer
 
 
 @pytest.fixture

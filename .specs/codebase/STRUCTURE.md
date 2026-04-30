@@ -92,12 +92,9 @@ espace-image/
 ├── docker-compose.yml            # Compose for local dev/testing
 ├── pyproject.toml                # Project metadata, dependencies, tool config
 ├── init_db.py                    # Database initialization helper
-├── main.py                       # Entry point (imports app.main:app for uvicorn)
 ├── README.md                     # Project overview
 ├── CONTRIBUTING.md               # Contribution guidelines
 ├── LICENSE                       # License
-├── GEMINI.md                     # AI assistant context file
-├── PLAN.md                       # Project planning/roadmap
 └── PWA-INSTALL.md                # PWA installation instructions
 ```
 
@@ -200,11 +197,8 @@ espace-image/
 
 | File | Purpose |
 |------|---------|
-| `main.py` | Uvicorn entry point; imports FastAPI app from `app.main:app` |
 | `init_db.py` | Helper script to initialize database |
 | `pyproject.toml` | Project metadata, dependencies, tool configuration |
 | `Dockerfile` | Container image definition |
 | `docker-compose.yml` | Local dev/test container orchestration |
 | `README.md` | Project overview, quick start |
-| `PLAN.md` | Roadmap and future features |
-| `GEMINI.md` | AI assistant context file |
