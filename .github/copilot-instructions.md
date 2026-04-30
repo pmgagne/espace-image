@@ -1,159 +1,148 @@
 # GitHub Copilot Instructions — Espace-Image
 
-## Architecture: Talos-Inspired Modular Monolith
+## Architecture: Modular Monolith With Module-Owned Infrastructure
 
-Espace-Image uses a **modular monolith pattern** with per-module hexagonal boundaries (`api/`, `internal/application/`, `internal/infrastructure/`). All modules are composed at startup via a **composition root** and communicate through **Protocol-based interfaces**.
+Espace-Image uses a modular monolith pattern with per-module boundaries under `app/modules/<name>/`.
 
-### Big Picture
+Each module exposes:
 
-- **FastAPI app** (`app/main.py`): Entry point, lifespan hooks, APScheduler, composition root integration
-- **Composition root** (`app/modules/loader.py`): Initializes all modules (dependency wiring, middleware)
-- **Module structure**: Six modules (calendar, alarms, weather, media, settings, slideshow) each with clean API boundaries
-- **Routes** (`app/routers/`): Inject module services via `Depends(get_<module>_service)`, no direct service imports
-- **Database**: SQLModel ORM, SQLite, UTC time storage (see [DB.md](../docs/db/DB.md))
-- **UI**: Modern slideshow (`/` → `index.html`), legacy iPad 2 (`/legacy` → ES5-only), admin HTMX (`/admin/*`)
+- `api/` for public contracts and DI tokens
+- `internal/application/` for module behavior and orchestration
+- `internal/infrastructure/` for external API, file, and persistence-heavy helpers
+
+The composition root in `app/modules/loader.py` wires all modules into the FastAPI app at startup.
+
+## Big Picture
+
+- **FastAPI app** (`app/main.py`): entry point, lifespan hooks, APScheduler, scheduler jobs
+- **Composition root** (`app/modules/loader.py`): initializes modules and registers DI overrides
+- **Routes** (`app/routers/`): shared HTTP adapter layer using `Depends(get_<module>_service)`
+- **Database** (`app/db/`): SQLModel ORM on SQLite, UTC storage
+- **UI**: modern slideshow at `/`, legacy iPad 2 UI at `/legacy`, HTMX admin routes under `/admin/*`
 
 ## Workflows (uv only)
-- Install deps: uv sync --dev
-- Run app: uv run uvicorn app.main:app --reload
-- Tests: uv run pytest tests/ -v --cov=app --cov-report=xml
-- Lint/format Python: uv run ruff check .  |  uv run ruff format .
-- Lint HTML/CSS/JS: npm run lint (or npm run lint:html, lint:css, lint:js separately)
-- Auto-fix linting: npm run lint:fix
 
-## Module Architecture Patterns (5 Core Patterns)
+- Install deps: `uv sync --dev`
+- Run app: `uv run uvicorn app.main:app --reload`
+- Tests: `uv run pytest tests/ -v --cov=app --cov-report=xml`
+- Lint/format Python: `uv run ruff check .` and `uv run ruff format .`
+- Lint HTML/CSS/JS: `npm run lint`
+- Auto-fix CSS/JS linting: `npm run lint:fix`
 
-### 1. Protocol-Based Interfaces (Module API Contract)
-- Location: `app/modules/<name>/api/interfaces.py`
-- Define `I<Name>Service(Protocol)` and `get_<name>_service()` getter (raises `NotImplementedError` until init)
-- Example: `ICalendarService`, `IAlarmsService`, `IWeatherService`
-- Routes use `Depends(get_<name>_service)` to inject services (no direct imports)
-- Keeps module boundaries clean; enables swapping implementations
+## Architectural Rules
 
-### 2. Loader Pattern (Dependency Wiring)
-- Location: `app/modules/<name>/loader.py`
-- Implements three functions: `init(app)` (setup), `post_init(app)` (finalize), `teardown(app)` (cleanup)
-- Composition root (`app/modules/loader.py`) calls all module loaders during `app_init()` / `app_teardown()`
-- Example: `alarms/loader.py` creates `AlarmsService` instance, sets `app.dependency_overrides[get_alarms_service]`
-- Separates dependency wiring from business logic
+### 1. Module Interface Rule
 
-### 3. Hexagonal Module Structure
-- **`api/`** — Public interface (Protocol, exceptions, DTOs)
-- **`internal/application/`** — Business logic (service classes, use cases)
-- **`internal/infrastructure/`** — DB/HTTP adapters (repositories)
-- No module imports across module boundaries except via `api/interfaces.py`
-- Each module owns its database models, external calls, caching
+- Public module contracts live in `app/modules/<name>/api/interfaces.py`
+- Routes and cross-module callers should depend on `I<Name>Service` and `get_<name>_service()`
+- Do not bypass module interfaces from routers
 
-### 4. Service Layer (Application Logic)
-- Location: `app/modules/<name>/internal/application/service.py`
-- Pure business logic (no FastAPI, no HTTP concerns)
-- Accepts dependencies (repositories, external clients) via constructor
-- All exceptions defined in `api/exceptions.py`
-- Testable independently of HTTP/FastAPI
+### 2. Application vs Infrastructure Rule
 
-### 5. Repository (Infrastructure Adapter)
-- Location: `app/modules/<name>/internal/infrastructure/repository.py`
-- Handles all DB queries, HTTP calls, file I/O
-- Encapsulates external integrations (httpx, SQLModel, etc.)
-- No business logic (queries/commands only)
-- Used by service layer
+- Put coordination and business logic in `internal/application/service.py`
+- Put HTTP clients, file operations, and low-level integration code in `internal/infrastructure/`
+- Infrastructure filenames can be role-specific; they do not need to be named `repository.py`
 
-## Current Modules & Responsibilities
+### 3. Shared Router Rule
 
-| Module | Location | Purpose | Key Service |
-|--------|----------|---------|-------------|
-| **calendar** | `app/modules/calendar/` | ICS ingestion, event parsing, caching | `ICalendarService` |
-| **alarms** | `app/modules/alarms/` | Alarm extraction, dismissal, reconciliation | `IAlarmsService` |
-| **weather** | `app/modules/weather/` | Open-Meteo API, geocoding, caching | `IWeatherService` |
-| **media** | `app/modules/media/` | Photo upload, optimization, storage | `IMediaService` |
-| **settings** | `app/modules/settings/` | AppSettings read/write, preset management | `ISettingsService` |
-| **slideshow** | `app/modules/slideshow/` | Active preset, slide sequence | `ISlideshowService` |
+- Shared routers in `app/routers/` are the current HTTP adapter layer
+- Keep routers thin: request parsing, dependency injection, response rendering
+- Do not move business logic back into routers
 
-See [CODEBASE_EXPLORATION_SUMMARY.md](CODEBASE_EXPLORATION_SUMMARY.md) for detailed module breakdown and patterns.
+### 4. No Shared Service Layer Rule
 
-## Project-Specific Conventions
+- Do not recreate `app/services/`
+- Former shared logic now lives in module infrastructure:
+  - calendar sync/parsing -> `app/modules/calendar/internal/infrastructure/calendar_sync.py`
+  - weather API/geocoding -> `app/modules/weather/internal/infrastructure/weather_api.py`
+  - media/image operations -> `app/modules/media/internal/infrastructure/image_ops.py`
 
-### Module Development
-- When adding features, create or extend a module under `app/modules/<name>/`
-- Define public API in `api/interfaces.py` (Protocol + getter function)
-- Implement in `internal/application/service.py` (business logic)
-- Data adapters in `internal/infrastructure/repository.py` (DB/HTTP)
-- Add lifecycle hooks to `loader.py` (init, post_init, teardown)
-- Register in composition root `app/modules/loader.py`
+### 5. Scheduler Exception Rule
 
-### Route Handlers
-- Use `async def` route handlers with `Depends(get_session)` for DB access
-- Inject module services via `Depends(get_<module>_service)` (no direct service imports)
-- Example: `calendar_service: ICalendarService = Depends(get_calendar_service)`
-- Do NOT call `app/services/` static methods; route through module API
+- `app/main.py` may instantiate the calendar application service directly for scheduler-driven background sync because that code runs outside request-scoped FastAPI DI
+- This exception should stay narrow and explicit
 
-### Frontend Conventions
-- Admin UI is HTMX-driven: `/admin/partials/*` return TemplateResponse fragments
-- Slideshow UI: `/` serves modern `app/templates/index.html`, `/legacy` serves iPad 2 UI
-- Legacy compatibility: ES5 JavaScript only, no CSS Grid, include polyfills
-- CSS: Use utility classes from `app/static/css/admin-forms.css`, avoid inline styles
-- HTML: All form inputs must have labels (for/id or aria-label)
-- JavaScript: Avoid inline event handlers; use listeners in `app/static/js/admin.js` or `main.js`
+## Current Modules
 
-### Database & Time
-- All event/alarm times stored in **UTC** in database (`datetime.now(UTC)`)
-- Original timezone preserved in model fields (`event_tz`) for recurrence/display
-- Session injected per-route via `Depends(get_session)`, not global
-- See [docs/db/DB.md](../docs/db/DB.md) for schema and relationships
+| Module | Purpose | Public Contract |
+| --- | --- | --- |
+| `calendar` | ICS ingestion, recurrence expansion, event cache sync | `ICalendarService` |
+| `alarms` | active alarm assembly, dismissal, purge | `IAlarmsService` |
+| `weather` | weather fetch and geocoding | `IWeatherService` |
+| `media` | upload validation, optimization, storage | `IMediaService` |
+| `settings` | application settings and preset persistence | `ISettingsService` |
+| `slideshow` | current slide selection | `ISlideshowService` |
 
-### Legacy Services (To Be Migrated)
-- `app/services/calendar_service.py` → Use `ICalendarService` from calendar module
-- `app/services/alarm_service.py` → Use `IAlarmsService` from alarms module
-- `app/services/weather_service.py` → Use `IWeatherService` from weather module
-- `app/services/image_service.py` → Use `IMediaService` from media module
-## Integration Points & Configuration
+## Route Conventions
 
-### Calendar Module
-- Calendar sources: iCloud/ICS URLs stored in CalendarSource; background sync every ~3 hours
-- Events cached in CalendarEventCache with composite UIDs for recurring occurrences
-- Use `ICalendarService` to sync, query events within time windows
-- Timezone handling: All times stored UTC, original tz preserved in `event_tz` field
+- Use `async def` route handlers where appropriate
+- Inject DB sessions via `Depends(get_session)`
+- Inject module services via `Depends(get_<module>_service)`
+- Route tests should prefer dependency overrides over patching internals
 
-### Alarms Module
-- Alarms extracted from VALARM properties in ICS events
-- Tracked in AlarmEvent table with (source_id, event_uid) composite key for idempotency
-- Dismissed alarms purged after 30 days (use `IAlarmsService.purge_old_dismissed_alarms()`)
-- Display logic: alarm fires when `trigger_time <= now` and not dismissed
+## Frontend Conventions
 
-### Weather Integration
-- WeatherService hits Open-Meteo API (free, no key required)
-- Admin geocoding uses Nominatim (search location by name)
-- **Note**: Rate limiting is not currently implemented. For multi-instance or high-volume deployments, implement rate limiting to protect free API quotas (6 req/min Open-Meteo, 3 req/min Nominatim)
+- Admin UI is HTMX-driven and returns fragment `TemplateResponse` payloads
+- The slideshow has both modern and legacy modes; preserve iPad 2 compatibility in legacy assets
+- Avoid inline event handlers; prefer JS modules in `app/static/js/`
+- Keep HTML forms fully labeled
 
-### Media Module
-- Gallery uploads: Use `IMediaService` for upload/optimize/delete operations
-- Images stored in `data/uploads/`; metadata in Photo table
-- Automatic HEIC → JPEG conversion; optimization for iPad 2 (~1MB max per image)
-- Preset system: Each preset can have different photo collections
+## Data and Time Rules
 
-### Configuration
-- Env flags: `LOG_LEVEL` (logging level), `WEBAPP_DEBUG` (template debug), `DATABASE_URL` (SQLite by default)
-- See `app/config.py` for default values and tuning parameters
+- Store event and alarm times in UTC
+- Preserve original event timezone metadata when needed for recurrence/display
+- Keep all-day events date-safe rather than timezone-shifted
+
+## Integration Notes
+
+### Calendar
+
+- ICS sources are stored in `CalendarSource`
+- Cached events live in `CalendarEventCache`
+- Sync metadata lives in `CalendarSyncStatusEntry`
+- Recurrence and alarm parsing use `icalevents`
+
+### Alarms
+
+- Alarm dismissal state lives in `AlarmEvent`
+- Old dismissed alarms are purged after 30 days
+- Simulated alarms are part of the current debug/test-support behavior
+
+### Weather
+
+- Weather and geocoding both use Open-Meteo endpoints
+- Rate limiting is not implemented today
+- If deployment volume changes, add rate limiting inside weather infrastructure rather than at the router layer
+
+### Media
+
+- Uploaded files are stored under `data/uploads/`
+- The media module owns image validation and optimization
+- Preset-specific organization remains part of the current storage model
 
 ## Documentation Maintenance
-- Always keep the `docs/` folder up to date with any changes to database schema, business logic, algorithms, or workflows.
-- Update relevant documentation files (e.g., `docs/db/DB.md`) whenever you modify models, event/alarm logic, or system patterns.
-- Documentation must be clear and actionable for LLM agents and human developers.
 
-## Knowledge Base & Reference
+When architecture changes, update the same change across:
 
-### Memory Bank (LLM Agent Context)
-- [memory-bank/projectbrief.md](../memory-bank/projectbrief.md) — Project goals and scope
-- [memory-bank/systemPatterns.md](../memory-bank/systemPatterns.md) — Technical patterns and architecture decisions
-- [memory-bank/progress.md](../memory-bank/progress.md) — Feature completion status and known issues
-- [memory-bank/tasks/](../memory-bank/tasks/) — Task tracking and implementation history
+- `CODEBASE_EXPLORATION_SUMMARY.md`
+- `memory-bank/systemPatterns.md`
+- `memory-bank/activeContext.md`
+- `memory-bank/progress.md`
+- `.specs/codebase/*.md` when they describe current structure
+- `.github/AGENTS.md` and this file when agent guidance changes
 
-### Architecture & Decisions
-- [docs/db/DB.md](../docs/db/DB.md) — Database schema, relationships, and time handling
-- [docs/ADR/](../docs/ADR/) — Architectural Decision Records (5 key ADRs)
-- [CODEBASE_EXPLORATION_SUMMARY.md](CODEBASE_EXPLORATION_SUMMARY.md) — Detailed module patterns and file map
+## Recommended Starting Points
 
-### Other Docs
-- [README.md](../README.md) — Project overview and deployment
-- [SECURITY.md](../SECURITY.md) — Security architecture and threat model
-- [CONTRIBUTING.md](../CONTRIBUTING.md) — Development workflow and contribution guidelines
+- `app/main.py`
+- `app/modules/loader.py`
+- `app/routers/dashboard.py`
+- `app/routers/admin.py`
+- `app/modules/*/api/interfaces.py`
+
+## Reference Docs
+
+- `docs/db/DB.md`
+- `CODEBASE_EXPLORATION_SUMMARY.md`
+- `memory-bank/systemPatterns.md`
+- `memory-bank/activeContext.md`
+- `memory-bank/progress.md`
