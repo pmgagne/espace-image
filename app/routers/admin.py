@@ -239,7 +239,7 @@ async def upload_photos(
             {**data, "error_message": str(ve)},
         )
 
-        return await get_gallery_partial(request, preset_id, session, media_service)
+    return await get_gallery_partial(request, preset_id, session, media_service)
 
 
 @router.delete("/photos/{photo_id}", response_class=HTMLResponse)
