@@ -22,13 +22,35 @@ Legacy and modern UIs both use this mechanism for consistent, reliable updates.
 
 ## Agentic Workflow
 
-This project is also an experiment to explore agentic full stack development. We use vscode with copilot for code generation. We use as much as possible the non-premium models
-GPT-4.1 for planning and GPT-5 mini for coding.
+This project is also an experiment to explore agentic full stack development. We use vscode with copilot for code generation.
 
 We adopted the ask (if necessary)/plan (GPT 4-1)/Implement (GPT 5-mini) loop.
 
 The actual takeout is that GPT4.1 seems good for planing and explaining, but not so good for
 coding. GPT-5-mini (with the [4.1 Beast Mode](https://raw.githubusercontent.com/github/awesome-copilot/main/agents/4.1-Beast.agent.md)) agent prompt is convincing.
+
+### OpenCode CLI Setup
+
+This repository is also configured for OpenCode/OpenCode CLI so it can reuse the same repo guidance authored for GitHub Copilot.
+
+- Root discovery starts from `AGENTS.md`.
+- Project configuration lives in `opencode.jsonc`.
+- OpenCode loads the canonical repo guidance from `AGENTS.md`, `.github/AGENTS.md`, and `.github/copilot-instructions.md`.
+- Repo-specific OpenCode agents live in `.opencode/agents/`.
+
+Current OpenCode agents available in this repo:
+
+- `beast-lite`
+- `beast-mode-v3-1`
+- `context-architect`
+- `custom-agent-foundry-optimized`
+- `jira-ticket-composer`
+- `reviewer`
+- `senior-cloud-architect`
+- `task-planner`
+- `task-researcher`
+
+If you launch OpenCode from the repo root, it should pick up this configuration automatically.
 
 ## Calendar Parsing Migration
 
