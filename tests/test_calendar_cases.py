@@ -16,8 +16,10 @@ from typing import Any
 from sqlmodel import Session, select
 
 from app.db.models import CalendarEventCache
-from app.routers import dashboard
-from app.services.calendar_service import CalendarService
+from app.modules.alarms.internal.application.service import AlarmsService
+from app.modules.calendar.internal.infrastructure.calendar_sync import (
+    CalendarService,
+)
 
 # Use a fixed reference time to make calendar tests deterministic
 FIXED_NOW = datetime(2026, 2, 16, 0, 0, tzinfo=UTC)
@@ -33,7 +35,10 @@ def load_and_cache_events(
     window_start = now - timedelta(days=1)
     window_end = now + timedelta(days=window_days)
     events = CalendarService.extract_events_from_ics(
-        ics_content, source_id=source_id, window_start=window_start, window_end=window_end
+        ics_content,
+        source_id=source_id,
+        window_start=window_start,
+        window_end=window_end,
     )
     latest_by_uid = CalendarService._select_latest_by_uid(events)
     CalendarService._add_cache_entries(session, latest_by_uid, source_id)
@@ -53,7 +58,7 @@ def set_event_time(session: Session, uid: str, start: datetime, end: datetime) -
 def get_alarm(session: Session, uid: str, ics_path: str | None = None) -> dict[str, Any] | None:
     """
     If ics_path is provided, use CalendarService.get_upcoming_alarms directly on the ICS file for robust alarm extraction.
-    Otherwise, fallback to dashboard._fetch_calendar_alarms (DB cache).
+    Otherwise, fallback to the alarms module service over the DB cache.
     """
     if ics_path is not None:
         with open(ics_path, encoding="utf-8") as fh:
@@ -69,8 +74,7 @@ def get_alarm(session: Session, uid: str, ics_path: str | None = None) -> dict[s
             if uid in alarm["uid"]:
                 return alarm
         return None
-    # Fallback: use dashboard logic (DB cache)
-    alarms = asyncio.run(dashboard._fetch_calendar_alarms(session))
+    alarms = asyncio.run(AlarmsService().get_active_alarms(session))
     for alarm in alarms:
         if uid in alarm["uid"]:
             return alarm
@@ -78,7 +82,10 @@ def get_alarm(session: Session, uid: str, ics_path: str | None = None) -> dict[s
 
 
 def alarm_field_checks(
-    alarm: dict[str, Any], expected_title: str, expected_time: datetime, expected_uid: str
+    alarm: dict[str, Any],
+    expected_title: str,
+    expected_time: datetime,
+    expected_uid: str,
 ) -> None:
     """Check that alarm fields match expected event info."""
     # Use standardized field names from get_upcoming_alarms()

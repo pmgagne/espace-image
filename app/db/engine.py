@@ -181,7 +181,13 @@ def migrate_database() -> None:  # noqa: C901
                                                  calendar_source_id, calendar_event_uid)
                     VALUES (?, ?, ?, ?, ?)
                 """,
-                    (new_uuid, trigger_time, dismissed_at, calendar_source_id, calendar_event_uid),
+                    (
+                        new_uuid,
+                        trigger_time,
+                        dismissed_at,
+                        calendar_source_id,
+                        calendar_event_uid,
+                    ),
                 )
 
             # Step 4: Drop old table and rename new table

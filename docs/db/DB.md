@@ -207,17 +207,13 @@ Date displayed: Feb 13 (Friday) ✅
 
 ### API Rate Limiting
 
-**Purpose:** Protect against accidental abuse of free external APIs (Open-Meteo, Nominatim) and maintain good standing with service providers.
+**Current Status:** Rate limiting is not currently implemented. If multi-instance or production-scale deployments become necessary, rate limiting should be added to protect against accidental abuse of free external APIs (Open-Meteo, Nominatim).
 
-**Implementation:**
+**Recommended Implementation (future):**
 
-- Simple async in-memory sliding-window limiter: `app/services/rate_limiter.py`
-- Per-process, resets on app restart
-- Non-blocking async acquire with per-key timestamp deques
-
-**Limits:**
-
-- **Open-Meteo Geocoding:** 6 requests per minute (used in `WeatherService.geocode_location()`)
+- Use Redis-backed distributed rate limiter for multi-process deployments
+- Per-endpoint limits: Open-Meteo (6 req/min), Nominatim (3 req/min)
+- Alternative: In-memory per-process limiter for single-instance deployments
 - **Nominatim Reverse Geocoding:** 3 requests per minute (used in admin settings partial)
 
 **Behavior:**

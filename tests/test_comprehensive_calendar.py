@@ -3,14 +3,17 @@ from datetime import UTC, datetime, timedelta
 
 from sqlmodel import select
 
-from app.services.calendar_service import CalendarService
+from app.modules.alarms.internal.application.service import AlarmsService
+from app.modules.calendar.internal.infrastructure.calendar_sync import (
+    CalendarService,
+)
 
 # Fixed reference time for deterministic calendar parsing tests
 FIXED_NOW = datetime(2026, 2, 16, 12, 0, tzinfo=UTC)
 
 
 def test_comprehensive_calendar_parsing_and_alarms(session):
-    # Create a calendar source first (required for _fetch_calendar_alarms)
+    # Create a calendar source first so cached events can be resolved into alarms.
     from app.db.models import CalendarSource
 
     source = CalendarSource(id=1, label="Test Source", url="https://example.com/test.ics")
@@ -81,10 +84,7 @@ def test_comprehensive_calendar_parsing_and_alarms(session):
         # If models import fails, at least ensure the cache exists
         pass
 
-    # Fetch alarms via the dashboard helper (which uses AlarmService.format_alarm)
-    from app.routers import dashboard
-
-    alarms = asyncio.run(dashboard._fetch_calendar_alarms(session))
+    alarms = asyncio.run(AlarmsService().get_active_alarms(session))
 
     alarm_uids = {a["uid"] for a in alarms}
 

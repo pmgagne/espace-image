@@ -44,8 +44,16 @@ def write_png(path, w, h, bg=(0, 0, 0), fg=(0, 209, 255)):
 
 if __name__ == "__main__":
     write_png(
-        os.path.join(OUT_DIR, "espaceimage-192.png"), 192, 192, bg=(10, 10, 10), fg=(0, 209, 255)
+        os.path.join(OUT_DIR, "espaceimage-192.png"),
+        192,
+        192,
+        bg=(10, 10, 10),
+        fg=(0, 209, 255),
     )
     write_png(
-        os.path.join(OUT_DIR, "espaceimage-512.png"), 512, 512, bg=(10, 10, 10), fg=(0, 209, 255)
+        os.path.join(OUT_DIR, "espaceimage-512.png"),
+        512,
+        512,
+        bg=(10, 10, 10),
+        fg=(0, 209, 255),
     )

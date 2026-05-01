@@ -5,52 +5,50 @@ applyTo: '**/*.py'
 
 # Python Coding Conventions
 
-## Python Instructions
+## Code Style
 
-- Write clear and concise comments for each function.
-- Ensure functions have descriptive names and include type hints.
-- Provide docstrings following PEP 257 conventions.
-- Use the `typing` module for type annotations (e.g., `List[str]`, `Dict[str, int]`).
-- Break down complex functions into smaller, more manageable functions.
+- Follow PEP 8. Use 4-space indentation. Max line length: 100 characters.
+- Use `ruff` for linting and formatting. Enabled rule sets: `E`, `F`, `I`, `UP`, `B`, `N`.
+  - Ignore `B008` for tool configuration defaults (e.g., FastMCP).
+- Place docstrings immediately after `def` or `class`.
+- Separate functions, classes, and logical blocks with blank lines.
 
-## General Instructions
+## Type Hints
 
-- Always prioritize readability and clarity.
-- For algorithm-related code, include explanations of the approach used.
-- Write code with good maintainability practices, including comments on why certain design decisions were made.
-- Handle edge cases and write clear exception handling.
-- For libraries or external dependencies, mention their usage and purpose in comments.
-- Use consistent naming conventions and follow language-specific best practices.
-- Write concise, efficient, and idiomatic code that is also easily understandable.
+- Use strict Python 3.13+ type hints on all function signatures and complex variables.
+- Avoid `typing.Any`; prefer explicit types.
 
-## Code Style and Formatting
+## Functions and Documentation
 
-- Follow the **PEP 8** style guide for Python.
-- Maintain proper indentation (use 4 spaces for each level of indentation).
-- Ensure lines do not exceed 79 characters.
-- Place function and class docstrings immediately after the `def` or `class` keyword.
-- Use blank lines to separate functions, classes, and code blocks where appropriate.
+- Use descriptive function names. Add docstrings following PEP 257.
+- Write inline comments for non-obvious logic.
+- Break complex functions into smaller, focused helpers.
+- Comment on the purpose of external dependencies at their usage site.
 
-## Edge Cases and Testing
+## Async
 
-- Always include test cases for critical paths of the application.
-- Account for common edge cases like empty inputs, invalid data types, and large datasets.
-- Include comments for edge cases and the expected behavior in those cases.
-- Write unit tests for functions and document them with docstrings explaining the test cases.
+- Default to `async`/`await` for I/O-bound and service-level code.
+- Use synchronous code only for simple standalone scripts.
 
-## Example of Proper Documentation
+## Standalone Scripts
 
-```python
-def calculate_area(radius: float) -> float:
-    """
-    Calculate the area of a circle given the radius.
-    
-    Parameters:
-    radius (float): The radius of the circle.
-    
-    Returns:
-    float: The area of the circle, calculated as π * radius^2.
-    """
-    import math
-    return math.pi * radius ** 2
-```
+- Use the `uv` shebang and PEP 723 metadata block:
+  ```python
+  #!/usr/bin/env -S uv run
+  # /// script
+  # requires-python = ">=3.13"
+  # dependencies = ["..."]
+  # ///
+  ```
+
+## Testing
+
+- Use `pytest` for all tests. Run with `uv run pytest -q`.
+- Write tests for all critical code paths.
+- Cover edge cases: empty inputs, invalid types, boundary values.
+- Document each test function with a docstring describing what it verifies.
+
+## General
+
+- Prioritize readability. Explain *why* behind non-obvious design decisions.
+- Handle edge cases explicitly with clear exception handling.

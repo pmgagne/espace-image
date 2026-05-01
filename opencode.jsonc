@@ -1,0 +1,22 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    // Use the shell already standard in this repo's Windows setup.
+    "shell": "pwsh",
+    // Load the canonical repo guidance authored for GitHub/Copilot.
+    "instructions": [
+        "AGENTS.md",
+        ".github/AGENTS.md",
+        ".github/copilot-instructions.md"
+    ],
+    // Keep watcher noise down in large interactive sessions.
+    "watcher": {
+        "ignore": [
+            ".git/**",
+            ".venv/**",
+            "node_modules/**",
+            "data/uploads/**",
+            ".pytest_cache/**",
+            "**/__pycache__/**"
+        ]
+    }
+}

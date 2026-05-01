@@ -90,7 +90,9 @@ class CalendarEventCache(SQLModel, table=True):
     all_day: bool = Field(default=False, index=True)
     trigger_time: datetime | None = Field(default=None, index=True)  # Stored in UTC if set
     optional_trigger: bool = Field(
-        default=False, index=True, description="True if trigger is a default (not from VALARM)"
+        default=False,
+        index=True,
+        description="True if trigger is a default (not from VALARM)",
     )
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
