@@ -88,9 +88,7 @@ class CalendarEventCache(SQLModel, table=True):
     location: str = Field(default="")
     # Whether the original event was an all-day event (DATE type in ICS)
     all_day: bool = Field(default=False, index=True)
-    trigger_time: datetime | None = Field(
-        default=None, index=True
-    )  # Stored in UTC if set
+    trigger_time: datetime | None = Field(default=None, index=True)  # Stored in UTC if set
     optional_trigger: bool = Field(
         default=False,
         index=True,
@@ -105,9 +103,7 @@ class CalendarSyncStatusEntry(SQLModel, table=True):
     __tablename__ = "calendar_sync_status"
 
     id: int | None = Field(default=None, primary_key=True)
-    calendar_source_id: int = Field(
-        foreign_key="calendarsource.id", index=True, unique=True
-    )
+    calendar_source_id: int = Field(foreign_key="calendarsource.id", index=True, unique=True)
     last_synced_at: datetime | None = Field(default=None)
     next_sync_at: datetime | None = Field(default=None)
     sync_status: CalendarSyncStatus = Field(default=CalendarSyncStatus.PENDING)

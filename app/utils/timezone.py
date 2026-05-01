@@ -106,9 +106,7 @@ def normalize_datetime(val: datetime | date | None) -> datetime | None:
         # create a datetime at midnight of that date in UTC
         return datetime.combine(val, time.min, tzinfo=UTC)
     except Exception as err:
-        raise TypeError(
-            f"Cannot normalize value of type {type(val)} to datetime"
-        ) from err
+        raise TypeError(f"Cannot normalize value of type {type(val)} to datetime") from err
 
 
 def get_local_timezone_name() -> str:

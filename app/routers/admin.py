@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 async def admin_shell(request: Request):
     """Admin Shell with Sidebar"""
     debug_mode = os.getenv("WEBAPP_DEBUG", "").lower() in ("true", "1", "yes")
-    return templates.TemplateResponse(request, "admin_base.html", {"debug_mode": debug_mode})
+    tpl = templates.env.get_template("admin_base.html")
+    return HTMLResponse(tpl.render(request=request, debug_mode=debug_mode))
 
 
 # --- Partials: Settings ---
@@ -57,15 +58,15 @@ async def get_settings_partial(
 
     backend_timezone = get_local_timezone_name()
 
-    return templates.TemplateResponse(
-        request,
-        "partials/settings.html",
-        {
-            "settings": settings,
-            "presets": presets,
-            "location_name": location_name,
-            "backend_timezone": backend_timezone,
-        },
+    tpl = templates.env.get_template("partials/settings.html")
+    return HTMLResponse(
+        tpl.render(
+            request=request,
+            settings=settings,
+            presets=presets,
+            location_name=location_name,
+            backend_timezone=backend_timezone,
+        )
     )
 
 
@@ -104,15 +105,15 @@ async def search_location(
         settings.weather_longitude = result["lon"]
         location_name = result["name"]
 
-    return templates.TemplateResponse(
-        request,
-        "partials/settings.html",
-        {
-            "settings": settings,
-            "presets": presets,
-            "location_name": location_name,
-            "backend_timezone": get_local_timezone_name(),
-        },
+    tpl = templates.env.get_template("partials/settings.html")
+    return HTMLResponse(
+        tpl.render(
+            request=request,
+            settings=settings,
+            presets=presets,
+            location_name=location_name,
+            backend_timezone=get_local_timezone_name(),
+        )
     )
 
 
@@ -167,11 +168,13 @@ async def get_calendars_partial(
     calendar_service: ICalendarService = Depends(get_calendar_service),
 ):
     data = await calendar_service.get_calendars_for_ui(session)
-    return templates.TemplateResponse(
-        request,
-        "partials/calendars.html",
-        data,
+    tpl = templates.env.get_template("partials/calendars.html")
+    ctx = (
+        {**data, "request": request}
+        if isinstance(data, dict)
+        else {"request": request, "data": data}
     )
+    return HTMLResponse(tpl.render(**ctx))
 
 
 @router.post("/calendars", response_class=HTMLResponse)
@@ -201,11 +204,13 @@ async def get_gallery_partial(
     media_service: IMediaService = Depends(get_media_service),
 ):
     data = await media_service.get_gallery_for_ui(session, preset_id)
-    return templates.TemplateResponse(
-        request,
-        "partials/gallery.html",
-        data,
+    tpl = templates.env.get_template("partials/gallery.html")
+    ctx = (
+        {**data, "request": request}
+        if isinstance(data, dict)
+        else {"request": request, "data": data}
     )
+    return HTMLResponse(tpl.render(**ctx))
 
 
 @router.post("/presets", response_class=HTMLResponse)
@@ -233,11 +238,13 @@ async def upload_photos(
     except ValueError as ve:
         # Build gallery context and show user-friendly error message
         data = await media_service.get_gallery_for_ui(session, preset_id)
-        return templates.TemplateResponse(
-            request,
-            "partials/gallery.html",
-            {**data, "error_message": str(ve)},
+        tpl = templates.env.get_template("partials/gallery.html")
+        ctx = (
+            {**data, "request": request, "error_message": str(ve)}
+            if isinstance(data, dict)
+            else {"request": request, "data": data, "error_message": str(ve)}
         )
+        return HTMLResponse(tpl.render(**ctx))
 
     return await get_gallery_partial(request, preset_id, session, media_service)
 
@@ -263,7 +270,8 @@ async def delete_photo(
 @router.get("/partials/debug", response_class=HTMLResponse)
 async def get_debug_partial(request: Request):
     """Debug control panel for testing (HTMX partial)."""
-    return templates.TemplateResponse(request, "partials/debug.html", {})
+    tpl = templates.env.get_template("partials/debug.html")
+    return HTMLResponse(tpl.render(request=request))
 
 
 @router.post("/debug/simulate-alarm", response_class=HTMLResponse)
@@ -276,12 +284,10 @@ async def simulate_alarm(
     """Create a simulated alarm that appears after the specified delay."""
     await alarms_service.create_simulated_alarm(delay_seconds, session)
 
-    return templates.TemplateResponse(
-        request,
-        "partials/debug.html",
-        {
-            "success_message": (
-                f"Simulated alarm created! It will appear in {delay_seconds} seconds."
-            )
-        },
+    tpl = templates.env.get_template("partials/debug.html")
+    return HTMLResponse(
+        tpl.render(
+            request=request,
+            success_message=f"Simulated alarm created! It will appear in {delay_seconds} seconds.",
+        )
     )

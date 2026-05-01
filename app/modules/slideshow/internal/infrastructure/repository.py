@@ -14,6 +14,4 @@ class SlideshowRepository:
 
     def list_photos_for_preset(self, session: Session, preset_id: int) -> list[Photo]:
         """Return photos associated with a preset."""
-        return list(
-            session.exec(select(Photo).where(Photo.preset_id == preset_id)).all()
-        )
+        return list(session.exec(select(Photo).where(Photo.preset_id == preset_id)).all())

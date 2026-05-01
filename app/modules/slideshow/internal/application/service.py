@@ -15,9 +15,7 @@ class SlideshowModuleService(ISlideshowService):
         """Initialize service with repository dependency."""
         self._repository = repository
 
-    def select_next_slide(
-        self, session: Session, mode: str = "modern"
-    ) -> SlideSelectionResult:
+    def select_next_slide(self, session: Session, mode: str = "modern") -> SlideSelectionResult:
         """Return next slide URL or error message for slideshow rendering."""
         settings = self._repository.get_settings(session)
         if settings is None or settings.active_preset_id is None:
@@ -26,9 +24,7 @@ class SlideshowModuleService(ISlideshowService):
                 error_msg="No Preset Active. Please configure in Admin.",
             )
 
-        photos = self._repository.list_photos_for_preset(
-            session, settings.active_preset_id
-        )
+        photos = self._repository.list_photos_for_preset(session, settings.active_preset_id)
         if not photos:
             return SlideSelectionResult(
                 img_url=None,
@@ -36,9 +32,7 @@ class SlideshowModuleService(ISlideshowService):
             )
 
         photo = random.choice(photos)
-        return SlideSelectionResult(
-            img_url=f"/images/{photo.id}?mode={mode}", error_msg=None
-        )
+        return SlideSelectionResult(img_url=f"/images/{photo.id}?mode={mode}", error_msg=None)
 
 
 def create_slideshow_service() -> ISlideshowService:

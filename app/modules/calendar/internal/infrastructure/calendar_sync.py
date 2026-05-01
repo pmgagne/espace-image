@@ -538,9 +538,7 @@ class CalendarService:
                     import re
                     from datetime import timedelta
 
-                    rrule_str = (
-                        event.recurrence_rules[0] if event.recurrence_rules else ""
-                    )
+                    rrule_str = event.recurrence_rules[0] if event.recurrence_rules else ""
                     if re.search(r"FREQ=WEEKLY", rrule_str):
                         # Extract INTERVAL parameter (default 1 if not specified)
                         interval_match = re.search(r"INTERVAL=(\d+)", rrule_str)
@@ -568,9 +566,7 @@ class CalendarService:
                                 ev_copy = event.__class__(
                                     uid=occurrence_uid,
                                     start=occ_dt,
-                                    end=occ_dt + (event.end - event.start)
-                                    if event.end
-                                    else None,
+                                    end=occ_dt + (event.end - event.start) if event.end else None,
                                     summary=event.summary,
                                     description=event.description,
                                     location=event.location,
@@ -713,9 +709,7 @@ class CalendarService:
         return events
 
     @staticmethod
-    def _fallback_trigger_from_raw(
-        ics_content: str, event: ICalEvent
-    ) -> datetime | None:
+    def _fallback_trigger_from_raw(ics_content: str, event: ICalEvent) -> datetime | None:
         """
         If `extract_trigger_time` failed, attempt to compute trigger_time by
         parsing the raw ICS content for the event's UID and interpreting the
@@ -819,9 +813,7 @@ class CalendarService:
     @staticmethod
     def _clear_existing_cache(session: Session, source_id: int) -> None:
         existing = session.exec(
-            select(CalendarEventCache).where(
-                CalendarEventCache.calendar_source_id == source_id
-            )
+            select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == source_id)
         ).all()
         for existing_event in existing:
             session.delete(existing_event)
@@ -922,11 +914,7 @@ class CalendarService:
 
                 # Convert to UTC if timezone-aware; if naive, attach timezone first
                 try:
-                    if (
-                        isinstance(ev_start, datetime)
-                        and ev_start.tzinfo is None
-                        and tzid
-                    ):
+                    if isinstance(ev_start, datetime) and ev_start.tzinfo is None and tzid:
                         ev_start = ev_start.replace(tzinfo=ZoneInfo(tzid))
                     elif (
                         isinstance(ev_start, datetime)
@@ -991,18 +979,14 @@ class CalendarService:
                     if ev_start_orig is not None:
                         local_tz = CalendarService._get_local_tz()
                         if isinstance(ev_start_orig, datetime):
-                            midnight = datetime.combine(
-                                ev_start_orig.date(), datetime.min.time()
-                            )
+                            midnight = datetime.combine(ev_start_orig.date(), datetime.min.time())
                             if ev_start_orig.tzinfo is not None:
                                 midnight = midnight.replace(tzinfo=ev_start_orig.tzinfo)
                             elif local_tz is not None:
                                 midnight = midnight.replace(tzinfo=local_tz)
                         else:
                             # ev_start_orig likely a date
-                            midnight = datetime.combine(
-                                ev_start_orig, datetime.min.time()
-                            )
+                            midnight = datetime.combine(ev_start_orig, datetime.min.time())
                             if local_tz is not None:
                                 midnight = midnight.replace(tzinfo=local_tz)
                         trigger_time = ensure_utc_aware(midnight)

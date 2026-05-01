@@ -58,9 +58,7 @@ class CalendarRepository:
         """Clear cached events for a calendar source."""
         with self.session_provider() as session:
             existing = session.exec(
-                select(CalendarEventCache).where(
-                    CalendarEventCache.calendar_source_id == source_id
-                )
+                select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == source_id)
             ).all()
             for event in existing:
                 session.delete(event)

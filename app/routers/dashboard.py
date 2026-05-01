@@ -62,9 +62,8 @@ async def read_root(
         return RedirectResponse(url="/legacy", status_code=302)
 
     settings = settings_service.get_settings(session)
-    return templates.TemplateResponse(
-        request, "index.html", {"mode": "modern", "settings": settings}
-    )
+    tpl = templates.env.get_template("index.html")
+    return HTMLResponse(tpl.render(request=request, mode="modern", settings=settings))
 
 
 @router.get("/legacy")
@@ -89,10 +88,9 @@ async def read_legacy(
     except Exception:
         last_sync_utc = ""
 
-    return templates.TemplateResponse(
-        request,
-        "legacy/index.html",
-        {"mode": "legacy", "settings": settings, "last_sync_utc": last_sync_utc},
+    tpl = templates.env.get_template("legacy/index.html")
+    return HTMLResponse(
+        tpl.render(request=request, mode="legacy", settings=settings, last_sync_utc=last_sync_utc)
     )
 
 
@@ -113,10 +111,8 @@ async def get_weather(
     settings = settings_service.get_settings(session)
 
     if not settings or settings.weather_latitude is None or settings.weather_longitude is None:
-        return templates.TemplateResponse(
-            "partials/weather.html",
-            {"request": request, "has_location": False},
-        )
+        tpl = templates.env.get_template("partials/weather.html")
+        return HTMLResponse(tpl.render(request=request, has_location=False))
 
     lat = settings.weather_latitude
     lon = settings.weather_longitude
@@ -128,10 +124,8 @@ async def get_weather(
         "location": weather_data.location,
     }
 
-    return templates.TemplateResponse(
-        "partials/weather.html",
-        {"request": request, "has_location": True, "weather": weather},
-    )
+    tpl = templates.env.get_template("partials/weather.html")
+    return HTMLResponse(tpl.render(request=request, has_location=True, weather=weather))
 
 
 @router.get("/components/slide", response_class=HTMLResponse, response_model=SlideResponse)
@@ -142,16 +136,11 @@ async def get_next_slide(
     slideshow_service: ISlideshowService = Depends(get_slideshow_service),
 ):
     selection = slideshow_service.select_next_slide(session, mode)
+    tpl = templates.env.get_template("partials/slide.html")
     if selection.error_msg:
-        return templates.TemplateResponse(
-            "partials/slide.html",
-            {"request": request, "error_msg": selection.error_msg},
-        )
+        return HTMLResponse(tpl.render(request=request, error_msg=selection.error_msg))
 
-    return templates.TemplateResponse(
-        "partials/slide.html",
-        {"request": request, "img_url": selection.img_url},
-    )
+    return HTMLResponse(tpl.render(request=request, img_url=selection.img_url))
 
 
 def _alarms_to_context(
@@ -417,11 +406,8 @@ async def check_alarm(
     if not alarm_contexts:
         return HTMLResponse("")
 
-    return templates.TemplateResponse(
-        request,
-        "partials/alarms.html",
-        {"alarms": alarm_contexts},
-    )
+    tpl = templates.env.get_template("partials/alarms.html")
+    return HTMLResponse(tpl.render(request=request, alarms=alarm_contexts))
 
 
 @router.get(

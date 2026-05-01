@@ -92,9 +92,7 @@ class ImageOptimizer:
             with Image.open(BytesIO(file_content)) as img:
                 format_name = (img.format or "").upper()
                 is_jpeg = format_name == "JPEG"
-                should_reencode = (not is_jpeg) or (
-                    len(file_content) > optimize_min_bytes
-                )
+                should_reencode = (not is_jpeg) or (len(file_content) > optimize_min_bytes)
 
                 if not should_reencode:
                     return file_content
@@ -116,9 +114,7 @@ class ImageOptimizer:
                     return optimized
 
                 target_quality = quality
-                while (
-                    len(optimized) > optimize_min_bytes and target_quality > min_quality
-                ):
+                while len(optimized) > optimize_min_bytes and target_quality > min_quality:
                     target_quality = max(min_quality, target_quality - 5)
                     output = BytesIO()
                     image.save(
