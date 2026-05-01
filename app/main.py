@@ -11,11 +11,20 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 
 # Import configuration constants
 from app.config import CALENDAR_SYNC_INTERVAL_MINUTES
-from app.db.engine import create_db_and_tables
 from app.db.session_factory import SessionFactory
 from app.modules.calendar.loader import build_calendar_service
 from app.modules.loader import app_init, app_post_init, app_teardown
 from app.routers import admin, dashboard, media
+
+
+def _run_alembic_upgrade() -> None:
+    """Run Alembic migrations to head on startup."""
+    import alembic.command
+    import alembic.config
+
+    cfg = alembic.config.Config("alembic.ini")
+    alembic.command.upgrade(cfg, "head")
+
 
 # Security Note: This application has NO authentication and is designed for
 # internal-network-only deployment. See SECURITY.md for details.
@@ -64,7 +73,7 @@ async def background_sync_calendars() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Startup
-    create_db_and_tables()
+    _run_alembic_upgrade()
     await app_init(_app)
     logger.info("Application startup (LOG_LEVEL=%s)", LOG_LEVEL)
 

@@ -18,12 +18,14 @@ class CalendarRepository(ICalendarRepository):
         window_end: datetime,
     ) -> list[CalendarEventCache]:
         """Return cached events intersecting the requested time window."""
-        return session.exec(
-            select(CalendarEventCache).where(
-                (CalendarEventCache.event_start <= window_end)
-                & (CalendarEventCache.event_end >= window_start)
-            )
-        ).all()
+        return list(
+            session.exec(
+                select(CalendarEventCache).where(
+                    (CalendarEventCache.event_start <= window_end)
+                    & (CalendarEventCache.event_end >= window_start)
+                )
+            ).all()
+        )
 
     def create_source(
         self,
@@ -57,11 +59,11 @@ class CalendarRepository(ICalendarRepository):
 
     def list_statuses(self, session: Session) -> list[CalendarSyncStatusEntry]:
         """Return all sync status rows."""
-        return session.exec(select(CalendarSyncStatusEntry)).all()
+        return list(session.exec(select(CalendarSyncStatusEntry)).all())
 
     def list_sources(self, session: Session) -> list[CalendarSource]:
         """Return all calendar source rows."""
-        return session.exec(select(CalendarSource)).all()
+        return list(session.exec(select(CalendarSource)).all())
 
     def get_status_for_source(
         self,

@@ -1,6 +1,6 @@
 # Espace-Image Codebase Exploration Summary
 
-**Date**: 2026-04-30  
+**Date**: 2026-05-01
 **Purpose**: Current architecture map for contributors and AI agents
 
 ## Executive Summary
@@ -16,6 +16,7 @@ The runtime shape is:
 - `app/modules/<name>/internal/application/` implements module behavior.
 - `app/modules/<name>/internal/infrastructure/` owns persistence, file I/O, and external API logic.
 - `app/db/` remains the shared SQLModel/SQLite layer.
+- `alembic/` manages all schema migrations; raw sqlite3 migrations have been removed.
 
 There is **no active `app/services/` layer**. Former calendar, weather, and media service logic now lives inside module infrastructure.
 
@@ -107,6 +108,16 @@ Former shared services were moved into module infrastructure:
 This is the key architectural cleanup completed on 2026-04-30.
 
 ## Data and State
+
+### Schema Migrations
+
+Schema migrations are managed by **Alembic** (`alembic/`).
+
+- `alembic/env.py` is configured to use `SQLModel.metadata` and the project's shared `engine` with `render_as_batch=True` for SQLite ALTER TABLE support.
+- `alembic/versions/` holds 8 chained revision files (baseline + 7 historical migrations).
+- `app/main.py` calls `_run_alembic_upgrade()` in the lifespan startup, which runs `alembic upgrade head` programmatically.
+- `app/db/engine.py` no longer contains raw sqlite3 migration code.
+- To add a new column: modify the model in `app/db/models.py`, then run `alembic revision --autogenerate -m "<description>"`.
 
 ### Persistent Stores
 

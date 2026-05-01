@@ -85,8 +85,8 @@ def client_fixture(session: Session):
 
     fastapi_app.dependency_overrides[get_session] = get_session_override
 
-    # We patch the function imported in app.main to prevent side effects on disk
-    with patch("app.main.create_db_and_tables"), TestClient(fastapi_app) as client:
+    # We patch the Alembic upgrade call in app.main to prevent side effects on disk
+    with patch("app.main._run_alembic_upgrade"), TestClient(fastapi_app) as client:
         # Route-level DI now depends on module services instead of request Session.
         # Apply after startup so module loaders cannot overwrite these test overrides.
         test_session_factory = SessionFactory(test_engine)

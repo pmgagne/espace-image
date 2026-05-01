@@ -25,6 +25,9 @@
 - shared router adapter layer depending on module DI contracts
 - former shared service layer removed from active architecture
 - consolidated calendar test coverage aligned to module ownership
+- **Alembic manages all schema migrations** (`alembic/versions/` — 8 revisions)
+- raw sqlite3 migration code removed from `app/db/engine.py`
+- `cast(Any, col)` pattern established for nullable SQLModel column filters
 
 ### Quality Gates
 
@@ -76,6 +79,7 @@ Final router-shell extraction is intentionally deferred until frontend migration
 - add focused module-level tests when new module behavior is introduced
 - avoid introducing new cross-module shortcuts that bypass interfaces
 - prepare a Vite migration checklist that defines API contracts and shell handoff steps before removing remaining router shell template rendering
+- update `tests/conftest.py` to use `alembic upgrade head` against in-memory SQLite instead of `SQLModel.metadata.create_all()` (optional follow-on; currently deferred)
 
 ## Milestones
 
@@ -83,3 +87,4 @@ Final router-shell extraction is intentionally deferred until frontend migration
 - `v0.2.0`: calendar integration
 - `v0.3.0`: `icalevents` migration
 - `v0.4.x`: modular-monolith boundary cleanup and module-owned infrastructure completion
+- `v0.5.0`: Alembic migration system; raw sqlite3 DDL removed
