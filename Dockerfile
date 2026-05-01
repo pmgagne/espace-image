@@ -1,7 +1,7 @@
 # Stage 1: Builder
-FROM python:3.13-slim-bookworm AS builder
+FROM python:3.14-slim-trixie AS builder
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.4.8 /uv /bin/uv
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ COPY app ./app
 RUN uv pip install --no-deps .
 
 # Stage 2: Runtime
-FROM python:3.13-slim-bookworm
+FROM python:3.14-slim-trixie
 
 WORKDIR /app
 
