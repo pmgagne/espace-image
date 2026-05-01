@@ -11,7 +11,9 @@ id + uid composite-key design.
 Downgrade is intentionally a no-op: the data transformation is not reversible
 without data loss, which is acceptable for this deployment model.
 
-Previously applied via raw sqlite3 table-copy dance in migrate_database().
+Note: this migration's changes were previously applied by the project's
+`migrate_database()` helper using raw sqlite3 table-copy operations; the
+Alembic revision is retained here for traceability.
 """
 
 from collections.abc import Sequence

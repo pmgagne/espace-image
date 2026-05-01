@@ -93,7 +93,7 @@ class ICalendarService(Protocol):
         ...
 
     async def get_latest_sync_utc_iso(self) -> str:
-        """Return latest successful sync timestamp as ISO string for legacy UI."""
+        """Return latest successful sync timestamp as an ISO string for UI polling."""
         ...
 
     async def get_calendars_for_ui(self) -> dict[str, Any]:

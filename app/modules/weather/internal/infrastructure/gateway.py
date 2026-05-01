@@ -7,7 +7,11 @@ from app.modules.weather.internal.infrastructure.weather_api import WeatherServi
 
 
 class WeatherGateway(IWeatherGateway):
-    """Adapter that delegates provider calls to legacy weather service."""
+    """Weather gateway implementing `IWeatherGateway`.
+
+    Delegates provider calls to the provider-backed `WeatherService`
+    implementation and returns normalized payloads expected by callers.
+    """
 
     async def get_current_weather(self, lat: float, lon: float) -> dict[str, Any]:
         """Fetch normalized weather payload from provider."""

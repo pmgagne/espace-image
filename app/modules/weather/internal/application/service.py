@@ -11,7 +11,11 @@ from app.modules.weather.api.presenters import IWeatherPresenter
 
 
 class WeatherModuleService(IWeatherService):
-    """Adapter service that preserves existing weather behavior during migration."""
+    """Weather service implementing `IWeatherService`.
+
+    Adapts gateway/provider results into normalized `WeatherData` and
+    renders HTML fragments via the provided presenter.
+    """
 
     def __init__(
         self,

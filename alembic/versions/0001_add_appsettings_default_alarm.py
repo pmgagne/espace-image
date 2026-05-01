@@ -5,7 +5,9 @@ Revises: f823da104bcb
 Create Date: 2026-05-01
 
 Adds default_alarm_for_all_events column to appsettings table.
-Previously applied via raw sqlite3 in migrate_database().
+Note: this migration's changes were previously applied by the project's
+`migrate_database()` helper using raw sqlite3 operations; the Alembic
+revision is retained here for traceability.
 """
 
 from collections.abc import Sequence

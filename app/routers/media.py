@@ -16,7 +16,8 @@ async def get_image(
 ):
     """
     Serves the image file.
-    If mode='legacy', resizes it on the fly.
+    If `mode=='legacy'`, return a compatibility streaming response used by
+    older clients (legacy mode) which expect an on-the-fly resized JPEG.
     """
 
     try:

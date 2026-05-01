@@ -51,7 +51,11 @@ async def read_legacy(
     settings_service: ISettingsService = Depends(get_settings_service),
     calendar_service: ICalendarService = Depends(get_calendar_service),
 ):
-    """Legacy Slideshow View (iPad 2)"""
+    """Legacy Slideshow View (iPad 2 compatibility).
+
+    Renders the older slideshow UI used by iPad 2 clients that require
+    a simplified template and polling behaviour.
+    """
     settings = settings_service.get_settings()
     last_sync_utc = await calendar_service.get_latest_sync_utc_iso()
 

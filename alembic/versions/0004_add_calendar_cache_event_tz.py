@@ -5,7 +5,9 @@ Revises: 0003
 Create Date: 2026-05-01
 
 Adds event_tz column and index to calendar_event_cache table.
-Previously applied via raw sqlite3 in migrate_database().
+Note: this migration's changes were previously applied by the project's
+`migrate_database()` helper using raw sqlite3 operations; the Alembic
+revision is retained here for traceability.
 """
 
 from collections.abc import Sequence

@@ -173,7 +173,7 @@ class CalendarService:
             return [self._status_to_dto(status) for status in statuses]
 
     async def get_latest_sync_utc_iso(self, session: Session | None = None) -> str:
-        """Return latest successful sync timestamp as ISO string for legacy UI."""
+        """Return latest successful sync timestamp as an ISO string for UI polling."""
         statuses = await self.get_sync_status(session=session)
         latest_sync = ""
         for status in statuses:

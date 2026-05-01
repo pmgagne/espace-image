@@ -20,7 +20,11 @@ from app.modules.media.internal.infrastructure.image_ops import (
 
 
 class MediaModuleService(IMediaService):
-    """Adapter service for media file operations during migration."""
+    """Media service implementing `IMediaService`.
+
+    Coordinates repository, storage, and presenter to handle uploads,
+    presets, and photo lifecycle operations used by the admin UI.
+    """
 
     def __init__(
         self,

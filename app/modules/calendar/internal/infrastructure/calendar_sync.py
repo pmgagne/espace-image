@@ -114,8 +114,8 @@ class CalendarService:
             end (datetime): End of the window for event extraction.
             tzinfo (ZoneInfo | None): Timezone to use for parsing, if any.
             fix_icloud (bool):
-                Whether to apply iCloud/Apple-specific parsing
-                workarounds.
+                Whether to apply iCloud/Apple-specific parsing workarounds
+                to handle known quirks in Apple-generated ICS files.
 
         Returns:
             list[ICalEvent]: List of parsed calendar events with .raw attached.
@@ -184,7 +184,8 @@ class CalendarService:
     @staticmethod
     def _has_non_time_alarm(_component: object) -> bool:
         """
-        Legacy: kept for compatibility.
+        Kept to maintain backward compatibility with existing cached
+        calendar data and callers that expect this behavior.
 
         Use `_detect_proximity_uids` on raw ICS instead.
 
@@ -215,7 +216,8 @@ class CalendarService:
         Scan raw ICS content and return a set of UIDs for VEVENTs that contain
         a VALARM with a PROXIMITY property.
         This is a lightweight heuristic.
-        It is string-based to preserve previous behavior.
+        The field is string-based to match the stored representation in the
+        database and avoid conversion errors when reading older records.
 
         Args:
             ics_content (str): The raw ICS data as a string.
@@ -291,8 +293,8 @@ class CalendarService:
             lookback_minutes (int): Minutes back to include events.
             tzinfo (ZoneInfo | None): Timezone to use for parsing, if any.
             fix_icloud (bool):
-                Whether to apply iCloud/Apple-specific parsing
-                workarounds.
+                Whether to apply iCloud/Apple-specific parsing workarounds
+                to handle known quirks in Apple-generated ICS files.
 
         Returns:
             list[dict]: List of alarm event dictionaries.
@@ -526,7 +528,8 @@ class CalendarService:
                 location, has_non_time_alarm, source_id, trigger_time.
         """
         events: list[dict[str, Any]] = []
-        # Patch: Expand RRULE events for the full window, even if DTSTART is old
+        # Ensure RRULE events are expanded for the full window so occurrences
+        # are included even when the DTSTART is older than the window.
         ical_events = CalendarService.parse_ics_events(
             ics_content, window_start, window_end, fix_icloud=fix_icloud
         )
@@ -905,7 +908,8 @@ class CalendarService:
         for uid, event in latest_by_uid.items():
             try:
                 # All event times are stored in UTC for consistency.
-                # Original timezone is preserved in event_tz metadata.
+                # Preserve original timezone identifier in `event_tz` metadata
+                # so displays and conversions can reference the source timezone.
                 ev_start = event.get("event_start")
                 ev_end = event.get("event_end")
                 tzid = event.get("tzid")
