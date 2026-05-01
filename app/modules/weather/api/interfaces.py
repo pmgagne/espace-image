@@ -40,6 +40,18 @@ class IWeatherService(Protocol):
         """Get rendered HTML for weather component."""
         ...
 
+    async def get_weather_oob_html(self, lat: float | None, lon: float | None) -> str:
+        """Get out-of-band weather wrapper HTML fragment for index refresh polling."""
+        ...
+
+    async def get_location_name(self, lat: float | None, lon: float | None) -> str:
+        """Return a best-effort location label for settings UI coordinates."""
+        ...
+
+    async def geocode_for_settings(self, query: str) -> tuple[float | None, float | None, str]:
+        """Geocode settings query and return preview coordinates plus display name."""
+        ...
+
 
 def get_weather_service() -> IWeatherService:
     """Dependency injection token for the weather service."""

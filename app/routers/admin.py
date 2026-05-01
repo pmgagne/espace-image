@@ -1,7 +1,6 @@
 import contextlib
 import logging
 import os
-from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
@@ -31,50 +30,27 @@ async def admin_shell(request: Request):
 # --- Partials: Settings ---
 @router.get("/partials/settings", response_class=HTMLResponse)
 async def get_settings_partial(
-    request: Request,
+    request: Request,  # noqa: ARG001
     settings_service: ISettingsService = Depends(get_settings_service),
     weather_service: IWeatherService = Depends(get_weather_service),
 ):
-    settings = settings_service.get_settings()
-    presets = settings_service.list_presets()
-    if settings is None:
-        settings = SimpleNamespace(
-            weather_latitude=None,
-            weather_longitude=None,
-            active_preset_id=None,
-            slideshow_duration=30,
-        )
-
-    location_name = ""
-    if settings and settings.weather_latitude and settings.weather_longitude:
-        try:
-            location_name = (
-                await weather_service.reverse_geocode(
-                    settings.weather_latitude,
-                    settings.weather_longitude,
-                )
-                or ""
-            )
-        except Exception:
-            logger.exception("Geocoding error while reverse geocoding")
-
-    backend_timezone = get_local_timezone_name()
-
-    tpl = templates.env.get_template("partials/settings.html")
+    settings = settings_service.get_settings_form()
+    location_name = await weather_service.get_location_name(
+        settings.weather_latitude,
+        settings.weather_longitude,
+    )
     return HTMLResponse(
-        tpl.render(
-            request=request,
-            settings=settings,
-            presets=presets,
+        settings_service.get_settings_html(
             location_name=location_name,
-            backend_timezone=backend_timezone,
+            backend_timezone=get_local_timezone_name(),
+            form=settings,
         )
     )
 
 
 @router.post("/settings/search", response_class=HTMLResponse)
 async def search_location(
-    request: Request,
+    request: Request,  # noqa: ARG001
     location_query: str = Form(...),
     settings_service: ISettingsService = Depends(get_settings_service),
     weather_service: IWeatherService = Depends(get_weather_service),
@@ -83,50 +59,17 @@ async def search_location(
     Geocodes the location query and returns the settings form
     pre-filled with the new coordinates (not saved yet).
     """
-    current_settings = settings_service.get_settings()
-    if not current_settings:
-        settings = SimpleNamespace(
-            weather_latitude=None,
-            weather_longitude=None,
-            active_preset_id=None,
-            slideshow_duration=30,
-        )
-    else:
-        # Keep route-level mutable state separate from immutable DTOs.
-        settings = SimpleNamespace(
-            weather_latitude=current_settings.weather_latitude,
-            weather_longitude=current_settings.weather_longitude,
-            active_preset_id=current_settings.active_preset_id,
-            slideshow_duration=current_settings.slideshow_duration,
-        )
+    settings = settings_service.get_settings_form()
 
-    presets = settings_service.list_presets()
+    lat, lon, location_name = await weather_service.geocode_for_settings(location_query)
+    if lat is not None and lon is not None:
+        settings = settings_service.with_location_preview(settings, lat, lon)
 
-    # Perform Geocoding
-    result_data = await weather_service.geocode_location(location_query)
-    result = None
-    if result_data is not None:
-        result = {
-            "lat": result_data.lat,
-            "lon": result_data.lon,
-            "name": result_data.name,
-        }
-    location_name = "Location not found"
-
-    if result:
-        # Update the settings object in memory only (no commit)
-        settings.weather_latitude = result["lat"]
-        settings.weather_longitude = result["lon"]
-        location_name = result["name"]
-
-    tpl = templates.env.get_template("partials/settings.html")
     return HTMLResponse(
-        tpl.render(
-            request=request,
-            settings=settings,
-            presets=presets,
+        settings_service.get_settings_html(
             location_name=location_name,
             backend_timezone=get_local_timezone_name(),
+            form=settings,
         )
     )
 
@@ -141,19 +84,10 @@ async def update_settings(
     default_alarm_for_all_events: str | None = Form(None),
     settings_service: ISettingsService = Depends(get_settings_service),
 ):
-    # Basic validation for form inputs
-    import math
-
-    if latitude is not None and (
-        math.isnan(latitude) or math.isinf(latitude) or not (-90.0 <= latitude <= 90.0)
-    ):
-        raise HTTPException(status_code=422, detail="Invalid latitude value")
-    if longitude is not None and (
-        math.isnan(longitude) or math.isinf(longitude) or not (-180.0 <= longitude <= 180.0)
-    ):
-        raise HTTPException(status_code=422, detail="Invalid longitude value")
-    if duration is not None and duration <= 0:
-        raise HTTPException(status_code=422, detail="Duration must be a positive integer")
+    try:
+        settings_service.validate_settings_input(latitude, longitude, duration)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
         settings_service.save_settings(
@@ -175,17 +109,10 @@ async def update_settings(
 # --- Partials: Calendars ---
 @router.get("/partials/calendars", response_class=HTMLResponse)
 async def get_calendars_partial(
-    request: Request,
+    request: Request,  # noqa: ARG001
     calendar_service: ICalendarService = Depends(get_calendar_service),
 ):
-    data = await calendar_service.get_calendars_for_ui()
-    tpl = templates.env.get_template("partials/calendars.html")
-    ctx = (
-        {**data, "request": request}
-        if isinstance(data, dict)
-        else {"request": request, "data": data}
-    )
-    return HTMLResponse(tpl.render(**ctx))
+    return HTMLResponse(await calendar_service.get_calendars_html())
 
 
 @router.post("/calendars", response_class=HTMLResponse)
@@ -208,18 +135,11 @@ async def add_calendar(
 # --- Partials: Gallery ---
 @router.get("/partials/gallery", response_class=HTMLResponse)
 async def get_gallery_partial(
-    request: Request,
+    request: Request,  # noqa: ARG001
     preset_id: int | None = None,
     media_service: IMediaService = Depends(get_media_service),
 ):
-    data = await media_service.get_gallery_for_ui(preset_id)
-    tpl = templates.env.get_template("partials/gallery.html")
-    ctx = (
-        {**data, "request": request}
-        if isinstance(data, dict)
-        else {"request": request, "data": data}
-    )
-    return HTMLResponse(tpl.render(**ctx))
+    return HTMLResponse(await media_service.get_gallery_html(preset_id=preset_id))
 
 
 @router.post("/presets", response_class=HTMLResponse)
@@ -235,7 +155,7 @@ async def create_preset(
 
 @router.post("/upload", response_class=HTMLResponse)
 async def upload_photos(
-    request: Request,
+    request: Request,  # noqa: ARG001
     preset_id: int = Form(...),
     files: list[UploadFile] = File(...),
     media_service: IMediaService = Depends(get_media_service),
@@ -243,17 +163,14 @@ async def upload_photos(
     try:
         await media_service.upload_photos(preset_id, files)
     except ValueError as ve:
-        # Build gallery context and show user-friendly error message
-        data = await media_service.get_gallery_for_ui(preset_id)
-        tpl = templates.env.get_template("partials/gallery.html")
-        ctx = (
-            {**data, "request": request, "error_message": str(ve)}
-            if isinstance(data, dict)
-            else {"request": request, "data": data, "error_message": str(ve)}
+        return HTMLResponse(
+            await media_service.get_gallery_html(
+                preset_id=preset_id,
+                error_message=str(ve),
+            )
         )
-        return HTMLResponse(tpl.render(**ctx))
 
-    return await get_gallery_partial(request, preset_id, media_service)
+    return HTMLResponse(await media_service.get_gallery_html(preset_id=preset_id))
 
 
 @router.delete("/photos/{photo_id}", response_class=HTMLResponse)
@@ -274,25 +191,24 @@ async def delete_photo(
 
 # --- Debug Panel ---
 @router.get("/partials/debug", response_class=HTMLResponse)
-async def get_debug_partial(request: Request):
+async def get_debug_partial(
+    request: Request,  # noqa: ARG001
+    alarms_service: IAlarmsService = Depends(get_alarms_service),
+):
     """Debug control panel for testing (HTMX partial)."""
-    tpl = templates.env.get_template("partials/debug.html")
-    return HTMLResponse(tpl.render(request=request))
+    return HTMLResponse(await alarms_service.get_debug_html())
 
 
 @router.post("/debug/simulate-alarm", response_class=HTMLResponse)
 async def simulate_alarm(
-    request: Request,
+    request: Request,  # noqa: ARG001
     delay_seconds: int = Form(...),
     alarms_service: IAlarmsService = Depends(get_alarms_service),
 ):
     """Create a simulated alarm that appears after the specified delay."""
     await alarms_service.create_simulated_alarm(delay_seconds)
-
-    tpl = templates.env.get_template("partials/debug.html")
     return HTMLResponse(
-        tpl.render(
-            request=request,
-            success_message=f"Simulated alarm created! It will appear in {delay_seconds} seconds.",
+        await alarms_service.get_debug_html(
+            success_message=(f"Simulated alarm created! It will appear in {delay_seconds} seconds.")
         )
     )

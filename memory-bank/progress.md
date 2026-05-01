@@ -1,6 +1,6 @@
 # Progress — Espace-Image
 
-**Last Updated**: 2026-04-30
+**Last Updated**: 2026-05-01
 
 ## What Works
 
@@ -28,7 +28,7 @@
 
 ### Quality Gates
 
-- full Python test suite passing (`65` tests at last validation)
+- full Python test suite passing (`72` tests at last validation)
 - Ruff linting clean at last validation
 - route boundaries verified against module interfaces
 
@@ -43,6 +43,8 @@ The app remains a single FastAPI + SQLite deployment optimized for an internal-n
 **Status**: Stable and post-migration
 
 The large architecture modernization work is complete enough that new work should now be framed as feature work or incremental refactoring, not as broad structural migration.
+
+Final router-shell extraction is intentionally deferred until frontend migration to Vite, where that boundary change can happen once instead of being reworked twice.
 
 ## Known Constraints
 
@@ -73,6 +75,7 @@ The large architecture modernization work is complete enough that new work shoul
 - keep docs synchronized with module boundaries
 - add focused module-level tests when new module behavior is introduced
 - avoid introducing new cross-module shortcuts that bypass interfaces
+- prepare a Vite migration checklist that defines API contracts and shell handoff steps before removing remaining router shell template rendering
 
 ## Milestones
 

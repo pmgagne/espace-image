@@ -472,3 +472,241 @@ Maintainability is strongest where module ownership is clear. The major future r
 2. Add focused module-level tests only when new behavior is introduced.
 3. Review large infrastructure files periodically and split them by role if they become too broad.
 4. Revisit rate limiting and deployment assumptions only if traffic or hosting requirements materially change.
+
+## Phase 4: Pure Hexagonal Closure Plan
+
+### Objective
+
+Close the remaining boundary leaks so the runtime can be described as a pure hexagonal modular monolith:
+
+- routers remain HTTP adapters only
+- application services orchestrate only use cases
+- infrastructure adapters own persistence and external IO
+- module APIs expose DTO-based ports only
+- no shared ORM entities crossing module API boundaries
+
+### Current vs Target Context
+
+```mermaid
+flowchart LR
+    subgraph Current[Current]
+        R1[Shared Routers]
+        A1[App Services]
+        ORM1[(Shared ORM Models)]
+        T1[Template Rendering in Some Services]
+        R1 --> A1
+        A1 --> ORM1
+        A1 --> T1
+    end
+
+    subgraph Target[Pure Hexagonal Target]
+        R2[HTTP Adapters]
+        P2[Module API Ports]
+        U2[Use Case Services]
+        Q2[Presenter Ports]
+        D2[Persistence Ports]
+        I2[Infrastructure Adapters]
+        X2[(DB / FS / External APIs)]
+        R2 --> P2
+        P2 --> U2
+        U2 --> Q2
+        U2 --> D2
+        Q2 --> I2
+        D2 --> I2
+        I2 --> X2
+    end
+```
+
+### Component Closure Map (File-by-File)
+
+1. Router to presenter consistency
+   - Current files: `app/routers/dashboard.py`, `app/routers/admin.py`
+   - Gap: mixed rendering location (some fragments rendered in router, some in services)
+   - Target: all HTML fragment assembly through explicit presenter ports
+
+2. Application service to ORM coupling
+   - Current files: `app/modules/alarms/internal/application/service.py`, `app/modules/calendar/internal/application/service.py`, `app/modules/media/internal/application/service.py`, `app/modules/settings/internal/application/service.py`, `app/modules/slideshow/internal/application/service.py`
+   - Gap: services still execute SQLModel queries and use shared ORM entities directly
+   - Target: application layer depends on repository ports; SQLModel access moves to infrastructure adapters
+
+3. Module-owned persistence boundaries
+   - Current files: `app/db/models.py` and module application services listed above
+   - Gap: shared model package is a cross-module persistence dependency
+   - Target: module-specific persistence adapters map storage entities to module contracts before returning
+
+4. Presenter boundary formalization
+   - Current files: `app/modules/*/api/interfaces.py`, `app/modules/*/internal/application/service.py`
+   - Gap: presenter methods exist but are not consistently modeled as explicit presenter ports
+   - Target: separate presenter interfaces in module API and infrastructure presenter implementations (template adapters)
+
+5. Scheduler and background boundary purity
+   - Current files: `app/main.py`, `app/modules/calendar/internal/application/service.py`
+   - Gap: acceptable exception exists, but should use only public module contract and composition wiring
+   - Target: background jobs instantiate services strictly through composition root factories and ports
+
+### Target Component Diagram (Pure Hexagonal)
+
+```mermaid
+flowchart TB
+    subgraph HTTP[HTTP Adapters]
+        Dash[dashboard router]
+        Admin[admin router]
+        MediaR[media router]
+    end
+
+    subgraph Calendar[calendar module]
+        CalAPI[api/interfaces + contracts]
+        CalUse[application/use cases]
+        CalRepoPort[persistence port]
+        CalPresPort[presenter port]
+        CalInfra[infrastructure adapters]
+    end
+
+    subgraph Alarms[alarms module]
+        AlAPI[api/interfaces + contracts]
+        AlUse[application/use cases]
+        AlRepoPort[persistence port]
+        AlPresPort[presenter port]
+        AlInfra[infrastructure adapters]
+    end
+
+    subgraph CoreInfra[Shared Technical Infrastructure]
+        SF[SessionFactory]
+        DB[(SQLite)]
+        FS[(Uploads)]
+        EXT[ICS + Open-Meteo]
+    end
+
+    Dash --> CalAPI
+    Dash --> AlAPI
+    Admin --> CalAPI
+    Admin --> AlAPI
+    MediaR --> AlAPI
+
+    CalAPI --> CalUse
+    CalUse --> CalRepoPort
+    CalUse --> CalPresPort
+    CalRepoPort --> CalInfra
+    CalPresPort --> CalInfra
+
+    AlAPI --> AlUse
+    AlUse --> AlRepoPort
+    AlUse --> AlPresPort
+    AlRepoPort --> AlInfra
+    AlPresPort --> AlInfra
+
+    CalInfra --> SF
+    AlInfra --> SF
+    SF --> DB
+    CalInfra --> EXT
+    AlInfra --> EXT
+    AlInfra --> FS
+```
+
+### Deployment Delta (Current to Target)
+
+```mermaid
+flowchart LR
+    subgraph Now[Now]
+        AppNow[Single FastAPI Process]
+        DBNow[(SQLite + Files)]
+        AppNow --> DBNow
+    end
+
+    subgraph Pure[Pure Hexagonal on Same Deployment]
+        AppPure[Single FastAPI Process]
+        Ports[Strict Port Boundaries]
+        Adapters[Infrastructure Adapters]
+        DBPure[(SQLite + Files + External APIs)]
+        AppPure --> Ports
+        Ports --> Adapters
+        Adapters --> DBPure
+    end
+```
+
+### Data Flow Delta
+
+```mermaid
+flowchart LR
+    Req[Request / Scheduler] --> HTTPA[HTTP Adapter]
+    HTTPA --> Port[Module API Port]
+    Port --> Use[Use Case Service]
+    Use --> RepoPort[Repository Port]
+    Use --> PresPort[Presenter Port]
+    RepoPort --> RepoAdapter[Persistence Adapter]
+    PresPort --> PresAdapter[Template Presenter Adapter]
+    RepoAdapter --> Store[(DB / FS / External API)]
+    PresAdapter --> HTML[Rendered HTML Fragment]
+    HTML --> HTTPA
+```
+
+### Sequence: Admin Settings Save (Target)
+
+```mermaid
+sequenceDiagram
+    participant U as Admin UI
+    participant R as admin router
+    participant S as settings API port
+    participant Uc as settings use case
+    participant Rp as settings repository port
+    participant Ra as settings repository adapter
+    participant DB as SQLite
+
+    U->>R: POST /admin/settings
+    R->>S: save_settings(command)
+    S->>Uc: execute(command)
+    Uc->>Rp: get_preset(id)
+    Rp->>Ra: query preset
+    Ra->>DB: SELECT preset
+    DB-->>Ra: row
+    Ra-->>Uc: PresetDTO
+    Uc->>Rp: save_settings(dto)
+    Rp->>Ra: persist settings
+    Ra->>DB: UPSERT settings
+    DB-->>Ra: saved row
+    Ra-->>Uc: AppSettingsDTO
+    Uc-->>S: AppSettingsDTO
+    S-->>R: AppSettingsDTO
+    R-->>U: HX-Redirect
+```
+
+### Implementation Checklist (Execution Order)
+
+1. Define repository ports per module in `api/`.
+2. Move all SQLModel query/write logic from `internal/application/service.py` to `internal/infrastructure/` repository adapters.
+3. Keep `internal/application/service.py` focused on orchestration and contract mapping.
+4. Define presenter ports per module (HTML fragment output contracts).
+5. Move template rendering into presenter adapters; services call presenter ports instead of direct templating.
+6. Keep routers to parsing, DI, and response wrapping only.
+7. Ensure cross-module calls use only API interfaces and DTOs.
+8. Keep scheduler usage constrained to public service contracts and composition factories.
+
+### Acceptance Criteria for "Pure"
+
+1. No `select(...)` / ORM model queries inside any `internal/application/service.py`.
+2. No template rendering calls inside `internal/application/service.py`.
+3. Routers do not construct domain data; they only map request/response.
+4. Cross-module dependencies import only from `app/modules/<module>/api/*`.
+5. All module public methods return DTOs/contracts, not ORM entities.
+6. All tests pass with module services resolved through DI ports.
+
+### NFR Impact of Phase 4
+
+- Scalability: better extraction-readiness if deployment model changes.
+- Performance: minor in-process indirection overhead, negligible versus network and IO costs.
+- Security: stricter boundaries reduce accidental data exposure paths.
+- Reliability: clearer ownership lowers regression risk during module evolution.
+- Maintainability: significantly improved; contracts become the single source of truth.
+
+### Risks and Mitigations (Phase 4)
+
+- Risk: short-term churn across tests and fixtures.
+  - Mitigation: migrate one module at a time with contract tests.
+- Risk: over-abstraction.
+  - Mitigation: ports only where real boundary exists; avoid speculative interfaces.
+- Risk: presenter/repository duplication.
+  - Mitigation: shared patterns, but no shared domain logic layer.
+
+### Phase 4 Completion Definition
+
+Phase 4 is complete when all acceptance criteria are met and no module application service requires direct knowledge of SQLModel entities, template engines, or infrastructure libraries.

@@ -1,24 +1,32 @@
 """Settings module service implementation."""
 
+import math
 from contextlib import contextmanager
 
 from sqlmodel import Session
 
 from app.db.models import AppSettings, Preset
 from app.db.session_factory import SessionFactory
-from app.modules.settings.api.contracts import AppSettingsDTO, PresetDTO
+from app.modules.settings.api.contracts import AppSettingsDTO, PresetDTO, SettingsFormDTO
 from app.modules.settings.api.exceptions import PresetNotFoundError
 from app.modules.settings.api.interfaces import ISettingsService
-from app.modules.settings.internal.infrastructure.repository import SettingsRepository
+from app.modules.settings.api.presenters import ISettingsPresenter
+from app.modules.settings.api.repositories import ISettingsRepository
 
 
 class SettingsModuleService(ISettingsService):
     """Service exposing settings and preset operations."""
 
-    def __init__(self, repository: SettingsRepository, session_factory: SessionFactory) -> None:
+    def __init__(
+        self,
+        repository: ISettingsRepository,
+        session_factory: SessionFactory,
+        presenter: ISettingsPresenter,
+    ) -> None:
         """Initialize service with repository and session factory dependencies."""
         self._repository = repository
         self._session_factory = session_factory
+        self._presenter = presenter
 
     @contextmanager
     def _session_scope(self, session: Session | None = None):
@@ -93,7 +101,76 @@ class SettingsModuleService(ISettingsService):
             saved_settings = self._repository.save(active_session, settings)
             return self._settings_to_dto(saved_settings)
 
+    def get_settings_form(self) -> SettingsFormDTO:
+        """Return settings form state with default-safe values for rendering."""
+        current = self.get_settings()
+        if current is None:
+            return SettingsFormDTO(
+                active_preset_id=None,
+                weather_latitude=None,
+                weather_longitude=None,
+                slideshow_duration=30,
+            )
+        return SettingsFormDTO(
+            active_preset_id=current.active_preset_id,
+            weather_latitude=current.weather_latitude,
+            weather_longitude=current.weather_longitude,
+            slideshow_duration=current.slideshow_duration,
+        )
 
-def create_settings_service(session_factory: SessionFactory) -> ISettingsService:
+    def with_location_preview(
+        self,
+        form: SettingsFormDTO,
+        latitude: float,
+        longitude: float,
+    ) -> SettingsFormDTO:
+        """Return a settings form state with preview coordinates applied."""
+        return SettingsFormDTO(
+            active_preset_id=form.active_preset_id,
+            weather_latitude=latitude,
+            weather_longitude=longitude,
+            slideshow_duration=form.slideshow_duration,
+        )
+
+    def validate_settings_input(
+        self,
+        latitude: float | None,
+        longitude: float | None,
+        duration: int | None,
+    ) -> None:
+        """Validate settings form inputs and raise ValueError when invalid."""
+        if latitude is not None and (
+            math.isnan(latitude) or math.isinf(latitude) or not (-90.0 <= latitude <= 90.0)
+        ):
+            raise ValueError("Invalid latitude value")
+        if longitude is not None and (
+            math.isnan(longitude) or math.isinf(longitude) or not (-180.0 <= longitude <= 180.0)
+        ):
+            raise ValueError("Invalid longitude value")
+        if duration is not None and duration <= 0:
+            raise ValueError("Duration must be a positive integer")
+
+    def get_settings_html(
+        self,
+        location_name: str | None,
+        backend_timezone: str,
+        form: SettingsFormDTO | None = None,
+    ) -> str:
+        """Return rendered settings partial HTML."""
+        settings = form if form is not None else self.get_settings_form()
+        presets = self.list_presets()
+        return self._presenter.render_settings_html(
+            settings=settings,
+            presets=presets,
+            location_name=location_name,
+            backend_timezone=backend_timezone,
+        )
+
+
+def create_settings_service(
+    session_factory: SessionFactory,
+    repository: ISettingsRepository,
+    presenter: ISettingsPresenter,
+) -> ISettingsService:
     """Factory that returns the settings service implementation."""
-    return SettingsModuleService(SettingsRepository(), session_factory)
+    return SettingsModuleService(repository, session_factory, presenter)

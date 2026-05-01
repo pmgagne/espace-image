@@ -55,6 +55,10 @@ class IAlarmsService(Protocol):
         """Return rendered HTML string for alarm component."""
         ...
 
+    async def get_debug_html(self, success_message: str | None = None) -> str:
+        """Return rendered HTML string for debug panel component."""
+        ...
+
 
 def get_alarms_service() -> IAlarmsService:
     """Dependency injection token for alarms service."""

@@ -80,6 +80,14 @@ class IMediaService(Protocol):
         """
         ...
 
+    async def get_gallery_html(
+        self,
+        preset_id: int | None = None,
+        error_message: str | None = None,
+    ) -> str:
+        """Return rendered gallery management partial HTML."""
+        ...
+
     async def get_photo_for_download(self, photo_id: int) -> dict[str, Any]:
         """
         Get photo with eager-loaded preset relationship for download.

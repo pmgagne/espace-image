@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from sqlmodel import select
 
 from app.db.session_factory import SessionFactory
-from app.modules.alarms.internal.application.service import AlarmsService
+from app.modules.alarms.internal.application.service import create_alarms_service
 from app.modules.calendar.internal.infrastructure.calendar_sync import (
     CalendarService,
 )
@@ -86,7 +86,7 @@ def test_comprehensive_calendar_parsing_and_alarms(session):
         pass
 
     alarms = asyncio.run(
-        AlarmsService(SessionFactory(session.get_bind())).get_active_alarms(session)
+        create_alarms_service(SessionFactory(session.get_bind())).get_active_alarms(session)
     )
 
     alarm_uids = {a["uid"] for a in alarms}

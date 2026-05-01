@@ -7,15 +7,22 @@ from sqlmodel import Session
 
 from app.db.session_factory import SessionFactory
 from app.modules.slideshow.api.interfaces import ISlideshowService, SlideSelectionResult
-from app.modules.slideshow.internal.infrastructure.repository import SlideshowRepository
+from app.modules.slideshow.api.presenters import ISlideshowPresenter
+from app.modules.slideshow.api.repositories import ISlideshowRepository
 
 
 class SlideshowModuleService(ISlideshowService):
     """Service exposing slideshow selection operations."""
 
-    def __init__(self, repository: SlideshowRepository, session_factory: SessionFactory) -> None:
-        """Initialize service with repository and session factory dependencies."""
+    def __init__(
+        self,
+        repository: ISlideshowRepository,
+        presenter: ISlideshowPresenter,
+        session_factory: SessionFactory,
+    ) -> None:
+        """Initialize service with repository, presenter, and session dependencies."""
         self._repository = repository
+        self._presenter = presenter
         self._session_factory = session_factory
 
     @contextmanager
@@ -60,17 +67,14 @@ class SlideshowModuleService(ISlideshowService):
 
         Returns HTML fragment with either slide image or error message.
         """
-        from app.template_config import templates
-
         selection = self.select_next_slide(mode)
-        tpl = templates.env.get_template("partials/slide.html")
-
-        if selection.error_msg:
-            return tpl.render(error_msg=selection.error_msg)
-
-        return tpl.render(img_url=selection.img_url)
+        return self._presenter.render_slide_html(selection)
 
 
-def create_slideshow_service(session_factory: SessionFactory) -> ISlideshowService:
+def create_slideshow_service(
+    session_factory: SessionFactory,
+    repository: ISlideshowRepository,
+    presenter: ISlideshowPresenter,
+) -> ISlideshowService:
     """Factory that returns the slideshow service implementation."""
-    return SlideshowModuleService(SlideshowRepository(), session_factory)
+    return SlideshowModuleService(repository, presenter, session_factory)

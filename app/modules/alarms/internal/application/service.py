@@ -5,15 +5,15 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
-from app.db.models import (
-    AlarmEvent,
-    CalendarEventCache,
-    CalendarSource,
-)
+from app.db.models import AlarmEvent
 from app.db.session_factory import SessionFactory
 from app.modules.alarms.api.contracts import AlarmEventDTO
+from app.modules.alarms.api.presenters import IAlarmsPresenter
+from app.modules.alarms.api.repositories import IAlarmsRepository
+from app.modules.alarms.internal.infrastructure.presenter import AlarmsPresenter
+from app.modules.alarms.internal.infrastructure.repository import AlarmsRepository
 from app.utils.timezone import datetime_to_iso_with_tz, ensure_utc_aware
 
 logger = logging.getLogger(__name__)
@@ -22,9 +22,16 @@ logger = logging.getLogger(__name__)
 class AlarmsService:
     """Alarms service for alarm display, dismissal, and maintenance."""
 
-    def __init__(self, session_factory: SessionFactory) -> None:
-        """Initialize alarms service with session factory dependency."""
+    def __init__(
+        self,
+        session_factory: SessionFactory,
+        repository: IAlarmsRepository,
+        presenter: IAlarmsPresenter,
+    ) -> None:
+        """Initialize alarms service with session, repository, and presenter dependencies."""
         self._session_factory = session_factory
+        self._repository = repository
+        self._presenter = presenter
 
     @contextmanager
     def _session_scope(self, session: Session | None = None):
@@ -91,17 +98,16 @@ class AlarmsService:
         window_start = utc_now - timedelta(days=7)
         window_end = utc_now + timedelta(days=7)
 
-        sources = session.exec(select(CalendarSource)).all()
+        sources = self._repository.list_calendar_sources(session)
         active_alarms: list[dict] = []
 
         for source in sources:
-            cached_events = session.exec(
-                select(CalendarEventCache).where(
-                    (CalendarEventCache.calendar_source_id == source.id)
-                    & (CalendarEventCache.event_start <= window_end)
-                    & (CalendarEventCache.event_end >= window_start)
-                )
-            ).all()
+            cached_events = self._repository.list_cached_events_in_window(
+                session,
+                source.id,
+                window_start,
+                window_end,
+            )
 
             for event in cached_events:
                 # Determine effective trigger time (fallback to event_start)
@@ -130,12 +136,11 @@ class AlarmsService:
                 composite_uid = f"{event.calendar_source_id}:{event.uid}"
 
                 # Check if alarm was dismissed
-                dismissed = session.exec(
-                    select(AlarmEvent).where(
-                        AlarmEvent.calendar_source_id == event.calendar_source_id,
-                        AlarmEvent.calendar_event_uid == event.uid,
-                    )
-                ).first()
+                dismissed = self._repository.get_alarm_by_calendar_uid(
+                    session,
+                    event.calendar_source_id,
+                    event.uid,
+                )
 
                 if not dismissed or dismissed.dismissed_at is None:
                     alarm = {
@@ -163,13 +168,7 @@ class AlarmsService:
         now_naive = datetime.now(UTC).replace(tzinfo=None)
 
         # Test alarms have no calendar link (NULL calendar_source_id)
-        simulated_alarms = session.exec(
-            select(AlarmEvent).where(
-                (AlarmEvent.calendar_source_id.is_(None))  # type: ignore[union-attr]
-                & (AlarmEvent.trigger_time <= now_naive)
-                & (AlarmEvent.dismissed_at.is_(None))  # type: ignore[union-attr]
-            )
-        ).all()
+        simulated_alarms = self._repository.list_ready_simulated_alarms(session, now_naive)
 
         alarms = []
         for alarm_event in simulated_alarms:
@@ -212,12 +211,10 @@ class AlarmsService:
                 try:
                     alarm_uuid = UUID(alarm_uid)
                     # Direct UUID lookup
-                    alarm = active_session.exec(
-                        select(AlarmEvent).where(AlarmEvent.id == alarm_uuid)
-                    ).first()
+                    alarm = self._repository.get_alarm_by_uuid(active_session, alarm_uuid)
                     if alarm:
                         alarm.dismissed_at = datetime.now(UTC)
-                        active_session.add(alarm)
+                        self._repository.add_alarm(active_session, alarm)
                         active_session.commit()
                     return
                 except ValueError:
@@ -234,29 +231,27 @@ class AlarmsService:
                 event_uid = parts[1]
 
                 # Lookup by calendar relationship
-                alarm = active_session.exec(
-                    select(AlarmEvent).where(
-                        (AlarmEvent.calendar_source_id == source_id)
-                        & (AlarmEvent.calendar_event_uid == event_uid)
-                    )
-                ).first()
+                alarm = self._repository.get_alarm_by_calendar_uid(
+                    active_session,
+                    source_id,
+                    event_uid,
+                )
 
                 if alarm:
                     # Update existing alarm
                     alarm.dismissed_at = datetime.now(UTC)
-                    active_session.add(alarm)
+                    self._repository.add_alarm(active_session, alarm)
                 else:
                     # Create new alarm record for this dismissal
                     trigger_time = datetime.now(UTC)
 
                     # Try to find cached event for accurate trigger time
                     try:
-                        cached = active_session.exec(
-                            select(CalendarEventCache).where(
-                                (CalendarEventCache.calendar_source_id == source_id)
-                                & (CalendarEventCache.uid == event_uid)
-                            )
-                        ).first()
+                        cached = self._repository.get_cached_event_by_uid(
+                            active_session,
+                            source_id,
+                            event_uid,
+                        )
                         if cached:
                             trigger_time = cached.event_start
                     except Exception as e:
@@ -273,7 +268,7 @@ class AlarmsService:
                         calendar_source_id=source_id,
                         calendar_event_uid=event_uid,
                     )
-                    active_session.add(alarm)
+                    self._repository.add_alarm(active_session, alarm)
 
                 active_session.commit()
             except Exception as e:
@@ -285,12 +280,10 @@ class AlarmsService:
             try:
                 now = datetime.now(UTC)
                 purge_before = now - timedelta(days=30)
-                dismissed_col = AlarmEvent.dismissed_at  # type: ignore[assignment]
-                dismissed_alarms = active_session.exec(
-                    select(AlarmEvent).where(
-                        (dismissed_col.isnot(None)) & (dismissed_col < purge_before)
-                    )
-                ).all()
+                dismissed_alarms = self._repository.list_dismissed_before(
+                    active_session,
+                    purge_before,
+                )
 
                 count = len(dismissed_alarms)
                 if count > 0:
@@ -300,7 +293,7 @@ class AlarmsService:
                         purge_before.isoformat(),
                     )
                     for alarm in dismissed_alarms:
-                        active_session.delete(alarm)
+                        self._repository.delete_alarm(active_session, alarm)
                     active_session.commit()
             except Exception as e:
                 logger.error("Error purging old dismissed alarms: %s", e)
@@ -310,8 +303,8 @@ class AlarmsService:
         from app.utils.timezone import ensure_utc_aware
 
         with self._session_scope(session) as active_session:
-            cached = active_session.exec(select(CalendarEventCache)).all()
-            alarms = active_session.exec(select(AlarmEvent)).all()
+            cached = self._repository.list_cached_events(active_session)
+            alarms = self._repository.list_all_alarms(active_session)
 
             events_out = []
             for ev in cached:
@@ -416,14 +409,12 @@ class AlarmsService:
 
         Returns empty string if no alarms, otherwise returns alarm list HTML.
         """
-        from app.template_config import templates
-
         alarm_contexts = await self.get_alarm_contexts(mock=mock, tz_offset=tz_offset)
-        if not alarm_contexts:
-            return ""
+        return self._presenter.render_alarm_html(alarm_contexts)
 
-        tpl = templates.env.get_template("partials/alarms.html")
-        return tpl.render(alarms=alarm_contexts)
+    async def get_debug_html(self, success_message: str | None = None) -> str:
+        """Get rendered HTML for the debug panel component."""
+        return self._presenter.render_debug_html(success_message=success_message)
 
     def _isoformat_safe(self, dt_obj: object, tzid: str | None = None) -> str:
         """Return timezone-aware ISO string or empty string on conversion failure."""
@@ -558,9 +549,17 @@ class AlarmsService:
         return contexts
 
 
-def create_alarms_service(session_factory: SessionFactory) -> AlarmsService:
+def create_alarms_service(
+    session_factory: SessionFactory,
+    repository: IAlarmsRepository | None = None,
+    presenter: IAlarmsPresenter | None = None,
+) -> AlarmsService:
     """Factory that returns the alarms service implementation."""
-    return AlarmsService(session_factory)
+    return AlarmsService(
+        session_factory,
+        repository or AlarmsRepository(),
+        presenter or AlarmsPresenter(),
+    )
 
 
 def alarms_to_context(

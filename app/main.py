@@ -13,9 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from app.config import CALENDAR_SYNC_INTERVAL_MINUTES
 from app.db.engine import create_db_and_tables
 from app.db.session_factory import SessionFactory
-from app.modules.calendar.internal.application.service import (
-    create_calendar_service,
-)
+from app.modules.calendar.loader import build_calendar_service
 from app.modules.loader import app_init, app_post_init, app_teardown
 from app.routers import admin, dashboard, media
 
@@ -53,11 +51,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 async def background_sync_calendars() -> None:
     """Background task to sync calendar events on configured interval."""
     try:
-        # Create calendar service directly (outside FastAPI DI context)
+        # Build calendar service via module-owned composition helper
         from app.db.engine import engine
 
         session_factory = SessionFactory(engine)
-        calendar_service = create_calendar_service(session_factory)
+        calendar_service = build_calendar_service(session_factory)
         await calendar_service.sync_calendars()
     except Exception as e:
         logger.exception("Error in background calendar sync: %s", e)

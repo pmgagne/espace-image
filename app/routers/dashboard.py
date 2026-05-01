@@ -53,18 +53,7 @@ async def read_legacy(
 ):
     """Legacy Slideshow View (iPad 2)"""
     settings = settings_service.get_settings()
-    # Determine the most recent calendar sync time (if any) to display in legacy UI
-    try:
-        statuses = await calendar_service.get_sync_status()
-        latest = None
-        for status_dict in statuses:
-            if status_dict.get("last_synced_at") and (
-                latest is None or status_dict["last_synced_at"] > latest
-            ):
-                latest = status_dict["last_synced_at"]
-        last_sync_utc = latest.isoformat() if latest else ""
-    except Exception:
-        last_sync_utc = ""
+    last_sync_utc = await calendar_service.get_latest_sync_utc_iso()
 
     tpl = templates.env.get_template("legacy/index.html")
     return HTMLResponse(
@@ -106,7 +95,7 @@ async def get_next_slide(
 
 @router.get("/components/index-refresh", response_class=HTMLResponse)
 async def components_index_refresh(
-    request: Request,
+    request: Request,  # noqa: ARG001
     settings_service: ISettingsService = Depends(get_settings_service),
     weather_service: IWeatherService = Depends(get_weather_service),
     alarms_service: IAlarmsService = Depends(get_alarms_service),
@@ -121,24 +110,14 @@ async def components_index_refresh(
     out_parts: list[str] = []
 
     # Weather fragment (if location configured)
-    if (
-        settings
-        and settings.weather_latitude is not None
-        and settings.weather_longitude is not None
-    ):
+    if settings:
         try:
-            weather_data = await weather_service.get_current_weather(
-                settings.weather_latitude, settings.weather_longitude
+            weather_oob_html = await weather_service.get_weather_oob_html(
+                settings.weather_latitude,
+                settings.weather_longitude,
             )
-            weather = {
-                "temp": weather_data.temp,
-                "condition": weather_data.condition,
-                "location": weather_data.location,
-            }
-            weather_html = templates.env.get_template("partials/weather.html").render(
-                request=request, has_location=True, weather=weather
-            )
-            out_parts.append(f'<div hx-swap-oob="innerHTML:#weather-wrapper">{weather_html}</div>')
+            if weather_oob_html:
+                out_parts.append(weather_oob_html)
         except Exception:
             logger.exception("Failed to render weather fragment for index-refresh")
 

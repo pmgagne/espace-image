@@ -1,5 +1,5 @@
 from app.main import app as fastapi_app
-from app.modules.settings.api.contracts import AppSettingsDTO
+from app.modules.settings.api.contracts import AppSettingsDTO, SettingsFormDTO
 from app.modules.settings.api.interfaces import get_settings_service
 from app.modules.weather.api.interfaces import (
     WeatherLocationResult,
@@ -12,6 +12,12 @@ def test_admin_settings_search(client, session):
         async def geocode_location(self, query: str) -> WeatherLocationResult | None:
             assert query == "Paris"
             return WeatherLocationResult(lat=48.8566, lon=2.3522, name="Paris, France")
+
+        async def geocode_for_settings(self, query: str) -> tuple[float | None, float | None, str]:
+            result = await self.geocode_location(query)
+            if result is None:
+                return None, None, "Location not found"
+            return result.lat, result.lon, result.name
 
     fastapi_app.dependency_overrides[get_weather_service] = lambda: FakeWeatherService()
     try:
@@ -38,8 +44,26 @@ def test_admin_settings_partial_uses_weather_service(client):
                 default_alarm_for_all_events=False,
             )
 
+        def get_settings_form(self):
+            return SettingsFormDTO(
+                active_preset_id=None,
+                weather_latitude=48.8566,
+                weather_longitude=2.3522,
+                slideshow_duration=30,
+            )
+
         def list_presets(self):
             return []
+
+        def get_settings_html(
+            self,
+            location_name: str | None,
+            backend_timezone: str,
+            form: SettingsFormDTO | None = None,
+        ) -> str:
+            _ = backend_timezone
+            rendered_location = location_name or ""
+            return f"<div>{rendered_location}</div>"
 
     class FakeWeatherService:
         async def geocode_location(self, query: str) -> WeatherLocationResult | None:
@@ -49,6 +73,11 @@ def test_admin_settings_partial_uses_weather_service(client):
             assert lat == 48.8566
             assert lon == 2.3522
             return "Paris, Ile-de-France"
+
+        async def get_location_name(self, lat: float | None, lon: float | None) -> str:
+            if lat is None or lon is None:
+                return ""
+            return await self.reverse_geocode(lat, lon) or ""
 
     fastapi_app.dependency_overrides[get_settings_service] = lambda: FakeSettingsService()
     fastapi_app.dependency_overrides[get_weather_service] = lambda: FakeWeatherService()

@@ -1,6 +1,6 @@
 # Active Context
 
-**Last Updated**: 2026-04-30
+**Last Updated**: 2026-05-01
 
 ## Current Architecture State
 
@@ -52,9 +52,15 @@ The important current-state facts are:
 ## Active Decisions
 
 - shared routers remain acceptable; per-module REST adapters are not currently required
+- defer extraction of page-shell template rendering (`/admin`, `/`, `/legacy`) until frontend migration to Vite to avoid duplicated transition work
 - SQLite remains the correct persistence choice for the current deployment model
 - no authentication remains acceptable for internal-network-only deployment
 - rate limiting is not implemented today; add it only if deployment shape changes or API volume increases
+
+## Deferred Work (Vite Migration)
+
+1. Move remaining shell template rendering out of routers as the frontend boundary shifts to Vite.
+2. Keep current router shell handlers stable until the Vite entrypoint and API contract are ready.
 
 ## Useful Anchors
 

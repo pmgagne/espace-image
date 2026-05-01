@@ -9,14 +9,27 @@ from app.db.session_factory import SessionFactory
 
 from .api.interfaces import get_calendar_service
 from .internal.application.service import create_calendar_service
+from .internal.infrastructure.presenter import CalendarPresenter
+from .internal.infrastructure.repository import CalendarRepository
+from .internal.infrastructure.sync_gateway import CalendarSyncGateway
 
 logger = logging.getLogger(__name__)
+
+
+def build_calendar_service(session_factory: SessionFactory):
+    """Build a calendar service instance using module-owned composition wiring."""
+    return create_calendar_service(
+        session_factory,
+        CalendarRepository(),
+        CalendarSyncGateway(),
+        CalendarPresenter(),
+    )
 
 
 async def init(app: FastAPI) -> None:
     """Initialize calendar module dependencies."""
     session_factory = SessionFactory(engine)
-    service = create_calendar_service(session_factory)
+    service = build_calendar_service(session_factory)
     app.dependency_overrides[get_calendar_service] = lambda: service
     logger.info("Initialized calendar module")
 

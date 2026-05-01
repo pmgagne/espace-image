@@ -11,16 +11,30 @@ from app.db.session_factory import SessionFactory
 from app.main import app as fastapi_app
 from app.modules.alarms.api.interfaces import get_alarms_service
 from app.modules.alarms.internal.application.service import create_alarms_service
+from app.modules.alarms.internal.infrastructure.presenter import AlarmsPresenter
+from app.modules.alarms.internal.infrastructure.repository import AlarmsRepository
 from app.modules.calendar.api.interfaces import get_calendar_service
 from app.modules.calendar.internal.application.service import create_calendar_service
+from app.modules.calendar.internal.infrastructure.presenter import CalendarPresenter
+from app.modules.calendar.internal.infrastructure.repository import CalendarRepository
+from app.modules.calendar.internal.infrastructure.sync_gateway import CalendarSyncGateway
 from app.modules.media.api.interfaces import get_media_service
 from app.modules.media.internal.application.service import create_media_service
+from app.modules.media.internal.infrastructure.image_ops import GalleryManager
+from app.modules.media.internal.infrastructure.presenter import MediaPresenter
+from app.modules.media.internal.infrastructure.repository import MediaRepository
 from app.modules.settings.api.interfaces import get_settings_service
 from app.modules.settings.internal.application.service import create_settings_service
+from app.modules.settings.internal.infrastructure.presenter import SettingsPresenter
+from app.modules.settings.internal.infrastructure.repository import SettingsRepository
 from app.modules.slideshow.api.interfaces import get_slideshow_service
 from app.modules.slideshow.internal.application.service import create_slideshow_service
+from app.modules.slideshow.internal.infrastructure.presenter import SlideshowPresenter
+from app.modules.slideshow.internal.infrastructure.repository import SlideshowRepository
 from app.modules.weather.api.interfaces import get_weather_service
 from app.modules.weather.internal.application.service import create_weather_service
+from app.modules.weather.internal.infrastructure.gateway import WeatherGateway
+from app.modules.weather.internal.infrastructure.presenter import WeatherPresenter
 
 # Suppress noisy third-party Deprecation/Runtime warnings during tests
 warnings.filterwarnings(
@@ -77,22 +91,36 @@ def client_fixture(session: Session):
         # Apply after startup so module loaders cannot overwrite these test overrides.
         test_session_factory = SessionFactory(test_engine)
         fastapi_app.dependency_overrides[get_settings_service] = lambda: create_settings_service(
-            test_session_factory
+            test_session_factory,
+            SettingsRepository(),
+            SettingsPresenter(),
         )
         fastapi_app.dependency_overrides[get_media_service] = lambda: create_media_service(
-            test_session_factory
+            test_session_factory,
+            MediaRepository(),
+            GalleryManager(),
+            MediaPresenter(),
         )
         fastapi_app.dependency_overrides[get_calendar_service] = lambda: create_calendar_service(
-            test_session_factory
+            test_session_factory,
+            CalendarRepository(),
+            CalendarSyncGateway(),
+            CalendarPresenter(),
         )
         fastapi_app.dependency_overrides[get_alarms_service] = lambda: create_alarms_service(
-            test_session_factory
+            test_session_factory,
+            AlarmsRepository(),
+            AlarmsPresenter(),
         )
         fastapi_app.dependency_overrides[get_slideshow_service] = lambda: create_slideshow_service(
-            test_session_factory
+            test_session_factory,
+            SlideshowRepository(),
+            SlideshowPresenter(),
         )
         fastapi_app.dependency_overrides[get_weather_service] = lambda: create_weather_service(
-            test_session_factory
+            test_session_factory,
+            WeatherGateway(),
+            WeatherPresenter(),
         )
         yield client
 

@@ -1,116 +1,117 @@
 """Alarms infrastructure layer - repository for DB access."""
 
-import logging
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Any, cast
+from uuid import UUID
 
-from sqlalchemy import and_
-from sqlmodel import select
+from sqlmodel import Session, select
 
-from app.db.models import AlarmEvent
-
-logger = logging.getLogger(__name__)
+from app.db.models import AlarmEvent, CalendarEventCache, CalendarSource
+from app.modules.alarms.api.repositories import IAlarmsRepository
 
 
-class AlarmsRepository:
-    """Repository for alarm-related database operations."""
+class AlarmsRepository(IAlarmsRepository):
+    """Repository adapter for alarm-related persistence operations."""
 
-    def __init__(self, session_provider):
-        """Initialize with a session provider (callable that returns Session)."""
-        self.session_provider = session_provider
+    def list_calendar_sources(self, session: Session) -> list[CalendarSource]:
+        """Return all calendar sources."""
+        return list(session.exec(select(CalendarSource)).all())
 
-    def get_alarm_by_composite_uid(
+    def list_cached_events_in_window(
         self,
-        calendar_source_id: int,
-        calendar_event_uid: str,
+        session: Session,
+        source_id: int,
+        window_start: datetime,
+        window_end: datetime,
+    ) -> list[CalendarEventCache]:
+        """Return cached events in a time window for one source."""
+        return list(
+            session.exec(
+                select(CalendarEventCache).where(
+                    (CalendarEventCache.calendar_source_id == source_id)
+                    & (CalendarEventCache.event_start <= window_end)
+                    & (CalendarEventCache.event_end >= window_start)
+                )
+            ).all()
+        )
+
+    def get_alarm_by_calendar_uid(
+        self,
+        session: Session,
+        source_id: int,
+        event_uid: str,
     ) -> AlarmEvent | None:
-        """Fetch an alarm by composite UID (source_id + event_uid)."""
-        with self.session_provider() as session:
-            return session.exec(
-                select(AlarmEvent).where(
-                    (AlarmEvent.calendar_source_id == calendar_source_id)
-                    & (AlarmEvent.calendar_event_uid == calendar_event_uid)
-                )
-            ).first()
-
-    def create_alarm(
-        self,
-        trigger_time: datetime,
-        calendar_source_id: int | None = None,
-        calendar_event_uid: str | None = None,
-    ) -> AlarmEvent:
-        """Create a new alarm event."""
-        with self.session_provider() as session:
-            alarm = AlarmEvent(
-                trigger_time=trigger_time,
-                calendar_source_id=calendar_source_id,
-                calendar_event_uid=calendar_event_uid,
+        """Return alarm row by calendar source and event UID."""
+        return session.exec(
+            select(AlarmEvent).where(
+                (AlarmEvent.calendar_source_id == source_id)
+                & (AlarmEvent.calendar_event_uid == event_uid)
             )
-            session.add(alarm)
-            session.commit()
-            session.refresh(alarm)
-            return alarm
+        ).first()
 
-    def dismiss_alarm(
+    def get_alarm_by_uuid(self, session: Session, alarm_id: UUID) -> AlarmEvent | None:
+        """Return alarm row by UUID."""
+        return session.exec(select(AlarmEvent).where(AlarmEvent.id == alarm_id)).first()
+
+    def get_cached_event_by_uid(
         self,
-        calendar_source_id: int,
-        calendar_event_uid: str,
-    ) -> None:
-        """Mark an alarm as dismissed."""
-        with self.session_provider() as session:
-            alarm = session.exec(
-                select(AlarmEvent).where(
-                    (AlarmEvent.calendar_source_id == calendar_source_id)
-                    & (AlarmEvent.calendar_event_uid == calendar_event_uid)
-                )
-            ).first()
+        session: Session,
+        source_id: int,
+        event_uid: str,
+    ) -> CalendarEventCache | None:
+        """Return cached event by source and UID."""
+        return session.exec(
+            select(CalendarEventCache).where(
+                (CalendarEventCache.calendar_source_id == source_id)
+                & (CalendarEventCache.uid == event_uid)
+            )
+        ).first()
 
-            if alarm:
-                alarm.dismissed_at = datetime.now(UTC)
-                session.add(alarm)
-                session.commit()
+    def add_alarm(self, session: Session, alarm: AlarmEvent) -> None:
+        """Stage an alarm row for persistence in current transaction."""
+        session.add(alarm)
 
-    def get_test_alarms(self) -> list[AlarmEvent]:
-        """Fetch test/simulated alarms (no calendar link)."""
-        with self.session_provider() as session:
-            now_naive = datetime.now(UTC).replace(tzinfo=None)
-            return session.exec(
+    def list_ready_simulated_alarms(
+        self,
+        session: Session,
+        now_naive: datetime,
+    ) -> list[AlarmEvent]:
+        """Return simulated alarms ready to fire and not dismissed."""
+        cs_col = cast(Any, AlarmEvent.calendar_source_id)
+        dismissed_col = cast(Any, AlarmEvent.dismissed_at)
+        return list(
+            session.exec(
                 select(AlarmEvent).where(
-                    (AlarmEvent.calendar_source_id.is_(None))  # type: ignore[union-attr]
+                    (cs_col.is_(None))
                     & (AlarmEvent.trigger_time <= now_naive)
-                    & (AlarmEvent.dismissed_at.is_(None))  # type: ignore[union-attr]
+                    & (dismissed_col.is_(None))
                 )
             ).all()
+        )
 
-    def purge_old_dismissed_alarms(self, days_old: int = 30) -> int:
-        """
-        Delete dismissed alarms older than specified days.
-
-        Returns:
-            Number of alarms purged.
-        """
-        with self.session_provider() as session:
-            now = datetime.now(UTC)
-            purge_before = now - timedelta(days=days_old)
-            dismissed_col = cast(Any, AlarmEvent.dismissed_at)
-            dismissed_alarms = session.exec(
+    def list_dismissed_before(
+        self,
+        session: Session,
+        purge_before: datetime,
+    ) -> list[AlarmEvent]:
+        """Return dismissed alarms older than a threshold."""
+        dismissed_col = cast(Any, AlarmEvent.dismissed_at)
+        return list(
+            session.exec(
                 select(AlarmEvent).where(
-                    and_(
-                        dismissed_col.isnot(None),
-                        dismissed_col < purge_before,
-                    )
+                    (dismissed_col.isnot(None)) & (dismissed_col < purge_before)
                 )
             ).all()
+        )
 
-            count = len(dismissed_alarms)
-            if count > 0:
-                logger.info(
-                    "Purging %d dismissed alarms older than %s",
-                    count,
-                    purge_before.isoformat(),
-                )
-                for alarm in dismissed_alarms:
-                    session.delete(alarm)
-                session.commit()
+    def delete_alarm(self, session: Session, alarm: AlarmEvent) -> None:
+        """Delete one alarm row in current transaction."""
+        session.delete(alarm)
 
-            return count
+    def list_cached_events(self, session: Session) -> list[CalendarEventCache]:
+        """Return all cached events for debug view."""
+        return list(session.exec(select(CalendarEventCache)).all())
+
+    def list_all_alarms(self, session: Session) -> list[AlarmEvent]:
+        """Return all alarm rows for debug view."""
+        return list(session.exec(select(AlarmEvent)).all())

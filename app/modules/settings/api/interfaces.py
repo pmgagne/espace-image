@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from app.modules.settings.api.contracts import AppSettingsDTO, PresetDTO
+from app.modules.settings.api.contracts import AppSettingsDTO, PresetDTO, SettingsFormDTO
 
 
 class ISettingsService(Protocol):
@@ -26,6 +26,33 @@ class ISettingsService(Protocol):
         default_alarm_for_all_events: bool,
     ) -> AppSettingsDTO:
         """Persist settings changes and return saved settings."""
+
+    def get_settings_form(self) -> SettingsFormDTO:
+        """Return settings form state with default-safe values for rendering."""
+
+    def with_location_preview(
+        self,
+        form: SettingsFormDTO,
+        latitude: float,
+        longitude: float,
+    ) -> SettingsFormDTO:
+        """Return a settings form state with preview coordinates applied."""
+
+    def validate_settings_input(
+        self,
+        latitude: float | None,
+        longitude: float | None,
+        duration: int | None,
+    ) -> None:
+        """Validate settings form inputs and raise ValueError when invalid."""
+
+    def get_settings_html(
+        self,
+        location_name: str | None,
+        backend_timezone: str,
+        form: SettingsFormDTO | None = None,
+    ) -> str:
+        """Return rendered settings partial HTML."""
 
 
 def get_settings_service() -> ISettingsService:

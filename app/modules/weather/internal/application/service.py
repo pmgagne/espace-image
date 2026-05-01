@@ -1,26 +1,32 @@
 """Weather module service implementation."""
 
 from app.db.session_factory import SessionFactory
+from app.modules.weather.api.gateway import IWeatherGateway
 from app.modules.weather.api.interfaces import (
     IWeatherService,
     WeatherData,
     WeatherLocationResult,
 )
-from app.modules.weather.internal.infrastructure.weather_api import (
-    WeatherService as LegacyWeatherService,
-)
+from app.modules.weather.api.presenters import IWeatherPresenter
 
 
 class WeatherModuleService(IWeatherService):
     """Adapter service that preserves existing weather behavior during migration."""
 
-    def __init__(self, session_factory: SessionFactory) -> None:
-        """Initialize weather service with session factory dependency."""
+    def __init__(
+        self,
+        session_factory: SessionFactory,
+        gateway: IWeatherGateway,
+        presenter: IWeatherPresenter,
+    ) -> None:
+        """Initialize weather service with session factory, gateway, and presenter."""
         self._session_factory = session_factory
+        self._gateway = gateway
+        self._presenter = presenter
 
     async def get_current_weather(self, lat: float, lon: float) -> WeatherData:
         """Return normalized weather data for the given coordinates."""
-        data = await LegacyWeatherService.get_current_weather(lat, lon)
+        data = await self._gateway.get_current_weather(lat, lon)
         return WeatherData(
             temp=data.get("temp", "--"),
             condition=data.get("condition", "Service Error"),
@@ -29,7 +35,7 @@ class WeatherModuleService(IWeatherService):
 
     async def geocode_location(self, query: str) -> WeatherLocationResult | None:
         """Return normalized geocoding data for a user query."""
-        data = await LegacyWeatherService.geocode_location(query)
+        data = await self._gateway.geocode_location(query)
         if data is None:
             return None
         return WeatherLocationResult(
@@ -40,7 +46,7 @@ class WeatherModuleService(IWeatherService):
 
     async def reverse_geocode(self, lat: float, lon: float) -> str | None:
         """Return a human-readable location name for coordinates."""
-        return await LegacyWeatherService.reverse_geocode(lat, lon)
+        return await self._gateway.reverse_geocode(lat, lon)
 
     async def get_weather_html(self, lat: float | None, lon: float | None) -> str:
         """
@@ -49,12 +55,9 @@ class WeatherModuleService(IWeatherService):
         Returns empty HTML fragment if no coordinates provided.
         Otherwise returns rendered weather widget with current conditions.
         """
-        from app.template_config import templates
-
         # No location configured
         if lat is None or lon is None:
-            tpl = templates.env.get_template("partials/weather.html")
-            return tpl.render(has_location=False)
+            return self._presenter.render_weather_html(has_location=False)
 
         # Fetch and render weather
         weather_data = await self.get_current_weather(lat, lon)
@@ -64,10 +67,38 @@ class WeatherModuleService(IWeatherService):
             "location": weather_data.location,
         }
 
-        tpl = templates.env.get_template("partials/weather.html")
-        return tpl.render(has_location=True, weather=weather)
+        return self._presenter.render_weather_html(has_location=True, weather=weather)
+
+    async def get_weather_oob_html(self, lat: float | None, lon: float | None) -> str:
+        """Return out-of-band weather wrapper fragment for index refresh polling."""
+        if lat is None or lon is None:
+            return ""
+        weather_html = await self.get_weather_html(lat, lon)
+        if not weather_html:
+            return ""
+        return f'<div hx-swap-oob="innerHTML:#weather-wrapper">{weather_html}</div>'
+
+    async def get_location_name(self, lat: float | None, lon: float | None) -> str:
+        """Return a best-effort location label for settings UI coordinates."""
+        if lat is None or lon is None:
+            return ""
+        try:
+            return await self.reverse_geocode(lat, lon) or ""
+        except Exception:
+            return ""
+
+    async def geocode_for_settings(self, query: str) -> tuple[float | None, float | None, str]:
+        """Geocode settings query and return preview coordinates plus display name."""
+        result = await self.geocode_location(query)
+        if result is None:
+            return None, None, "Location not found"
+        return result.lat, result.lon, result.name
 
 
-def create_weather_service(session_factory: SessionFactory) -> IWeatherService:
+def create_weather_service(
+    session_factory: SessionFactory,
+    gateway: IWeatherGateway,
+    presenter: IWeatherPresenter,
+) -> IWeatherService:
     """Factory that returns the weather service implementation."""
-    return WeatherModuleService(session_factory)
+    return WeatherModuleService(session_factory, gateway, presenter)

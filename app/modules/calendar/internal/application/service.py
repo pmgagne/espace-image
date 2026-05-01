@@ -5,14 +5,14 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
-from app.db.models import CalendarEventCache, CalendarSource, CalendarSyncStatusEntry
+from app.db.models import CalendarSource, CalendarSyncStatusEntry
 from app.db.session_factory import SessionFactory
 from app.modules.calendar.api.contracts import CalendarSourceDTO, SyncStatusDTO
-from app.modules.calendar.internal.infrastructure.calendar_sync import (
-    CalendarService as OriginalCalendarService,
-)
+from app.modules.calendar.api.presenters import ICalendarPresenter
+from app.modules.calendar.api.repositories import ICalendarRepository
+from app.modules.calendar.api.sync_gateway import ICalendarSyncGateway
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +20,18 @@ logger = logging.getLogger(__name__)
 class CalendarService:
     """Calendar service for sync, fetch, and event management."""
 
-    def __init__(self, session_factory: SessionFactory) -> None:
-        """Initialize calendar service with session factory dependency."""
+    def __init__(
+        self,
+        session_factory: SessionFactory,
+        repository: ICalendarRepository,
+        sync_gateway: ICalendarSyncGateway,
+        presenter: ICalendarPresenter,
+    ) -> None:
+        """Initialize calendar service with injected persistence and sync adapters."""
         self._session_factory = session_factory
+        self._repository = repository
+        self._sync_gateway = sync_gateway
+        self._presenter = presenter
 
     @contextmanager
     def _session_scope(self, session: Session | None = None):
@@ -59,7 +68,7 @@ class CalendarService:
     async def sync_calendars(self, session: Session | None = None) -> None:
         """Sync all configured calendar sources."""
         with self._session_scope(session) as active_session:
-            await OriginalCalendarService.sync_calendar_events(active_session)
+            await self._sync_gateway.sync_calendar_events(active_session)
 
     async def get_calendar_events_in_window(
         self,
@@ -83,12 +92,11 @@ class CalendarService:
             window_start = utc_now - timedelta(days=days_back)
             window_end = utc_now + timedelta(days=days_ahead)
 
-            events = active_session.exec(
-                select(CalendarEventCache).where(
-                    (CalendarEventCache.event_start <= window_end)
-                    & (CalendarEventCache.event_end >= window_start)
-                )
-            ).all()
+            events = self._repository.list_events_in_window(
+                active_session,
+                window_start,
+                window_end,
+            )
 
             result = []
             for event in events:
@@ -119,7 +127,7 @@ class CalendarService:
         Returns:
             ICS content string or None if fetch failed.
         """
-        return await OriginalCalendarService.fetch_ics(url)
+        return await self._sync_gateway.fetch_ics(url)
 
     async def create_source(
         self,
@@ -130,10 +138,7 @@ class CalendarService:
     ) -> CalendarSourceDTO:
         """Create a new calendar source."""
         with self._session_scope(session) as active_session:
-            source = CalendarSource(label=label, url=url, color=color)
-            active_session.add(source)
-            active_session.commit()
-            active_session.refresh(source)
+            source = self._repository.create_source(active_session, label, url, color)
             return self._source_to_dto(source)
 
     async def update_source_defaults(
@@ -144,39 +149,45 @@ class CalendarService:
     ) -> CalendarSourceDTO:
         """Update calendar source default alarm setting."""
         with self._session_scope(session) as active_session:
-            source = active_session.get(CalendarSource, source_id)
+            source = self._repository.get_source(active_session, source_id)
             if not source:
                 msg = f"Calendar source {source_id} not found"
                 raise ValueError(msg)
             source.default_alarm_for_all_events = default_alarm
-            active_session.add(source)
-            active_session.commit()
-            active_session.refresh(source)
+            source = self._repository.save_source(active_session, source)
             return self._source_to_dto(source)
 
     async def delete_source(self, source_id: int, session: Session | None = None) -> bool:
         """Delete a calendar source."""
         with self._session_scope(session) as active_session:
-            source = active_session.get(CalendarSource, source_id)
+            source = self._repository.get_source(active_session, source_id)
             if not source:
                 return False
-            active_session.delete(source)
-            active_session.commit()
+            self._repository.delete_source(active_session, source)
             return True
 
     async def get_sync_status(self, session: Session | None = None) -> list[SyncStatusDTO]:
         """Get synchronization status for all calendar sources."""
         with self._session_scope(session) as active_session:
-            statuses = active_session.exec(select(CalendarSyncStatusEntry)).all()
+            statuses = self._repository.list_statuses(active_session)
             return [self._status_to_dto(status) for status in statuses]
+
+    async def get_latest_sync_utc_iso(self, session: Session | None = None) -> str:
+        """Return latest successful sync timestamp as ISO string for legacy UI."""
+        statuses = await self.get_sync_status(session=session)
+        latest_sync = ""
+        for status in statuses:
+            if status.last_synced_at and status.last_synced_at > latest_sync:
+                latest_sync = status.last_synced_at
+        return latest_sync
 
     async def get_debug_calendar_state(self, session: Session | None = None) -> dict[str, Any]:
         """Get calendar sources and sync status for debugging."""
         from app.utils.timezone import ensure_utc_aware
 
         with self._session_scope(session) as active_session:
-            sources = active_session.exec(select(CalendarSource)).all()
-            statuses = active_session.exec(select(CalendarSyncStatusEntry)).all()
+            sources = self._repository.list_sources(active_session)
+            statuses = self._repository.list_statuses(active_session)
 
             src_out = [
                 {
@@ -221,16 +232,12 @@ class CalendarService:
         from app.utils.timezone import ensure_utc_aware
 
         with self._session_scope(session) as active_session:
-            sources = active_session.exec(select(CalendarSource)).all()
+            sources = self._repository.list_sources(active_session)
             sync_statuses = {}
 
             for source in sources:
                 if source.id:
-                    status = active_session.exec(
-                        select(CalendarSyncStatusEntry).where(
-                            CalendarSyncStatusEntry.calendar_source_id == source.id
-                        )
-                    ).first()
+                    status = self._repository.get_status_for_source(active_session, source.id)
                     if status:
                         try:
                             last_synced = (
@@ -264,7 +271,17 @@ class CalendarService:
                 "sync_statuses": sync_statuses,
             }
 
+    async def get_calendars_html(self, session: Session | None = None) -> str:
+        """Return rendered calendars management partial HTML."""
+        data = await self.get_calendars_for_ui(session=session)
+        return self._presenter.render_calendars_html(data)
 
-def create_calendar_service(session_factory: SessionFactory) -> CalendarService:
+
+def create_calendar_service(
+    session_factory: SessionFactory,
+    repository: ICalendarRepository,
+    sync_gateway: ICalendarSyncGateway,
+    presenter: ICalendarPresenter,
+) -> CalendarService:
     """Factory that returns the calendar service implementation."""
-    return CalendarService(session_factory)
+    return CalendarService(session_factory, repository, sync_gateway, presenter)

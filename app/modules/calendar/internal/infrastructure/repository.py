@@ -1,147 +1,76 @@
-"""Calendar infrastructure layer - repository for DB access."""
+"""Calendar repository adapter for SQLModel persistence."""
 
-import logging
-from typing import Any, cast
+from datetime import datetime
 
-from sqlmodel import select
+from sqlmodel import Session, select
 
-from app.db.models import (
-    CalendarEventCache,
-    CalendarSource,
-    CalendarSyncStatusEntry,
-)
-
-logger = logging.getLogger(__name__)
+from app.db.models import CalendarEventCache, CalendarSource, CalendarSyncStatusEntry
+from app.modules.calendar.api.repositories import ICalendarRepository
 
 
-class CalendarRepository:
-    """Repository for calendar-related database operations."""
+class CalendarRepository(ICalendarRepository):
+    """SQLModel-backed repository for calendar use cases."""
 
-    def __init__(self, session_provider):
-        """Initialize with a session provider (callable that returns Session)."""
-        self.session_provider = session_provider
-
-    def get_all_sources(self) -> list[CalendarSource]:
-        """Fetch all calendar sources."""
-        with self.session_provider() as session:
-            return session.exec(select(CalendarSource)).all()
-
-    def get_source_by_id(self, source_id: int) -> CalendarSource | None:
-        """Fetch a calendar source by ID."""
-        with self.session_provider() as session:
-            return session.get(CalendarSource, source_id)
-
-    def get_cached_events_in_window(
+    def list_events_in_window(
         self,
-        window_start: Any,
-        window_end: Any,
+        session: Session,
+        window_start: datetime,
+        window_end: datetime,
     ) -> list[CalendarEventCache]:
-        """Fetch cached events within a time window."""
-        with self.session_provider() as session:
-            return session.exec(
-                select(CalendarEventCache).where(
-                    (CalendarEventCache.event_start <= window_end)
-                    & (CalendarEventCache.event_end >= window_start)
-                )
-            ).all()
+        """Return cached events intersecting the requested time window."""
+        return session.exec(
+            select(CalendarEventCache).where(
+                (CalendarEventCache.event_start <= window_end)
+                & (CalendarEventCache.event_end >= window_start)
+            )
+        ).all()
 
-    def get_sync_status(self, source_id: int) -> CalendarSyncStatusEntry | None:
-        """Fetch sync status for a calendar source."""
-        with self.session_provider() as session:
-            return session.exec(
-                select(CalendarSyncStatusEntry).where(
-                    CalendarSyncStatusEntry.calendar_source_id == source_id
-                )
-            ).first()
-
-    def clear_cache_for_source(self, source_id: int) -> None:
-        """Clear cached events for a calendar source."""
-        with self.session_provider() as session:
-            existing = session.exec(
-                select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == source_id)
-            ).all()
-            for event in existing:
-                session.delete(event)
-            session.commit()
-
-    def add_cache_entry(
+    def create_source(
         self,
-        source_id: int,
-        uid: str,
-        event_start: Any,
-        event_end: Any,
-        summary: str,
-        description: str = "",
-        location: str = "",
-        event_tz: str | None = None,
-        all_day: bool = False,
-        trigger_time: Any | None = None,
-        optional_trigger: bool = False,
-    ) -> None:
-        """Add or update a cached event."""
-        with self.session_provider() as session:
-            existing = session.exec(
-                select(CalendarEventCache).where(
-                    (CalendarEventCache.calendar_source_id == source_id)
-                    & (CalendarEventCache.uid == uid)
-                )
-            ).first()
+        session: Session,
+        label: str,
+        url: str,
+        color: str,
+    ) -> CalendarSource:
+        """Create and persist one calendar source."""
+        source = CalendarSource(label=label, url=url, color=color)
+        session.add(source)
+        session.commit()
+        session.refresh(source)
+        return source
 
-            if existing:
-                existing.event_start = cast(Any, event_start)
-                existing.event_end = cast(Any, event_end)
-                existing.summary = summary
-                existing.description = description
-                existing.location = location
-                existing.event_tz = event_tz
-                existing.all_day = all_day
-                existing.trigger_time = trigger_time
-                existing.optional_trigger = optional_trigger
-                session.add(existing)
-            else:
-                cache_entry = CalendarEventCache(
-                    calendar_source_id=source_id,
-                    uid=uid,
-                    event_start=cast(Any, event_start),
-                    event_end=cast(Any, event_end),
-                    summary=summary,
-                    description=description,
-                    location=location,
-                    event_tz=event_tz,
-                    all_day=all_day,
-                    trigger_time=trigger_time,
-                    optional_trigger=optional_trigger,
-                )
-                session.add(cache_entry)
-            session.commit()
+    def get_source(self, session: Session, source_id: int) -> CalendarSource | None:
+        """Return one calendar source by identifier."""
+        return session.get(CalendarSource, source_id)
 
-    def update_sync_status(
+    def save_source(self, session: Session, source: CalendarSource) -> CalendarSource:
+        """Persist calendar source updates."""
+        session.add(source)
+        session.commit()
+        session.refresh(source)
+        return source
+
+    def delete_source(self, session: Session, source: CalendarSource) -> None:
+        """Delete one calendar source row."""
+        session.delete(source)
+        session.commit()
+
+    def list_statuses(self, session: Session) -> list[CalendarSyncStatusEntry]:
+        """Return all sync status rows."""
+        return session.exec(select(CalendarSyncStatusEntry)).all()
+
+    def list_sources(self, session: Session) -> list[CalendarSource]:
+        """Return all calendar source rows."""
+        return session.exec(select(CalendarSource)).all()
+
+    def get_status_for_source(
         self,
+        session: Session,
         source_id: int,
-        sync_status: str,
-        last_synced_at: Any | None = None,
-        error_message: str = "",
-        error_count: int = 0,
-        last_error_at: Any | None = None,
-    ) -> None:
-        """Update sync status for a calendar source."""
-        with self.session_provider() as session:
-            status = session.exec(
-                select(CalendarSyncStatusEntry).where(
-                    CalendarSyncStatusEntry.calendar_source_id == source_id
-                )
-            ).first()
-
-            if not status:
-                status = CalendarSyncStatusEntry(calendar_source_id=source_id)
-
-            status.sync_status = sync_status
-            if last_synced_at is not None:
-                status.last_synced_at = last_synced_at
-            status.error_message = error_message
-            status.error_count = error_count
-            if last_error_at is not None:
-                status.last_error_at = last_error_at
-
-            session.add(status)
-            session.commit()
+    ) -> CalendarSyncStatusEntry | None:
+        """Return sync status for one source identifier."""
+        return session.exec(
+            select(CalendarSyncStatusEntry).where(
+                CalendarSyncStatusEntry.calendar_source_id == source_id
+            )
+        ).first()
