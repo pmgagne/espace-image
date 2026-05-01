@@ -76,3 +76,15 @@ typeCheckingMode = "strict"
 [tool.pycodestyle]
 max-line-length = 100
 ignore = ["E501"]     # line too long (handled by ruff)
+
+# Ensure setuptools uses explicit package discovery to avoid picking up
+# unrelated top-level folders (like alembic). This keeps editable installs
+# deterministic in flat-layout repos.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["alembic*"]
+
+[build-system]
+requires = ["setuptools>=65.5.1", "wheel"]
+build-backend = "setuptools.build_meta"
