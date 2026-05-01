@@ -35,6 +35,9 @@ class IWeatherService(Protocol):
 
     async def reverse_geocode(self, lat: float, lon: float) -> str | None:
         """Resolve coordinates to a human-readable location name."""
+
+    async def get_weather_html(self, lat: float | None, lon: float | None) -> str:
+        """Get rendered HTML for weather component."""
         ...
 
 

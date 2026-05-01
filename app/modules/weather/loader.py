@@ -2,13 +2,17 @@
 
 from fastapi import FastAPI
 
+from app.db.engine import engine
+from app.db.session_factory import SessionFactory
+
 from .api.interfaces import get_weather_service
 from .internal.application.service import create_weather_service
 
 
 async def init(app: FastAPI) -> None:
     """Initialize weather module dependencies."""
-    service = create_weather_service()
+    session_factory = SessionFactory(engine)
+    service = create_weather_service(session_factory)
     app.dependency_overrides[get_weather_service] = lambda: service
 
 

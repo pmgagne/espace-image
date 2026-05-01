@@ -2,32 +2,29 @@
 
 from typing import Protocol
 
-from sqlmodel import Session
-
-from app.db.models import AppSettings, Preset
+from app.modules.settings.api.contracts import AppSettingsDTO, PresetDTO
 
 
 class ISettingsService(Protocol):
     """Public interface for settings and preset access."""
 
-    def get_settings(self, session: Session) -> AppSettings | None:
+    def get_settings(self) -> AppSettingsDTO | None:
         """Return application settings or None when missing."""
 
-    def list_presets(self, session: Session) -> list[Preset]:
+    def list_presets(self) -> list[PresetDTO]:
         """Return all preset rows."""
 
-    def get_preset(self, session: Session, preset_id: int) -> Preset | None:
+    def get_preset(self, preset_id: int) -> PresetDTO | None:
         """Return a preset by identifier."""
 
     def save_settings(
         self,
-        session: Session,
         active_preset_id: int | None,
         latitude: float | None,
         longitude: float | None,
         duration: int | None,
         default_alarm_for_all_events: bool,
-    ) -> AppSettings:
+    ) -> AppSettingsDTO:
         """Persist settings changes and return saved settings."""
 
 

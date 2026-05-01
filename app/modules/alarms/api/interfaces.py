@@ -2,54 +2,57 @@
 
 from typing import Any, Protocol
 
-from sqlmodel import Session
-
-from app.db.models import AlarmEvent
+from app.modules.alarms.api.contracts import AlarmEventDTO
 
 
 class IAlarmsService(Protocol):
     """Public interface for alarms operations."""
 
-    async def get_active_alarms(self, session: Session) -> list[dict[str, Any]]:
+    async def get_active_alarms(self) -> list[dict[str, Any]]:
         """
         Fetch active alarms that should be displayed.
 
         Args:
-            session: Database session.
-
         Returns:
             List of alarm dictionaries with uid, name, start, end, trigger_time, all_day, tzid.
         """
         ...
 
-    async def create_simulated_alarm(self, delay_seconds: int, session: Session) -> AlarmEvent:
+    async def create_simulated_alarm(self, delay_seconds: int) -> AlarmEventDTO:
         """Create a simulated alarm that fires after the requested delay."""
         ...
 
-    async def dismiss_alarm(self, alarm_uid: str, session: Session) -> None:
+    async def dismiss_alarm(self, alarm_uid: str) -> None:
         """
         Mark an alarm as dismissed.
 
         Args:
             alarm_uid: Composite UID of alarm (calendar_source_id:event_uid).
-            session: Database session.
         """
         ...
 
-    async def purge_old_dismissed_alarms(self, session: Session) -> None:
+    async def purge_old_dismissed_alarms(self) -> None:
         """Purge dismissed alarms older than 30 days."""
         ...
 
-    async def get_debug_alarm_state(self, session: Session) -> dict[str, Any]:
+    async def get_debug_alarm_state(self) -> dict[str, Any]:
         """
         Get cached calendar events and alarm events for debugging.
 
         Args:
-            session: Database session.
-
         Returns:
             Dictionary with 'cached_events' and 'alarm_events' keys.
         """
+        ...
+
+    async def get_alarm_contexts(
+        self, mock: bool = False, tz_offset: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Return alarm payloads transformed for template rendering."""
+        ...
+
+    async def get_alarm_html(self, mock: bool = False, tz_offset: int | None = None) -> str:
+        """Return rendered HTML string for alarm component."""
         ...
 
 

@@ -7,14 +7,14 @@ from datetime import UTC, datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
-from sqlmodel import Session
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 # Import configuration constants
 from app.config import CALENDAR_SYNC_INTERVAL_MINUTES
-from app.db.engine import create_db_and_tables, engine
+from app.db.engine import create_db_and_tables
+from app.db.session_factory import SessionFactory
 from app.modules.calendar.internal.application.service import (
-    CalendarService as CalendarServiceImpl,
+    create_calendar_service,
 )
 from app.modules.loader import app_init, app_post_init, app_teardown
 from app.routers import admin, dashboard, media
@@ -52,13 +52,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 async def background_sync_calendars() -> None:
     """Background task to sync calendar events on configured interval."""
-    with Session(engine) as session:
-        try:
-            # Create calendar service directly (outside FastAPI DI context)
-            calendar_service = CalendarServiceImpl()
-            await calendar_service.sync_calendars(session)
-        except Exception as e:
-            logger.exception("Error in background calendar sync: %s", e)
+    try:
+        # Create calendar service directly (outside FastAPI DI context)
+        from app.db.engine import engine
+
+        session_factory = SessionFactory(engine)
+        calendar_service = create_calendar_service(session_factory)
+        await calendar_service.sync_calendars()
+    except Exception as e:
+        logger.exception("Error in background calendar sync: %s", e)
 
 
 @asynccontextmanager

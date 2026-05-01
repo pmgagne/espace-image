@@ -1,15 +1,11 @@
 import contextlib
 import logging
 import os
+from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
-from sqlmodel import Session
 
-from app.db.models import (
-    AppSettings,
-)
-from app.db.session import get_session
 from app.modules.alarms.api.interfaces import IAlarmsService, get_alarms_service
 from app.modules.calendar.api.interfaces import ICalendarService, get_calendar_service
 from app.modules.media.api.interfaces import IMediaService, get_media_service
@@ -36,12 +32,18 @@ async def admin_shell(request: Request):
 @router.get("/partials/settings", response_class=HTMLResponse)
 async def get_settings_partial(
     request: Request,
-    session: Session = Depends(get_session),
     settings_service: ISettingsService = Depends(get_settings_service),
     weather_service: IWeatherService = Depends(get_weather_service),
 ):
-    settings = settings_service.get_settings(session)
-    presets = settings_service.list_presets(session)
+    settings = settings_service.get_settings()
+    presets = settings_service.list_presets()
+    if settings is None:
+        settings = SimpleNamespace(
+            weather_latitude=None,
+            weather_longitude=None,
+            active_preset_id=None,
+            slideshow_duration=30,
+        )
 
     location_name = ""
     if settings and settings.weather_latitude and settings.weather_longitude:
@@ -74,7 +76,6 @@ async def get_settings_partial(
 async def search_location(
     request: Request,
     location_query: str = Form(...),
-    session: Session = Depends(get_session),
     settings_service: ISettingsService = Depends(get_settings_service),
     weather_service: IWeatherService = Depends(get_weather_service),
 ):
@@ -82,11 +83,24 @@ async def search_location(
     Geocodes the location query and returns the settings form
     pre-filled with the new coordinates (not saved yet).
     """
-    settings = settings_service.get_settings(session)
-    if not settings:
-        settings = AppSettings()
+    current_settings = settings_service.get_settings()
+    if not current_settings:
+        settings = SimpleNamespace(
+            weather_latitude=None,
+            weather_longitude=None,
+            active_preset_id=None,
+            slideshow_duration=30,
+        )
+    else:
+        # Keep route-level mutable state separate from immutable DTOs.
+        settings = SimpleNamespace(
+            weather_latitude=current_settings.weather_latitude,
+            weather_longitude=current_settings.weather_longitude,
+            active_preset_id=current_settings.active_preset_id,
+            slideshow_duration=current_settings.slideshow_duration,
+        )
 
-    presets = settings_service.list_presets(session)
+    presets = settings_service.list_presets()
 
     # Perform Geocoding
     result_data = await weather_service.geocode_location(location_query)
@@ -125,7 +139,6 @@ async def update_settings(
     longitude: float | None = Form(None),
     duration: int | None = Form(None),
     default_alarm_for_all_events: str | None = Form(None),
-    session: Session = Depends(get_session),
     settings_service: ISettingsService = Depends(get_settings_service),
 ):
     # Basic validation for form inputs
@@ -144,7 +157,6 @@ async def update_settings(
 
     try:
         settings_service.save_settings(
-            session=session,
             active_preset_id=active_preset_id,
             latitude=latitude,
             longitude=longitude,
@@ -164,10 +176,9 @@ async def update_settings(
 @router.get("/partials/calendars", response_class=HTMLResponse)
 async def get_calendars_partial(
     request: Request,
-    session: Session = Depends(get_session),
     calendar_service: ICalendarService = Depends(get_calendar_service),
 ):
-    data = await calendar_service.get_calendars_for_ui(session)
+    data = await calendar_service.get_calendars_for_ui()
     tpl = templates.env.get_template("partials/calendars.html")
     ctx = (
         {**data, "request": request}
@@ -180,7 +191,6 @@ async def get_calendars_partial(
 @router.post("/calendars", response_class=HTMLResponse)
 async def add_calendar(
     request: Request,
-    session: Session = Depends(get_session),
     calendar_service: ICalendarService = Depends(get_calendar_service),
 ):
     """Manually trigger calendar synchronization."""
@@ -190,9 +200,9 @@ async def add_calendar(
     # actual work. Run sync but suppress exceptions to avoid bubbling
     # errors to the admin UI
     with contextlib.suppress(Exception):
-        await calendar_service.sync_calendars(session)
+        await calendar_service.sync_calendars()
 
-    return await get_calendars_partial(request, session, calendar_service)
+    return await get_calendars_partial(request, calendar_service)
 
 
 # --- Partials: Gallery ---
@@ -200,10 +210,9 @@ async def add_calendar(
 async def get_gallery_partial(
     request: Request,
     preset_id: int | None = None,
-    session: Session = Depends(get_session),
     media_service: IMediaService = Depends(get_media_service),
 ):
-    data = await media_service.get_gallery_for_ui(session, preset_id)
+    data = await media_service.get_gallery_for_ui(preset_id)
     tpl = templates.env.get_template("partials/gallery.html")
     ctx = (
         {**data, "request": request}
@@ -217,12 +226,11 @@ async def get_gallery_partial(
 async def create_preset(
     request: Request,
     name: str = Form(...),
-    session: Session = Depends(get_session),
     media_service: IMediaService = Depends(get_media_service),
 ):
-    await media_service.create_preset(session, name)
+    await media_service.create_preset(name)
     # Refresh gallery showing new preset
-    return await get_gallery_partial(request, None, session, media_service)
+    return await get_gallery_partial(request, None, media_service)
 
 
 @router.post("/upload", response_class=HTMLResponse)
@@ -230,14 +238,13 @@ async def upload_photos(
     request: Request,
     preset_id: int = Form(...),
     files: list[UploadFile] = File(...),
-    session: Session = Depends(get_session),
     media_service: IMediaService = Depends(get_media_service),
 ):
     try:
-        await media_service.upload_photos(session, preset_id, files)
+        await media_service.upload_photos(preset_id, files)
     except ValueError as ve:
         # Build gallery context and show user-friendly error message
-        data = await media_service.get_gallery_for_ui(session, preset_id)
+        data = await media_service.get_gallery_for_ui(preset_id)
         tpl = templates.env.get_template("partials/gallery.html")
         ctx = (
             {**data, "request": request, "error_message": str(ve)}
@@ -246,24 +253,23 @@ async def upload_photos(
         )
         return HTMLResponse(tpl.render(**ctx))
 
-    return await get_gallery_partial(request, preset_id, session, media_service)
+    return await get_gallery_partial(request, preset_id, media_service)
 
 
 @router.delete("/photos/{photo_id}", response_class=HTMLResponse)
 async def delete_photo(
     request: Request,
     photo_id: int,
-    session: Session = Depends(get_session),
     media_service: IMediaService = Depends(get_media_service),
 ):
-    photo = await media_service.get_photo_by_id(session, photo_id)
+    photo = await media_service.get_photo_by_id(photo_id)
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
 
     preset_id = photo.preset_id
-    await media_service.delete_photo_from_db(session, photo_id)
+    await media_service.delete_photo_from_db(photo_id)
 
-    return await get_gallery_partial(request, preset_id, session, media_service)
+    return await get_gallery_partial(request, preset_id, media_service)
 
 
 # --- Debug Panel ---
@@ -278,11 +284,10 @@ async def get_debug_partial(request: Request):
 async def simulate_alarm(
     request: Request,
     delay_seconds: int = Form(...),
-    session: Session = Depends(get_session),
     alarms_service: IAlarmsService = Depends(get_alarms_service),
 ):
     """Create a simulated alarm that appears after the specified delay."""
-    await alarms_service.create_simulated_alarm(delay_seconds, session)
+    await alarms_service.create_simulated_alarm(delay_seconds)
 
     tpl = templates.env.get_template("partials/debug.html")
     return HTMLResponse(

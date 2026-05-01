@@ -1,5 +1,5 @@
-from app.db.models import AppSettings
 from app.main import app as fastapi_app
+from app.modules.settings.api.contracts import AppSettingsDTO
 from app.modules.settings.api.interfaces import get_settings_service
 from app.modules.weather.api.interfaces import (
     WeatherLocationResult,
@@ -29,10 +29,16 @@ def test_admin_settings_search(client, session):
 
 def test_admin_settings_partial_uses_weather_service(client):
     class FakeSettingsService:
-        def get_settings(self, session):
-            return AppSettings(weather_latitude=48.8566, weather_longitude=2.3522)
+        def get_settings(self):
+            return AppSettingsDTO(
+                active_preset_id=None,
+                weather_latitude=48.8566,
+                weather_longitude=2.3522,
+                slideshow_duration=30,
+                default_alarm_for_all_events=False,
+            )
 
-        def list_presets(self, session):
+        def list_presets(self):
             return []
 
     class FakeWeatherService:

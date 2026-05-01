@@ -1,9 +1,10 @@
 from datetime import UTC, datetime, timedelta
 
-from app.routers.dashboard import _alarms_to_context
+from app.db.session_factory import SessionFactory
+from app.modules.alarms.internal.application.service import alarms_to_context
 
 
-def test_alarms_sort_with_mixed_naive_and_aware_datetimes():
+def test_alarms_sort_with_mixed_naive_and_aware_datetimes(session_factory: SessionFactory):
     """Regression test: ensure mixing naive and aware datetimes does not raise and sorts correctly."""
     # Aware datetime (UTC)
     aware_start = datetime(2026, 2, 15, 12, 0, tzinfo=UTC)
@@ -31,7 +32,12 @@ def test_alarms_sort_with_mixed_naive_and_aware_datetimes():
     ]
 
     # Call the conversion to context — should not raise and should return contexts
-    contexts = _alarms_to_context(active_alarms, mock=False, tz_offset=None)
+    contexts = alarms_to_context(
+        active_alarms,
+        mock=False,
+        tz_offset=None,
+        session_factory=session_factory,
+    )
     assert isinstance(contexts, list) and len(contexts) == 2
 
     # The aware event (12:00Z) should come before the naive (11:00 interpreted as UTC)

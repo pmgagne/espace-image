@@ -16,6 +16,7 @@ from typing import Any
 from sqlmodel import Session, select
 
 from app.db.models import CalendarEventCache
+from app.db.session_factory import SessionFactory
 from app.modules.alarms.internal.application.service import AlarmsService
 from app.modules.calendar.internal.infrastructure.calendar_sync import (
     CalendarService,
@@ -74,7 +75,9 @@ def get_alarm(session: Session, uid: str, ics_path: str | None = None) -> dict[s
             if uid in alarm["uid"]:
                 return alarm
         return None
-    alarms = asyncio.run(AlarmsService().get_active_alarms(session))
+    alarms = asyncio.run(
+        AlarmsService(SessionFactory(session.get_bind())).get_active_alarms(session)
+    )
     for alarm in alarms:
         if uid in alarm["uid"]:
             return alarm

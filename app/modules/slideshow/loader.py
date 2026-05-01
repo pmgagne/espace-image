@@ -2,13 +2,17 @@
 
 from fastapi import FastAPI
 
+from app.db.engine import engine
+from app.db.session_factory import SessionFactory
+
 from .api.interfaces import get_slideshow_service
 from .internal.application.service import create_slideshow_service
 
 
 async def init(app: FastAPI) -> None:
     """Initialize slideshow module dependencies."""
-    service = create_slideshow_service()
+    session_factory = SessionFactory(engine)
+    service = create_slideshow_service(session_factory)
     app.dependency_overrides[get_slideshow_service] = lambda: service
 
 

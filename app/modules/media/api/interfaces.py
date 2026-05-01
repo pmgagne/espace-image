@@ -4,9 +4,11 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from fastapi import UploadFile
-from sqlmodel import Session
 
-from app.db.models import Photo, Preset
+from app.modules.media.api.contracts import (
+    PhotoDTO,
+    PresetDTO,
+)
 
 
 class IMediaService(Protocol):
@@ -26,12 +28,11 @@ class IMediaService(Protocol):
     def delete_photo(self, filename: str, preset_name: str = "Default") -> bool:
         """Delete an image file from storage."""
 
-    async def create_preset(self, session: Session, name: str) -> Preset:
+    async def create_preset(self, name: str) -> PresetDTO:
         """
         Create a new preset.
 
         Args:
-            session: Database session.
             name: Preset name.
 
         Returns:
@@ -39,14 +40,11 @@ class IMediaService(Protocol):
         """
         ...
 
-    async def upload_photos(
-        self, session: Session, preset_id: int, files: list[UploadFile]
-    ) -> list[Photo]:
+    async def upload_photos(self, preset_id: int, files: list[UploadFile]) -> list[PhotoDTO]:
         """
         Upload photos to a preset.
 
         Args:
-            session: Database session.
             preset_id: Preset ID.
             files: List of uploaded files.
 
@@ -58,12 +56,11 @@ class IMediaService(Protocol):
         """
         ...
 
-    async def delete_photo_from_db(self, session: Session, photo_id: int) -> bool:  # noqa: ARG002
+    async def delete_photo_from_db(self, photo_id: int) -> bool:
         """
         Delete a photo record from database.
 
         Args:
-            session: Database session.
             photo_id: Photo ID.
 
         Returns:
@@ -71,46 +68,45 @@ class IMediaService(Protocol):
         """
         ...
 
-        async def get_gallery_for_ui(
-            self, session: Session, preset_id: int | None = None
-        ) -> dict[str, Any]:
-            """
-            Get presets and photos formatted for gallery UI rendering.
+    async def get_gallery_for_ui(self, preset_id: int | None = None) -> dict[str, Any]:
+        """
+        Get presets and photos formatted for gallery UI rendering.
 
-            Args:
-                session: Database session.
-                preset_id: Optional preset ID to select by default.
+        Args:
+            preset_id: Optional preset ID to select by default.
 
-            Returns:
-                Dictionary with 'presets', 'selected_preset', and 'photos' for template.
-            """
-            ...
+        Returns:
+            Dictionary with 'presets', 'selected_preset', and 'photos' for template.
+        """
+        ...
 
-        async def get_photo_for_download(self, session: Session, photo_id: int) -> dict[str, Any]:
-            """
-            Get photo with eager-loaded preset relationship for download.
+    async def get_photo_for_download(self, photo_id: int) -> dict[str, Any]:
+        """
+        Get photo with eager-loaded preset relationship for download.
 
-            Args:
-                session: Database session.
-                photo_id: Photo ID.
+        Args:
+            photo_id: Photo ID.
 
-            Returns:
-                Dictionary with 'photo', 'preset_name', and 'file_path'.
-            """
-            ...
+        Returns:
+            Dictionary with 'photo', 'preset_name', and 'file_path'.
+        """
+        ...
 
-        async def get_photo_by_id(self, session: Session, photo_id: int) -> Photo | None:
-            """
-            Get a photo by ID without eager-loading (for validation).
+    async def get_photo_by_id(self, photo_id: int) -> PhotoDTO | None:
+        """
+        Get a photo by ID without eager-loading (for validation).
 
-            Args:
-                session: Database session.
-                photo_id: Photo ID.
+        Args:
+            photo_id: Photo ID.
 
-            Returns:
-                Photo record or None if not found.
-            """
-            ...
+        Returns:
+            Photo record or None if not found.
+        """
+        ...
+
+    async def get_image_payload(self, photo_id: int) -> dict[str, bytes]:
+        """Return optimized image bytes for serving."""
+        ...
 
 
 def get_media_service() -> IMediaService:

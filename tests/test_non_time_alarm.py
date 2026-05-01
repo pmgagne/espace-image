@@ -1,7 +1,8 @@
 from datetime import UTC, datetime, timedelta
 
+from app.db.session_factory import SessionFactory
+from app.modules.alarms.internal.application.service import alarms_to_context
 from app.modules.calendar.internal.infrastructure.calendar_sync import CalendarService
-from app.routers.dashboard import _alarms_to_context
 
 
 def _build_ics_with_proximity(start: datetime, end: datetime) -> str:
@@ -43,7 +44,7 @@ def test_extract_events_detects_proximity():
     assert ev.get("has_non_time_alarm") is True
 
 
-def test_alarm_contexts_sorted_newest_first():
+def test_alarm_contexts_sorted_newest_first(session_factory: SessionFactory):
     # Create two alarms with different start times
     now = datetime.now(UTC)
     a1 = {
@@ -61,6 +62,11 @@ def test_alarm_contexts_sorted_newest_first():
         "all_day": False,
     }
 
-    contexts = _alarms_to_context([a1, a2], mock=False, tz_offset=None)
+    contexts = alarms_to_context(
+        [a1, a2],
+        mock=False,
+        tz_offset=None,
+        session_factory=session_factory,
+    )
 
     assert [context["name"] for context in contexts] == ["Newer", "Older"]
