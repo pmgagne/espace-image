@@ -137,12 +137,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.28.0
-        with:
-          scan-type: "fs"
-          scan-ref: "."
-          format: "sarif"
-          output: "trivy-results.sarif"
+        run: |
+          # Install Trivy using the official install script and run a filesystem scan
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+          /usr/local/bin/trivy fs --format sarif -o trivy-results.sarif .
         continue-on-error: true
 
       - name: Upload Trivy results to GitHub Security tab
