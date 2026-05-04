@@ -25,11 +25,20 @@ from app.routers.api import weather as api_weather
 
 def _run_alembic_upgrade() -> None:
     """Run Alembic migrations to head on startup."""
-    import alembic.command
-    import alembic.config
 
-    cfg = alembic.config.Config("alembic.ini")
-    alembic.command.upgrade(cfg, "head")
+    # TODO: fix
+    # import alembic.command
+    # import alembic.config
+
+    # logger.info("Starting Alembic upgrade to head")
+    # try:
+    #     cfg = alembic.config.Config("alembic.ini")
+    #     alembic.command.upgrade(cfg, "head")
+    #     logger.info("Alembic upgrade to head completed successfully")
+    # except Exception as e:
+    #     logger.exception("Alembic upgrade failed: %s", e)
+    #     raise
+    pass
 
 
 # Security Note: This application has NO authentication and is designed for

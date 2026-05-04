@@ -1,3 +1,30 @@
+// Global stubs to avoid "refreshAdminContent is not defined" when handlers
+// or inline attributes invoke the functions before the full script initializes.
+if (typeof window !== 'undefined') {
+    window.__eai_admin_queue = window.__eai_admin_queue || [];
+    if (typeof window.refreshAdminContent !== 'function') {
+        window.refreshAdminContent = function (path) {
+            window.__eai_admin_queue.push({ fn: 'refreshAdminContent', args: [path] });
+        };
+    }
+    if (typeof window.parseJsonDetail !== 'function') {
+        window.parseJsonDetail = function () {
+            // placeholder: return a rejected Promise so callers hit error path
+            return Promise.reject(new Error('admin.js not initialized'));
+        };
+    }
+    if (typeof window.putJson !== 'function') {
+        window.putJson = function () {
+            return Promise.reject(new Error('admin.js not initialized'));
+        };
+    }
+    if (typeof window.postJson !== 'function') {
+        window.postJson = function () {
+            return Promise.reject(new Error('admin.js not initialized'));
+        };
+    }
+}
+
     // === Preset Combo-Box Add/Delete Handlers ===
     document.body.addEventListener('click', function (event) {
         // Add new preset (use closest to handle clicks on inner elements)
@@ -156,6 +183,33 @@
             }
             return response.json();
         });
+    }
+
+    // Expose utilities for inline/top-level handlers
+    try {
+        window.refreshAdminContent = refreshAdminContent;
+        window.parseJsonDetail = parseJsonDetail;
+        window.putJson = putJson;
+        window.postJson = postJson;
+    } catch (e) {
+        // Ignore if window is not available (e.g., unit test environment)
+    }
+
+    // Flush any queued early calls that happened before the script initialized
+    try {
+        var q = (window.__eai_admin_queue && window.__eai_admin_queue.splice(0)) || [];
+        q.forEach(function (entry) {
+            try {
+                if (entry.fn === 'refreshAdminContent') {
+                    refreshAdminContent.apply(null, entry.args || []);
+                }
+                // other queued fn types can be added here if needed
+            } catch (e) {
+                // ignore flush errors
+            }
+        });
+    } catch (e) {
+        // ignore
     }
 
     function refreshCalendarsPartial() {

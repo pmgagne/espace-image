@@ -79,6 +79,29 @@ class MediaModuleService(IMediaService):
             preset = self._repository.create_preset(active_session, name)
             return self._preset_to_dto(preset)
 
+    async def list_presets(self, session: Session | None = None) -> list[PresetDTO]:
+        """Return all presets as DTOs."""
+        with self._session_scope(session) as active_session:
+            presets = self._repository.list_presets(active_session)
+            return [self._preset_to_dto(p) for p in presets]
+
+    async def list_photos_for_preset(
+        self, preset_id: int, page: int = 1, size: int = 50, session: Session | None = None
+    ) -> tuple[list[PhotoDTO], int]:
+        """Return photo DTOs for a preset and total count (pagination).
+
+        Repository currently returns all photos; this method applies simple in-memory
+        pagination and returns (items, total_count).
+        """
+        with self._session_scope(session) as active_session:
+            photos = self._repository.list_photos_for_preset(active_session, preset_id)
+            total = len(photos)
+            # Simple pagination in memory (repository currently returns all)
+            start = (page - 1) * size
+            end = start + size
+            items = [self._photo_to_dto(p) for p in photos[start:end]]
+            return items, total
+
     async def upload_photos(
         self,
         preset_id: int,

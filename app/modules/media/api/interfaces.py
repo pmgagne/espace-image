@@ -40,6 +40,23 @@ class IMediaService(Protocol):
         """
         ...
 
+    async def list_presets(self) -> list[PresetDTO]:
+        """Return all presets as DTOs."""
+
+    async def get_current_preset(self) -> PresetDTO | None:
+        """Return the currently active preset, or None."""
+
+    async def set_active_preset(self, preset_id: int) -> PresetDTO:
+        """Set the given preset as active and return it."""
+
+    async def list_photos_for_preset(
+        self, preset_id: int, page: int = 1, size: int = 50
+    ) -> tuple[list[PhotoDTO], int]:
+        """List photos for a preset (paged).
+
+        Returns a tuple of (photos, total_count).
+        """
+
     async def upload_photos(self, preset_id: int, files: list[UploadFile]) -> list[PhotoDTO]:
         """
         Upload photos to a preset.
