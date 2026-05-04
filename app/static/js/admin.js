@@ -1,3 +1,77 @@
+    // === Preset Combo-Box Add/Delete Handlers ===
+    document.body.addEventListener('click', function (event) {
+        // Add new preset (use closest to handle clicks on inner elements)
+        var addBtn = event.target && event.target.closest ? event.target.closest('#add-preset-btn') : null;
+        if (addBtn) {
+            var nameInput = document.getElementById('add-preset-name');
+            var name = nameInput ? String(nameInput.value || '').trim() : '';
+            console.log('[admin] add-preset-btn clicked, name=', name);
+            if (!name) {
+                alert('Preset name required');
+                return;
+            }
+            fetch('/api/v1/presets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name })
+            }).then(function (response) {
+                if (!response.ok) {
+                    return parseJsonDetail(response).then(function (detail) {
+                        throw new Error(detail);
+                    });
+                }
+                return response.json();
+            }).then(function () {
+                nameInput.value = '';
+                refreshAdminContent('/admin/partials/gallery');
+            }).catch(function (error) {
+                alert(error.message || 'Failed to create preset');
+            });
+            return;
+        }
+
+        // Delete selected preset
+        var delBtn = event.target && event.target.closest ? event.target.closest('#delete-preset-btn') : null;
+        if (delBtn) {
+            var select = document.getElementById('preset-combo-box');
+            var presetId = select ? parseInt(select.value, 10) : null;
+            console.log('[admin] delete-preset-btn clicked, presetId=', presetId);
+            if (!presetId) {
+                alert('Select a preset to delete');
+                return;
+            }
+            if (!window.confirm('Delete this preset and all its photos?')) return;
+            fetch('/api/v1/presets/' + presetId, {
+                method: 'DELETE'
+            }).then(function (response) {
+                if (!response.ok) {
+                    return parseJsonDetail(response).then(function (detail) {
+                        throw new Error(detail);
+                    });
+                }
+                refreshAdminContent('/admin/partials/gallery');
+            }).catch(function (error) {
+                alert(error.message || 'Failed to delete preset');
+            });
+            return;
+        }
+    });
+
+    // Refresh gallery when preset selection changes and enable/disable delete button
+    document.body.addEventListener('change', function (event) {
+        if (event.target && event.target.id === 'preset-combo-box') {
+            var select = event.target;
+            var presetId = select.value;
+            var path = '/admin/partials/gallery';
+            if (presetId) path += '?preset_id=' + encodeURIComponent(presetId);
+            refreshAdminContent(path);
+
+            var deleteBtn = document.getElementById('delete-preset-btn');
+            if (deleteBtn) {
+                if (presetId) deleteBtn.removeAttribute('disabled'); else deleteBtn.setAttribute('disabled', 'disabled');
+            }
+        }
+    });
 // Admin page utilities: file input UI, timezone formatting for last-synced timestamps,
 // and HTMX hooks. Loaded from /static/js/admin.js
 
@@ -7,8 +81,13 @@
     function refreshAdminContent(path) {
         // Prefer HTMX so existing active-link and afterSwap hooks keep working.
         if (window.htmx && typeof window.htmx.ajax === 'function') {
-            window.htmx.ajax('GET', path, '#admin-content');
-            return;
+            try {
+                // Use options object for target to be compatible with htmx API variations
+                window.htmx.ajax('GET', path, { target: '#admin-content' });
+                return;
+            } catch (e) {
+                // Fall back to fetch if htmx.ajax signature differs
+            }
         }
 
         fetch(path)
@@ -376,10 +455,10 @@
         if (!deleteButton) return;
 
         event.preventDefault();
-        if (!window.confirm('Delete this photo?')) return;
-
         var imageId = parseInt(deleteButton.getAttribute('data-api-delete-image-id'), 10);
         var presetId = parseInt(deleteButton.getAttribute('data-preset-id'), 10);
+        console.log('[admin] delete image clicked, imageId=', imageId, 'presetId=', presetId);
+        if (!window.confirm('Delete this photo?')) return;
 
         fetch('/api/v1/images/' + imageId, {
             method: 'DELETE'

@@ -68,6 +68,18 @@ class IMediaService(Protocol):
         """
         ...
 
+    async def delete_preset(self, preset_id: int) -> bool:
+        """
+        Delete a preset and all its photos from storage and the database.
+
+        Args:
+            preset_id: Preset ID to delete.
+
+        Returns:
+            True if deleted, False if not found.
+        """
+        ...
+
     async def get_gallery_for_ui(self, preset_id: int | None = None) -> dict[str, Any]:
         """
         Get presets and photos formatted for gallery UI rendering.

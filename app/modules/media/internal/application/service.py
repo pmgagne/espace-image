@@ -198,6 +198,28 @@ class MediaModuleService(IMediaService):
 
         return {"bytes": self.optimize_path(file_path)}
 
+    async def delete_preset(self, preset_id: int, session: Session | None = None) -> bool:
+        """Delete a preset and its associated photos from storage and DB."""
+        with self._session_scope(session) as active_session:
+            preset = self._repository.get_preset(active_session, preset_id)
+            if not preset:
+                return False
+
+            photos = self._repository.list_photos_for_preset(active_session, preset_id)
+            from contextlib import suppress
+
+            for photo in photos:
+                # Delete file from storage (best-effort)
+                with suppress(Exception):
+                    self.delete_photo(photo.filename, preset.name if preset else "Default")
+                # Delete DB row
+                self._repository.delete_photo(active_session, photo)
+
+            # Remove preset row
+            active_session.delete(preset)
+            self._repository.commit(active_session)
+            return True
+
 
 def create_media_service(
     session_factory: SessionFactory,

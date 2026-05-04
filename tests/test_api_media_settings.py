@@ -113,3 +113,32 @@ def test_api_v1_routes_return_json_not_html(client):
     create_response = client.post("/api/v1/presets", json={"name": "JSON Contract Preset"})
     assert create_response.status_code == 201
     assert create_response.headers["content-type"].startswith("application/json")
+
+
+def test_api_create_and_delete_preset_removes_photos(client, session):
+    """Creating a preset via API then deleting it should remove the preset and its photos."""
+    # Create preset through API
+    response = client.post("/api/v1/presets", json={"name": "ToDeletePreset"})
+    assert response.status_code == 201
+    payload = response.json()
+    preset_id = payload["id"]
+
+    # Add a photo row referencing the preset (simulates uploaded photo)
+    photo = Photo(filename="orphan.jpg", preset_id=preset_id)
+    session.add(photo)
+    session.commit()
+    session.refresh(photo)
+    photo_id = photo.id
+
+    # Ensure DB rows exist
+    assert session.get(Photo, photo_id) is not None
+    assert session.get(Preset, preset_id) is not None
+
+    # Delete the preset via API
+    delete_resp = client.delete(f"/api/v1/presets/{preset_id}")
+    assert delete_resp.status_code == 204
+
+    # Verify preset and photo rows are removed from the DB
+    session.expire_all()
+    assert session.get(Preset, preset_id) is None
+    assert session.get(Photo, photo_id) is None

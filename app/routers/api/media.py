@@ -63,3 +63,15 @@ async def delete_image(
     if not deleted:
         raise HTTPException(status_code=404, detail="Photo not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/presets/{preset_id}")
+async def delete_preset(
+    preset_id: int,
+    media_service: IMediaService = Depends(get_media_service),
+) -> Response:
+    """Delete a preset and its associated photos."""
+    deleted = await media_service.delete_preset(preset_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
