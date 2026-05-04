@@ -213,3 +213,4 @@ xcuserdata/
 *.perspective{,v3}
 *.xcworkspace/xcuserdata/
 tmpclaude-*
+data/db.sqlite
