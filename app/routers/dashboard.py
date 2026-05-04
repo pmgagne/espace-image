@@ -5,13 +5,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.modules.alarms.api.interfaces import IAlarmsService, get_alarms_service
+from app.modules.alarms.internal.infrastructure.presenter import render_alarms_fragment
 from app.modules.calendar.api.interfaces import ICalendarService, get_calendar_service
 from app.modules.settings.api.interfaces import ISettingsService, get_settings_service
 from app.modules.slideshow.api.interfaces import (
     ISlideshowService,
     get_slideshow_service,
 )
+from app.modules.slideshow.internal.infrastructure.presenter import render_slide_fragment
 from app.modules.weather.api.interfaces import IWeatherService, get_weather_service
+from app.modules.weather.internal.infrastructure.presenter import render_weather_fragment
 from app.schemas import SlideResponse, WeatherResponse
 from app.template_config import templates
 
@@ -83,8 +86,16 @@ async def get_weather(
     lat = settings.weather_latitude if settings else None
     lon = settings.weather_longitude if settings else None
 
-    html = await weather_service.get_weather_html(lat, lon)
-    return HTMLResponse(html)
+    if lat is None or lon is None:
+        return HTMLResponse(render_weather_fragment(has_location=False))
+
+    weather_data = await weather_service.get_current_weather(lat, lon)
+    weather_payload = {
+        "temp": weather_data.temp,
+        "condition": weather_data.condition,
+        "location": weather_data.location,
+    }
+    return HTMLResponse(render_weather_fragment(has_location=True, weather=weather_payload))
 
 
 @router.get("/components/slide", response_class=HTMLResponse, response_model=SlideResponse)
@@ -93,8 +104,10 @@ async def get_next_slide(
     mode: str = "modern",
     slideshow_service: ISlideshowService = Depends(get_slideshow_service),
 ):
-    html = await slideshow_service.get_slide_html(mode)
-    return HTMLResponse(html)
+    selection = slideshow_service.select_next_slide(mode)
+    return HTMLResponse(
+        render_slide_fragment(img_url=selection.img_url, error_msg=selection.error_msg)
+    )
 
 
 @router.get("/components/index-refresh", response_class=HTMLResponse)
@@ -114,20 +127,30 @@ async def components_index_refresh(
     out_parts: list[str] = []
 
     # Weather fragment (if location configured)
-    if settings:
+    if (
+        settings
+        and settings.weather_latitude is not None
+        and settings.weather_longitude is not None
+    ):
         try:
-            weather_oob_html = await weather_service.get_weather_oob_html(
+            weather_data = await weather_service.get_current_weather(
                 settings.weather_latitude,
                 settings.weather_longitude,
             )
-            if weather_oob_html:
-                out_parts.append(weather_oob_html)
+            weather_payload = {
+                "temp": weather_data.temp,
+                "condition": weather_data.condition,
+                "location": weather_data.location,
+            }
+            weather_html = render_weather_fragment(has_location=True, weather=weather_payload)
+            out_parts.append(f'<div hx-swap-oob="innerHTML:#weather-wrapper">{weather_html}</div>')
         except Exception:
             logger.exception("Failed to render weather fragment for index-refresh")
 
     # Alarm fragment
     try:
-        alarm_html = await alarms_service.get_alarm_html(mock=False, tz_offset=None)
+        alarm_contexts = await alarms_service.get_alarm_contexts(mock=False, tz_offset=None)
+        alarm_html = render_alarms_fragment(alarm_contexts)
         if alarm_html:
             out_parts.append(f'<div hx-swap-oob="innerHTML:#alarm-poller">{alarm_html}</div>')
         else:
@@ -148,8 +171,8 @@ async def check_alarm(
     """Checks for active alarms and returns a list of them if any exist."""
     logger.info("Alarm refresh requested (mock=%s, tz_offset=%s)", mock, tz_offset)
 
-    alarm_html = await alarms_service.get_alarm_html(mock=mock, tz_offset=tz_offset)
-    return HTMLResponse(alarm_html)
+    alarm_contexts = await alarms_service.get_alarm_contexts(mock=mock, tz_offset=tz_offset)
+    return HTMLResponse(render_alarms_fragment(alarm_contexts))
 
 
 @router.get(
@@ -180,32 +203,13 @@ async def debug_calendars(
 
 @router.post("/api/alarms/{alarm_id}/dismiss", response_class=HTMLResponse)
 async def dismiss_alarm(
-    request: Request,
-    alarm_id: str,
-    mock: bool = False,
-    tz_offset: int | None = None,
-    alarms_service: IAlarmsService = Depends(get_alarms_service),
+    request: Request,  # noqa: ARG001
+    alarm_id: str,  # noqa: ARG001
 ):
-    """Dismisses an alarm and returns the updated alarm list."""
-    # If this is a mock request, bypass strict alarm_id validation and return
-    # the mock alarm list immediately. Mock IDs (e.g. "mock-1") are allowed
-    # and should not be treated as errors.
-    if mock:
-        return await check_alarm(
-            request,
-            mock=True,
-            tz_offset=tz_offset,
-            alarms_service=alarms_service,
-        )
-
-    # Use service to dismiss the alarm (handles UUID and composite UID parsing)
-    await alarms_service.dismiss_alarm(alarm_id)
-
-    # Return the updated list immediately
-    logger.info("Alarm dismissed id=%s (tz_offset=%s)", alarm_id, tz_offset)
-    return await check_alarm(
-        request,
-        mock=False,
-        tz_offset=tz_offset,
-        alarms_service=alarms_service,
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "Deprecated alarm mutation route. Use POST /api/v1/alarms/{alarm_id}/dismiss "
+            "and refresh /components/alarm."
+        ),
     )

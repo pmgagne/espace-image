@@ -9,7 +9,6 @@ from app.db.session_factory import SessionFactory
 
 from .api.interfaces import get_calendar_service
 from .internal.application.service import create_calendar_service
-from .internal.infrastructure.presenter import CalendarPresenter
 from .internal.infrastructure.repository import CalendarRepository
 from .internal.infrastructure.sync_gateway import CalendarSyncGateway
 
@@ -22,7 +21,6 @@ def build_calendar_service(session_factory: SessionFactory):
         session_factory,
         CalendarRepository(),
         CalendarSyncGateway(),
-        CalendarPresenter(),
     )
 
 

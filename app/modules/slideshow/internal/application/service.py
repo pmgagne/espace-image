@@ -7,7 +7,6 @@ from sqlmodel import Session
 
 from app.db.session_factory import SessionFactory
 from app.modules.slideshow.api.interfaces import ISlideshowService, SlideSelectionResult
-from app.modules.slideshow.api.presenters import ISlideshowPresenter
 from app.modules.slideshow.api.repositories import ISlideshowRepository
 
 
@@ -17,12 +16,10 @@ class SlideshowModuleService(ISlideshowService):
     def __init__(
         self,
         repository: ISlideshowRepository,
-        presenter: ISlideshowPresenter,
         session_factory: SessionFactory,
     ) -> None:
-        """Initialize service with repository, presenter, and session dependencies."""
+        """Initialize service with repository and session dependencies."""
         self._repository = repository
-        self._presenter = presenter
         self._session_factory = session_factory
 
     @contextmanager
@@ -61,20 +58,10 @@ class SlideshowModuleService(ISlideshowService):
             photo = random.choice(photos)
             return SlideSelectionResult(img_url=f"/images/{photo.id}?mode={mode}", error_msg=None)
 
-    async def get_slide_html(self, mode: str = "modern") -> str:
-        """
-        Get rendered HTML for slide component.
-
-        Returns HTML fragment with either slide image or error message.
-        """
-        selection = self.select_next_slide(mode)
-        return self._presenter.render_slide_html(selection)
-
 
 def create_slideshow_service(
     session_factory: SessionFactory,
     repository: ISlideshowRepository,
-    presenter: ISlideshowPresenter,
 ) -> ISlideshowService:
     """Factory that returns the slideshow service implementation."""
-    return SlideshowModuleService(repository, presenter, session_factory)
+    return SlideshowModuleService(repository, session_factory)

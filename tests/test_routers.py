@@ -1,6 +1,6 @@
 from sqlmodel import select
 
-from app.db.models import AppSettings, Preset
+from app.db.models import AppSettings, CalendarSource, Preset
 
 
 def test_dashboard_modern(client):
@@ -31,9 +31,10 @@ def test_admin_page(client):
 
 
 def test_create_preset(client, session):
-    response = client.post("/admin/presets", data={"name": "New Preset"})
-    assert response.status_code == 200
-    assert "New Preset" in response.text
+    response = client.post("/api/v1/presets", json={"name": "New Preset"})
+    assert response.status_code == 201
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["name"] == "New Preset"
 
     # Check DB
     presets = session.exec(select(Preset).where(Preset.name == "New Preset")).all()
@@ -49,3 +50,57 @@ def test_components_weather(client, session):
     response = client.get("/components/weather")
     assert response.status_code == 200
     assert "weather-info" in response.text
+
+
+def test_admin_gallery_partial_uses_api_write_controls(client):
+    response = client.get("/admin/partials/gallery")
+    assert response.status_code == 200
+    assert 'id="admin-preset-create-form"' in response.text
+    assert 'id="admin-upload-form"' not in response.text
+    assert 'hx-post="/admin/presets"' not in response.text
+    assert 'hx-post="/admin/upload"' not in response.text
+
+
+def test_admin_settings_partial_uses_api_write_form(client):
+    response = client.get("/admin/partials/settings")
+    assert response.status_code == 200
+    assert 'id="admin-settings-form"' in response.text
+    assert 'hx-post="/admin/settings"' not in response.text
+
+
+def test_admin_calendars_partial_uses_api_write_controls(client, session):
+    source = CalendarSource(label="Home", url="https://example.com/home.ics", color="#123456")
+    session.add(source)
+    session.commit()
+
+    response = client.get("/admin/partials/calendars")
+    assert response.status_code == 200
+    assert 'id="admin-calendar-create-form"' in response.text
+    assert 'id="btn-sync-calendars"' in response.text
+    assert "data-api-calendar-default-source-id" in response.text
+    assert "data-api-delete-calendar-source-id" in response.text
+    assert 'hx-post="/admin/calendars"' not in response.text
+    assert 'hx-post="/admin/calendars/' not in response.text
+    assert 'hx-delete="/admin/calendars/' not in response.text
+
+
+def test_admin_calendar_mutation_route_is_deprecated(client):
+    response = client.post("/admin/calendars")
+    assert response.status_code == 410
+
+
+def test_admin_debug_partial_uses_api_write_form(client):
+    response = client.get("/admin/partials/debug")
+    assert response.status_code == 200
+    assert 'id="admin-simulate-alarm-form"' in response.text
+    assert 'hx-post="/admin/debug/simulate-alarm"' not in response.text
+
+
+def test_admin_debug_simulate_route_is_deprecated(client):
+    response = client.post("/admin/debug/simulate-alarm", data={"delay_seconds": 1})
+    assert response.status_code == 410
+
+
+def test_dashboard_legacy_alarm_mutation_route_is_deprecated(client):
+    response = client.post("/api/alarms/00000000-0000-0000-0000-000000000000/dismiss")
+    assert response.status_code == 410

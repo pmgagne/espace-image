@@ -11,7 +11,6 @@ from app.db.models import Photo, Preset
 from app.db.session_factory import SessionFactory
 from app.modules.media.api.contracts import PhotoDTO, PresetDTO
 from app.modules.media.api.interfaces import IMediaService
-from app.modules.media.api.presenters import IMediaPresenter
 from app.modules.media.api.repositories import IMediaRepository
 from app.modules.media.api.storage import IMediaStorage
 from app.modules.media.internal.infrastructure.image_ops import (
@@ -22,8 +21,8 @@ from app.modules.media.internal.infrastructure.image_ops import (
 class MediaModuleService(IMediaService):
     """Media service implementing `IMediaService`.
 
-    Coordinates repository, storage, and presenter to handle uploads,
-    presets, and photo lifecycle operations used by the admin UI.
+    Coordinates repository and storage to handle uploads,
+    presets, and photo lifecycle operations.
     """
 
     def __init__(
@@ -31,13 +30,11 @@ class MediaModuleService(IMediaService):
         session_factory: SessionFactory,
         repository: IMediaRepository,
         storage: IMediaStorage,
-        presenter: IMediaPresenter,
     ) -> None:
         """Initialize media adapters with session factory and storage settings."""
         self._session_factory = session_factory
         self._repository = repository
         self._storage = storage
-        self._presenter = presenter
         self._upload_dir = Path("data/uploads")
 
     @contextmanager
@@ -159,15 +156,6 @@ class MediaModuleService(IMediaService):
                 "photos": [self._photo_to_dto(p) for p in photos],
             }
 
-    async def get_gallery_html(
-        self,
-        preset_id: int | None = None,
-        error_message: str | None = None,
-    ) -> str:
-        """Return rendered gallery management partial HTML."""
-        data = await self.get_gallery_for_ui(preset_id=preset_id)
-        return self._presenter.render_gallery_html(data, error_message=error_message)
-
     async def get_photo_for_download(
         self, photo_id: int, session: Session | None = None
     ) -> dict[str, Any]:
@@ -215,7 +203,6 @@ def create_media_service(
     session_factory: SessionFactory,
     repository: IMediaRepository,
     storage: IMediaStorage,
-    presenter: IMediaPresenter,
 ) -> IMediaService:
     """Factory that returns the media service implementation."""
-    return MediaModuleService(session_factory, repository, storage, presenter)
+    return MediaModuleService(session_factory, repository, storage)

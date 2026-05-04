@@ -8,7 +8,6 @@ from app.db.session_factory import SessionFactory
 from .api.interfaces import get_media_service
 from .internal.application.service import create_media_service
 from .internal.infrastructure.image_ops import GalleryManager
-from .internal.infrastructure.presenter import MediaPresenter
 from .internal.infrastructure.repository import MediaRepository
 
 
@@ -19,7 +18,6 @@ async def init(app: FastAPI) -> None:
         session_factory,
         MediaRepository(),
         GalleryManager(),
-        MediaPresenter(),
     )
     app.dependency_overrides[get_media_service] = lambda: service
 

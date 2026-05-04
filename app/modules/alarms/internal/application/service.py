@@ -1,4 +1,8 @@
-"""Alarms service - wraps existing alarm logic and exposes module API."""
+"""Alarms service - wraps existing alarm logic and exposes module API.
+
+This implementation returns DTOs and contexts; HTML rendering is the
+responsibility of GUI adapters or routers.
+"""
 
 import logging
 from contextlib import contextmanager
@@ -10,9 +14,7 @@ from sqlmodel import Session
 from app.db.models import AlarmEvent
 from app.db.session_factory import SessionFactory
 from app.modules.alarms.api.contracts import AlarmEventDTO
-from app.modules.alarms.api.presenters import IAlarmsPresenter
 from app.modules.alarms.api.repositories import IAlarmsRepository
-from app.modules.alarms.internal.infrastructure.presenter import AlarmsPresenter
 from app.modules.alarms.internal.infrastructure.repository import AlarmsRepository
 from app.utils.timezone import datetime_to_iso_with_tz, ensure_utc_aware
 
@@ -26,12 +28,10 @@ class AlarmsService:
         self,
         session_factory: SessionFactory,
         repository: IAlarmsRepository,
-        presenter: IAlarmsPresenter,
     ) -> None:
-        """Initialize alarms service with session, repository, and presenter dependencies."""
+        """Initialize alarms service with session and repository dependencies."""
         self._session_factory = session_factory
         self._repository = repository
-        self._presenter = presenter
 
     @contextmanager
     def _session_scope(self, session: Session | None = None):
@@ -170,7 +170,7 @@ class AlarmsService:
         # Test alarms have no calendar link (NULL calendar_source_id)
         simulated_alarms = self._repository.list_ready_simulated_alarms(session, now_naive)
 
-        alarms = []
+        alarms: list[dict[str, Any]] = []
         for alarm_event in simulated_alarms:
             try:
                 start_dt = ensure_utc_aware(alarm_event.trigger_time)
@@ -399,23 +399,6 @@ class AlarmsService:
 
         return self._alarms_to_context(active_alarms, mock=mock, tz_offset=tz_offset)
 
-    async def get_alarm_html(
-        self,
-        mock: bool = False,
-        tz_offset: int | None = None,
-    ) -> str:
-        """
-        Get rendered HTML for alarm component.
-
-        Returns empty string if no alarms, otherwise returns alarm list HTML.
-        """
-        alarm_contexts = await self.get_alarm_contexts(mock=mock, tz_offset=tz_offset)
-        return self._presenter.render_alarm_html(alarm_contexts)
-
-    async def get_debug_html(self, success_message: str | None = None) -> str:
-        """Get rendered HTML for the debug panel component."""
-        return self._presenter.render_debug_html(success_message=success_message)
-
     def _isoformat_safe(self, dt_obj: object, tzid: str | None = None) -> str:
         """Return timezone-aware ISO string or empty string on conversion failure."""
         if not dt_obj or not hasattr(dt_obj, "isoformat"):
@@ -543,6 +526,7 @@ class AlarmsService:
                     "all_day": "true" if all_day else "false",
                     "mock": mock,
                     "tz_query": tz_query,
+                    "tz_offset": tz_offset,
                 }
             )
 
@@ -552,13 +536,11 @@ class AlarmsService:
 def create_alarms_service(
     session_factory: SessionFactory,
     repository: IAlarmsRepository | None = None,
-    presenter: IAlarmsPresenter | None = None,
 ) -> AlarmsService:
     """Factory that returns the alarms service implementation."""
     return AlarmsService(
         session_factory,
         repository or AlarmsRepository(),
-        presenter or AlarmsPresenter(),
     )
 
 

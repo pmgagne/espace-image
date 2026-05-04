@@ -19,7 +19,7 @@
         </div>
         <div class="preset-create">
             <label for="new-preset-name">New Preset</label>
-            <form hx-post="/admin/presets" hx-target="#admin-content" class="preset-create-form">
+            <form id="admin-preset-create-form" class="preset-create-form">
                 <input type="text" name="name" id="new-preset-name" placeholder="Name" required>
                 <button type="submit">Create</button>
             </form>
@@ -35,7 +35,7 @@
     {% endif %}
     <div class="upload-area">
         <h2>Upload to: <span class="text-info">{{ selected_preset.name }}</span></h2>
-        <form hx-post="/admin/upload" hx-target="#admin-content" hx-encoding="multipart/form-data" class="upload-form">
+        <form id="admin-upload-form" class="upload-form">
             <input type="hidden" name="preset_id" value="{{ selected_preset.id }}">
 
             <label class="file-input-wrapper btn mb-0" data-placeholder="Choose Photos">
@@ -58,8 +58,12 @@
         <div class="photo-card">
             <img src="/images/{{ photo.id }}?mode=modern" loading="lazy" alt="{{ photo.filename }}">
             <div class="photo-actions">
-                <button type="button" class="delete-btn" hx-delete="/admin/photos/{{ photo.id }}"
-                    hx-target="#admin-content" hx-confirm="Delete this photo?">Delete</button>
+                <button
+                    type="button"
+                    class="delete-btn"
+                    data-api-delete-image-id="{{ photo.id }}"
+                    data-preset-id="{{ selected_preset.id }}"
+                >Delete</button>
             </div>
         </div>
         {% endfor %}

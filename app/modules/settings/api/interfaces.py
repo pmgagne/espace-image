@@ -10,12 +10,15 @@ class ISettingsService(Protocol):
 
     def get_settings(self) -> AppSettingsDTO | None:
         """Return application settings or None when missing."""
+        ...
 
     def list_presets(self) -> list[PresetDTO]:
         """Return all preset rows."""
+        ...
 
     def get_preset(self, preset_id: int) -> PresetDTO | None:
         """Return a preset by identifier."""
+        ...
 
     def save_settings(
         self,
@@ -26,9 +29,11 @@ class ISettingsService(Protocol):
         default_alarm_for_all_events: bool,
     ) -> AppSettingsDTO:
         """Persist settings changes and return saved settings."""
+        ...
 
     def get_settings_form(self) -> SettingsFormDTO:
         """Return settings form state with default-safe values for rendering."""
+        ...
 
     def with_location_preview(
         self,
@@ -37,6 +42,7 @@ class ISettingsService(Protocol):
         longitude: float,
     ) -> SettingsFormDTO:
         """Return a settings form state with preview coordinates applied."""
+        ...
 
     def validate_settings_input(
         self,
@@ -45,14 +51,7 @@ class ISettingsService(Protocol):
         duration: int | None,
     ) -> None:
         """Validate settings form inputs and raise ValueError when invalid."""
-
-    def get_settings_html(
-        self,
-        location_name: str | None,
-        backend_timezone: str,
-        form: SettingsFormDTO | None = None,
-    ) -> str:
-        """Return rendered settings partial HTML."""
+        ...
 
 
 def get_settings_service() -> ISettingsService:

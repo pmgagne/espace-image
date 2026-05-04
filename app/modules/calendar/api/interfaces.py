@@ -100,10 +100,6 @@ class ICalendarService(Protocol):
         """Get calendar sources and sync status formatted for UI rendering."""
         ...
 
-    async def get_calendars_html(self) -> str:
-        """Return rendered calendars management partial HTML."""
-        ...
-
     async def get_debug_calendar_state(self) -> dict[str, Any]:
         """
         Get calendar sources and sync status for debugging.

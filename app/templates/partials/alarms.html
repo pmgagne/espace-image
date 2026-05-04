@@ -11,8 +11,9 @@
                 data-allday="{{ alarm.all_day }}">{{ alarm.fallback_text }}</span>
         </div>
         <button type="button" class="dismiss-btn-small" aria-label="Dismiss alarm"
-            hx-post="/api/alarms/{{ alarm.uid | urlencode }}/dismiss?mock={{ 'true' if alarm.mock else 'false' }}{{ alarm.tz_query }}"
-            hx-target="#alarm-poller" hx-swap="innerHTML">
+            data-api-dismiss-alarm-id="{{ alarm.uid }}"
+            data-api-dismiss-mock="{{ 'true' if alarm.mock else 'false' }}"
+            data-api-dismiss-tz-offset="{{ alarm.tz_offset if alarm.tz_offset is not none else '' }}">
             Dismiss
         </button>
     </div>

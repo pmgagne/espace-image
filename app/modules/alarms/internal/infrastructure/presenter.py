@@ -1,24 +1,37 @@
-"""Presenter adapter for alarms module HTML rendering."""
+"""GUI presenter adapter for alarms module.
 
-from typing import Any
+This file lives in the module's infrastructure layer and is intended to be
+used only by GUI routers to render HTML fragments for alarms. It keeps
+template rendering out of the application service layer.
+"""
 
-from app.modules.alarms.api.presenters import IAlarmsPresenter
+from __future__ import annotations
+
 from app.template_config import templates
 
 
-class AlarmsPresenter(IAlarmsPresenter):
-    """Template-backed presenter for alarm partials."""
+def render_alarms_fragment(alarms: list[dict]) -> str:
+    """Render the alarms HTML fragment used by the GUI.
 
-    def render_alarm_html(self, alarm_contexts: list[dict[str, Any]]) -> str:
-        """Render alarm contexts into HTML fragment."""
-        if not alarm_contexts:
-            return ""
-        tpl = templates.env.get_template("partials/alarms.html")
-        return tpl.render(alarms=alarm_contexts)
+    Args:
+        alarms: List of alarm context dictionaries as returned by the
+            `IAlarmsService.get_alarm_contexts` call.
 
-    def render_debug_html(self, success_message: str | None = None) -> str:
-        """Render debug panel HTML fragment."""
-        tpl = templates.env.get_template("partials/debug.html")
-        if success_message:
-            return tpl.render(success_message=success_message)
-        return tpl.render()
+    Returns:
+        Rendered HTML string for the alarms partial.
+    """
+    tpl = templates.env.get_template("partials/alarms.html")
+    return tpl.render(alarms=alarms)
+
+
+def render_debug_fragment(success_message: str | None = None) -> str:
+    """Render the debug panel HTML fragment used by admin GUI routes.
+
+    Args:
+        success_message: Optional success message for debug actions.
+
+    Returns:
+        Rendered HTML string for the debug partial.
+    """
+    tpl = templates.env.get_template("partials/debug.html")
+    return tpl.render(success_message=success_message)

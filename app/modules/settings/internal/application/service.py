@@ -10,7 +10,6 @@ from app.db.session_factory import SessionFactory
 from app.modules.settings.api.contracts import AppSettingsDTO, PresetDTO, SettingsFormDTO
 from app.modules.settings.api.exceptions import PresetNotFoundError
 from app.modules.settings.api.interfaces import ISettingsService
-from app.modules.settings.api.presenters import ISettingsPresenter
 from app.modules.settings.api.repositories import ISettingsRepository
 
 
@@ -21,12 +20,10 @@ class SettingsModuleService(ISettingsService):
         self,
         repository: ISettingsRepository,
         session_factory: SessionFactory,
-        presenter: ISettingsPresenter,
     ) -> None:
         """Initialize service with repository and session factory dependencies."""
         self._repository = repository
         self._session_factory = session_factory
-        self._presenter = presenter
 
     @contextmanager
     def _session_scope(self, session: Session | None = None):
@@ -150,27 +147,10 @@ class SettingsModuleService(ISettingsService):
         if duration is not None and duration <= 0:
             raise ValueError("Duration must be a positive integer")
 
-    def get_settings_html(
-        self,
-        location_name: str | None,
-        backend_timezone: str,
-        form: SettingsFormDTO | None = None,
-    ) -> str:
-        """Return rendered settings partial HTML."""
-        settings = form if form is not None else self.get_settings_form()
-        presets = self.list_presets()
-        return self._presenter.render_settings_html(
-            settings=settings,
-            presets=presets,
-            location_name=location_name,
-            backend_timezone=backend_timezone,
-        )
-
 
 def create_settings_service(
     session_factory: SessionFactory,
     repository: ISettingsRepository,
-    presenter: ISettingsPresenter,
 ) -> ISettingsService:
     """Factory that returns the settings service implementation."""
-    return SettingsModuleService(repository, session_factory, presenter)
+    return SettingsModuleService(repository, session_factory)

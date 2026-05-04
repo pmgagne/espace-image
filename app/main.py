@@ -15,6 +15,12 @@ from app.db.session_factory import SessionFactory
 from app.modules.calendar.loader import build_calendar_service
 from app.modules.loader import app_init, app_post_init, app_teardown
 from app.routers import admin, dashboard, media
+from app.routers.api import alarms as api_alarms
+from app.routers.api import calendar as api_calendar
+from app.routers.api import media as api_media
+from app.routers.api import settings as api_settings
+from app.routers.api import slideshow as api_slideshow
+from app.routers.api import weather as api_weather
 
 
 def _run_alembic_upgrade() -> None:
@@ -125,6 +131,12 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(dashboard.router)
 app.include_router(media.router)
 app.include_router(admin.router)
+app.include_router(api_alarms.router)
+app.include_router(api_calendar.router)
+app.include_router(api_media.router)
+app.include_router(api_settings.router)
+app.include_router(api_weather.router)
+app.include_router(api_slideshow.router)
 
 
 @app.get("/health")

@@ -9,7 +9,6 @@ from app.db.session_factory import SessionFactory
 
 from .api.interfaces import get_alarms_service
 from .internal.application.service import create_alarms_service
-from .internal.infrastructure.presenter import AlarmsPresenter
 from .internal.infrastructure.repository import AlarmsRepository
 
 logger = logging.getLogger(__name__)
@@ -21,7 +20,6 @@ async def init(app: FastAPI) -> None:
     service = create_alarms_service(
         session_factory,
         AlarmsRepository(),
-        AlarmsPresenter(),
     )
     app.dependency_overrides[get_alarms_service] = lambda: service
     logger.info("Initialized alarms module")

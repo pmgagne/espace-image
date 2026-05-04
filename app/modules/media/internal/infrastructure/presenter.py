@@ -1,21 +1,20 @@
-"""Presenter adapter for media HTML rendering."""
+"""GUI presenter adapter for media module.
 
-from typing import Any
+Provides helper to render the gallery partial used by admin routers.
+"""
 
-from app.modules.media.api.presenters import IMediaPresenter
 from app.template_config import templates
 
 
-class MediaPresenter(IMediaPresenter):
-    """Template-backed presenter for media gallery partials."""
+def render_gallery_fragment(data: dict, error_message: str | None = None) -> str:
+    """Render the gallery HTML fragment.
 
-    def render_gallery_html(
-        self,
-        data: dict[str, Any],
-        error_message: str | None = None,
-    ) -> str:
-        """Render gallery management partial HTML."""
-        tpl = templates.env.get_template("partials/gallery.html")
-        if error_message:
-            return tpl.render(**data, error_message=error_message)
-        return tpl.render(**data)
+    Args:
+        data: Context dictionary returned by `IMediaService.get_gallery_for_ui`.
+        error_message: Optional error message to display in the fragment.
+
+    Returns:
+        Rendered HTML string for the gallery partial.
+    """
+    tpl = templates.env.get_template("partials/gallery.html")
+    return tpl.render(**data, error_message=error_message)

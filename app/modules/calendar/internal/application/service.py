@@ -10,7 +10,6 @@ from sqlmodel import Session
 from app.db.models import CalendarSource, CalendarSyncStatusEntry
 from app.db.session_factory import SessionFactory
 from app.modules.calendar.api.contracts import CalendarSourceDTO, SyncStatusDTO
-from app.modules.calendar.api.presenters import ICalendarPresenter
 from app.modules.calendar.api.repositories import ICalendarRepository
 from app.modules.calendar.api.sync_gateway import ICalendarSyncGateway
 
@@ -25,13 +24,11 @@ class CalendarService:
         session_factory: SessionFactory,
         repository: ICalendarRepository,
         sync_gateway: ICalendarSyncGateway,
-        presenter: ICalendarPresenter,
     ) -> None:
         """Initialize calendar service with injected persistence and sync adapters."""
         self._session_factory = session_factory
         self._repository = repository
         self._sync_gateway = sync_gateway
-        self._presenter = presenter
 
     @contextmanager
     def _session_scope(self, session: Session | None = None):
@@ -271,17 +268,13 @@ class CalendarService:
                 "sync_statuses": sync_statuses,
             }
 
-    async def get_calendars_html(self, session: Session | None = None) -> str:
-        """Return rendered calendars management partial HTML."""
-        data = await self.get_calendars_for_ui(session=session)
-        return self._presenter.render_calendars_html(data)
+    # GUI rendering moved to routers/presenters. Use `get_calendars_for_ui` and render templates in GUI layer.
 
 
 def create_calendar_service(
     session_factory: SessionFactory,
     repository: ICalendarRepository,
     sync_gateway: ICalendarSyncGateway,
-    presenter: ICalendarPresenter,
 ) -> CalendarService:
     """Factory that returns the calendar service implementation."""
-    return CalendarService(session_factory, repository, sync_gateway, presenter)
+    return CalendarService(session_factory, repository, sync_gateway)

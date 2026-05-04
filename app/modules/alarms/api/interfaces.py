@@ -51,14 +51,6 @@ class IAlarmsService(Protocol):
         """Return alarm payloads transformed for template rendering."""
         ...
 
-    async def get_alarm_html(self, mock: bool = False, tz_offset: int | None = None) -> str:
-        """Return rendered HTML string for alarm component."""
-        ...
-
-    async def get_debug_html(self, success_message: str | None = None) -> str:
-        """Return rendered HTML string for debug panel component."""
-        ...
-
 
 def get_alarms_service() -> IAlarmsService:
     """Dependency injection token for alarms service."""

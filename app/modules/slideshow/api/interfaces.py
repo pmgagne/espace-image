@@ -17,9 +17,6 @@ class ISlideshowService(Protocol):
 
     def select_next_slide(self, mode: str = "modern") -> SlideSelectionResult:
         """Return next slide URL or an error message."""
-
-    async def get_slide_html(self, mode: str = "modern") -> str:
-        """Get rendered HTML for slide component."""
         ...
 
 

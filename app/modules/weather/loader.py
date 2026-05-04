@@ -8,7 +8,6 @@ from app.db.session_factory import SessionFactory
 from .api.interfaces import get_weather_service
 from .internal.application.service import create_weather_service
 from .internal.infrastructure.gateway import WeatherGateway
-from .internal.infrastructure.presenter import WeatherPresenter
 
 
 async def init(app: FastAPI) -> None:
@@ -17,7 +16,6 @@ async def init(app: FastAPI) -> None:
     service = create_weather_service(
         session_factory,
         WeatherGateway(),
-        WeatherPresenter(),
     )
     app.dependency_overrides[get_weather_service] = lambda: service
 
