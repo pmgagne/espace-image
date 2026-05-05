@@ -7,17 +7,20 @@ from datetime import UTC, datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
-from sqlmodel import Session
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 # Import configuration constants
 from app.config import CALENDAR_SYNC_INTERVAL_MINUTES
-from app.db.engine import create_db_and_tables, engine
-from app.modules.calendar.internal.application.service import (
-    CalendarService as CalendarServiceImpl,
-)
+from app.db.session_factory import SessionFactory
+from app.modules.calendar.loader import build_calendar_service
 from app.modules.loader import app_init, app_post_init, app_teardown
 from app.routers import admin, dashboard, media
+from app.routers.api import alarms as api_alarms
+from app.routers.api import calendar as api_calendar
+from app.routers.api import media as api_media
+from app.routers.api import settings as api_settings
+from app.routers.api import slideshow as api_slideshow
+from app.routers.api import weather as api_weather
 
 # Security Note: This application has NO authentication and is designed for
 # internal-network-only deployment. See SECURITY.md for details.
@@ -52,19 +55,20 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 async def background_sync_calendars() -> None:
     """Background task to sync calendar events on configured interval."""
-    with Session(engine) as session:
-        try:
-            # Create calendar service directly (outside FastAPI DI context)
-            calendar_service = CalendarServiceImpl()
-            await calendar_service.sync_calendars(session)
-        except Exception as e:
-            logger.exception("Error in background calendar sync: %s", e)
+    try:
+        # Build calendar service via module-owned composition helper
+        from app.db.engine import engine
+
+        session_factory = SessionFactory(engine)
+        calendar_service = build_calendar_service(session_factory)
+        await calendar_service.sync_calendars()
+    except Exception as e:
+        logger.exception("Error in background calendar sync: %s", e)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Startup
-    create_db_and_tables()
     await app_init(_app)
     logger.info("Application startup (LOG_LEVEL=%s)", LOG_LEVEL)
 
@@ -116,6 +120,12 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(dashboard.router)
 app.include_router(media.router)
 app.include_router(admin.router)
+app.include_router(api_alarms.router)
+app.include_router(api_calendar.router)
+app.include_router(api_media.router)
+app.include_router(api_settings.router)
+app.include_router(api_weather.router)
+app.include_router(api_slideshow.router)
 
 
 @app.get("/health")

@@ -1,8 +1,224 @@
+// Global stubs to avoid "refreshAdminContent is not defined" when handlers
+// or inline attributes invoke the functions before the full script initializes.
+if (typeof window !== 'undefined') {
+    window.__eai_admin_queue = window.__eai_admin_queue || [];
+    if (typeof window.refreshAdminContent !== 'function') {
+        window.refreshAdminContent = function (path) {
+            window.__eai_admin_queue.push({ fn: 'refreshAdminContent', args: [path] });
+        };
+    }
+    if (typeof window.parseJsonDetail !== 'function') {
+        window.parseJsonDetail = function () {
+            // placeholder: return a rejected Promise so callers hit error path
+            return Promise.reject(new Error('admin.js not initialized'));
+        };
+    }
+    if (typeof window.putJson !== 'function') {
+        window.putJson = function () {
+            return Promise.reject(new Error('admin.js not initialized'));
+        };
+    }
+    if (typeof window.postJson !== 'function') {
+        window.postJson = function () {
+            return Promise.reject(new Error('admin.js not initialized'));
+        };
+    }
+}
+
+// === Preset Combo-Box Add/Delete Handlers ===
+document.body.addEventListener('click', function (event) {
+    // Add new preset (use closest to handle clicks on inner elements)
+    var addBtn = event.target && event.target.closest ? event.target.closest('#add-preset-btn') : null;
+    if (addBtn) {
+        var nameInput = document.getElementById('add-preset-name');
+        var name = nameInput ? String(nameInput.value || '').trim() : '';
+        // debug log removed (ESLint no-console)
+        if (!name) {
+            alert('Preset name required');
+            return;
+        }
+        fetch('/api/v1/presets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+        }).then(function (response) {
+            if (!response.ok) {
+                return window.parseJsonDetail(response).then(function (detail) {
+                    throw new Error(detail);
+                });
+            }
+            return response.json();
+        }).then(function () {
+            nameInput.value = '';
+            window.refreshAdminContent('/admin/partials/gallery');
+        }).catch(function (error) {
+            alert(error.message || 'Failed to create preset');
+        });
+        return;
+    }
+
+    // Delete selected preset
+    var delBtn = event.target && event.target.closest ? event.target.closest('#delete-preset-btn') : null;
+    if (delBtn) {
+        var select = document.getElementById('preset-combo-box');
+        var presetId = select ? parseInt(select.value, 10) : null;
+        // debug log removed (ESLint no-console)
+        if (!presetId) {
+            alert('Select a preset to delete');
+            return;
+        }
+        if (!window.confirm('Delete this preset and all its photos?')) return;
+        fetch('/api/v1/presets/' + presetId, {
+            method: 'DELETE'
+        }).then(function (response) {
+            if (!response.ok) {
+                return window.parseJsonDetail(response).then(function (detail) {
+                    throw new Error(detail);
+                });
+            }
+            window.refreshAdminContent('/admin/partials/gallery');
+        }).catch(function (error) {
+            alert(error.message || 'Failed to delete preset');
+        });
+        return;
+    }
+});
+
+// Refresh gallery when preset selection changes and enable/disable delete button
+document.body.addEventListener('change', function (event) {
+    if (event.target && event.target.id === 'preset-combo-box') {
+        var select = event.target;
+        var presetId = select.value;
+        var path = '/admin/partials/gallery';
+        if (presetId) path += '?preset_id=' + encodeURIComponent(presetId);
+        window.refreshAdminContent(path);
+
+        var deleteBtn = document.getElementById('delete-preset-btn');
+        if (deleteBtn) {
+            if (presetId) deleteBtn.removeAttribute('disabled'); else deleteBtn.setAttribute('disabled', 'disabled');
+        }
+    }
+});
 // Admin page utilities: file input UI, timezone formatting for last-synced timestamps,
 // and HTMX hooks. Loaded from /static/js/admin.js
 
 (function () {
     'use strict';
+
+    function refreshAdminContent(path) {
+        // Prefer HTMX so existing active-link and afterSwap hooks keep working.
+        if (window.htmx && typeof window.htmx.ajax === 'function') {
+            try {
+                // Use options object for target to be compatible with htmx API variations
+                window.htmx.ajax('GET', path, { target: '#admin-content' });
+                return;
+            } catch (e) {
+                // Fall back to fetch if htmx.ajax signature differs
+            }
+        }
+
+        fetch(path)
+            .then(function (response) { return response.text(); })
+            .then(function (html) {
+                var target = document.getElementById('admin-content');
+                if (target) {
+                    target.innerHTML = html;
+                }
+            })
+            .catch(function () {
+                // Ignore refresh errors; existing content remains visible.
+            });
+    }
+
+    function parseJsonDetail(response) {
+        return response.json().then(function (payload) {
+            if (payload && payload.detail) {
+                return String(payload.detail);
+            }
+            return 'Request failed';
+        });
+    }
+
+    function toNullableInt(value) {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+        var parsed = parseInt(value, 10);
+        return isNaN(parsed) ? null : parsed;
+    }
+
+    function toNullableFloat(value) {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+        var parsed = parseFloat(value);
+        return isNaN(parsed) ? null : parsed;
+    }
+
+    function putJson(url, payload) {
+        return fetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(function (response) {
+            if (!response.ok) {
+                return parseJsonDetail(response).then(function (detail) {
+                    throw new Error(detail);
+                });
+            }
+            return response.json();
+        });
+    }
+
+    function postJson(url, payload) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(function (response) {
+            if (!response.ok) {
+                return parseJsonDetail(response).then(function (detail) {
+                    throw new Error(detail);
+                });
+            }
+            return response.json();
+        });
+    }
+
+    // Expose utilities for inline/top-level handlers
+    try {
+        window.refreshAdminContent = refreshAdminContent;
+        window.parseJsonDetail = parseJsonDetail;
+        window.putJson = putJson;
+        window.postJson = postJson;
+    } catch (e) {
+        // Ignore if window is not available (e.g., unit test environment)
+    }
+
+    // Flush any queued early calls that happened before the script initialized
+    try {
+        var q = (window.__eai_admin_queue && window.__eai_admin_queue.splice(0)) || [];
+        q.forEach(function (entry) {
+            try {
+                if (entry.fn === 'refreshAdminContent') {
+                    refreshAdminContent.apply(null, entry.args || []);
+                }
+                // other queued fn types can be added here if needed
+            } catch (e) {
+                // ignore flush errors
+            }
+        });
+    } catch (e) {
+        // ignore
+    }
+
+    function refreshCalendarsPartial() {
+        refreshAdminContent('/admin/partials/calendars');
+    }
+
+    function refreshDebugPartial() {
+        refreshAdminContent('/admin/partials/debug');
+    }
 
     function parseUtcStringToDate(utc) {
         if (!utc) return null;
@@ -108,66 +324,6 @@
     // Also run after HTMX swaps
     document.body.addEventListener('htmx:afterSwap', onHtmxAfterSwap);
 
-    // HTMX-driven calendar sync feedback
-    function isCalendarSyncElement(elt) {
-        if (!elt || !elt.getAttribute) return false;
-        var url = elt.getAttribute('hx-post') || elt.getAttribute('hx-get') || elt.getAttribute('hx-delete');
-        return url === '/admin/calendars/sync-now';
-    }
-
-    document.body.addEventListener('htmx:beforeRequest', function (evt) {
-        try {
-            var elt = evt.detail && evt.detail.elt;
-            if (!isCalendarSyncElement(elt)) return;
-            // show inline syncing message and disable button
-            var btn = elt;
-            btn.setAttribute('disabled', 'disabled');
-            btn.classList.add('loading');
-            var spinner = document.createElement('span');
-            spinner.className = 'sync-spinner';
-            spinner.style.marginLeft = '8px';
-            spinner.textContent = '⏳';
-            btn.appendChild(spinner);
-            var msg = document.getElementById('cal-sync-msg');
-            if (msg) { msg.style.display = 'inline-block'; msg.style.color = '#9ae6b4'; msg.textContent = 'Syncing…'; }
-        } catch (e) { /* ignore */ }
-    });
-
-    document.body.addEventListener('htmx:afterSwap', function (evt) {
-        try {
-            var elt = evt.detail && evt.detail.elt;
-            if (!isCalendarSyncElement(elt)) return;
-            // After successful swap the partial is refreshed; but ensure message shown briefly
-            var msg = document.getElementById('cal-sync-msg');
-            if (msg) { msg.style.display = 'inline-block'; msg.style.color = '#9ae6b4'; msg.textContent = 'Sync complete'; }
-            // cleanup button (if still present in DOM)
-            var btn = document.getElementById('btn-sync-calendars');
-            if (btn) {
-                btn.removeAttribute('disabled');
-                var spinner = btn.querySelector('.sync-spinner');
-                if (spinner) spinner.remove();
-            }
-            // hide message after a short delay
-            setTimeout(function () { if (msg) msg.style.display = 'none'; }, 2500);
-        } catch (e) {
-            // Ignore sync errors
-        }
-    });
-
-    document.body.addEventListener('htmx:responseError', function (evt) {
-        try {
-            var elt = evt.detail && evt.detail.elt;
-            if (!isCalendarSyncElement(elt)) return;
-            var msg = document.getElementById('cal-sync-msg');
-            if (msg) { msg.style.display = 'inline-block'; msg.style.color = '#f87171'; msg.textContent = 'Sync failed'; }
-            var btn = document.getElementById('btn-sync-calendars');
-            if (btn) { btn.removeAttribute('disabled'); var spinner = btn.querySelector('.sync-spinner'); if (spinner) spinner.remove(); }
-            setTimeout(function () { if (msg) msg.style.display = 'none'; }, 4000);
-        } catch (e) {
-            // Ignore error handling
-        }
-    });
-
     // === Settings Page Event Handlers ===
 
     // Location search - Enter key triggers search button
@@ -208,6 +364,263 @@
                 btn.innerText = originalText;
             });
         }
+    });
+
+    // === Admin write actions through JSON APIs ===
+    document.body.addEventListener('submit', function (event) {
+        var form = event.target;
+        if (!form || !form.id) return;
+
+        if (form.id === 'admin-preset-create-form') {
+            event.preventDefault();
+
+            var nameInput = form.querySelector('input[name="name"]');
+            var name = nameInput ? String(nameInput.value || '').trim() : '';
+            if (!name) return;
+
+            fetch('/api/v1/presets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name })
+            }).then(function (response) {
+                if (!response.ok) {
+                    return parseJsonDetail(response).then(function (detail) {
+                        throw new Error(detail);
+                    });
+                }
+                return response.json();
+            }).then(function () {
+                refreshAdminContent('/admin/partials/gallery');
+            }).catch(function (error) {
+                alert(error.message || 'Failed to create preset');
+            });
+            return;
+        }
+
+        if (form.id === 'admin-upload-form') {
+            event.preventDefault();
+
+            var presetInput = form.querySelector('input[name="preset_id"]');
+            var presetId = presetInput ? parseInt(presetInput.value, 10) : null;
+            if (!presetId) {
+                alert('Preset is required for upload');
+                return;
+            }
+
+            var formData = new FormData(form);
+            fetch('/api/v1/presets/' + presetId + '/images', {
+                method: 'POST',
+                body: formData
+            }).then(function (response) {
+                if (!response.ok) {
+                    return parseJsonDetail(response).then(function (detail) {
+                        throw new Error(detail);
+                    });
+                }
+                return response.json();
+            }).then(function () {
+                refreshAdminContent('/admin/partials/gallery?preset_id=' + presetId);
+            }).catch(function (error) {
+                alert(error.message || 'Failed to upload image(s)');
+            });
+            return;
+        }
+
+        if (form.id === 'admin-settings-form') {
+            event.preventDefault();
+
+            var activePreset = toNullableInt(
+                form.querySelector('select[name="active_preset_id"]').value
+            );
+            var latitude = toNullableFloat(form.querySelector('input[name="latitude"]').value);
+            var longitude = toNullableFloat(form.querySelector('input[name="longitude"]').value);
+            var duration = toNullableInt(form.querySelector('input[name="duration"]').value);
+
+            putJson('/api/v1/settings/weather-location', {
+                latitude: latitude,
+                longitude: longitude
+            }).then(function () {
+                return putJson('/api/v1/settings/active-preset', {
+                    active_preset_id: activePreset
+                });
+            }).then(function () {
+                return putJson('/api/v1/settings/slideshow-duration', {
+                    slideshow_duration: duration
+                });
+            }).then(function () {
+                window.location.href = '/';
+            }).catch(function (error) {
+                alert(error.message || 'Failed to save settings');
+            });
+            return;
+        }
+
+        if (form.id === 'admin-calendar-create-form') {
+            event.preventDefault();
+
+            var labelInput = form.querySelector('input[name="label"]');
+            var urlInput = form.querySelector('input[name="url"]');
+            var colorInput = form.querySelector('input[name="color"]');
+
+            var label = labelInput ? String(labelInput.value || '').trim() : '';
+            var url = urlInput ? String(urlInput.value || '').trim() : '';
+            var color = colorInput ? String(colorInput.value || '').trim() : '#3182ce';
+
+            if (!label || !url) {
+                alert('Label and URL are required');
+                return;
+            }
+
+            postJson('/api/v1/calendar/sources', {
+                label: label,
+                url: url,
+                color: color || '#3182ce'
+            }).then(function () {
+                refreshCalendarsPartial();
+            }).catch(function (error) {
+                alert(error.message || 'Failed to add calendar source');
+            });
+            return;
+        }
+
+        if (form.id === 'admin-simulate-alarm-form') {
+            event.preventDefault();
+
+            var delayInput = form.querySelector('input[name="delay_seconds"]');
+            var delaySeconds = delayInput ? parseInt(delayInput.value, 10) : 0;
+
+            if (isNaN(delaySeconds) || delaySeconds < 0) {
+                alert('Delay must be a non-negative integer');
+                return;
+            }
+
+            postJson('/api/v1/alarms/simulated', {
+                delay_seconds: delaySeconds
+            }).then(function () {
+                refreshDebugPartial();
+            }).catch(function (error) {
+                alert(error.message || 'Failed to create simulated alarm');
+            });
+        }
+    });
+
+    document.body.addEventListener('click', function (event) {
+        var deleteButton = event.target.closest('[data-api-delete-image-id]');
+        if (!deleteButton) return;
+
+        event.preventDefault();
+        var imageId = parseInt(deleteButton.getAttribute('data-api-delete-image-id'), 10);
+        var presetId = parseInt(deleteButton.getAttribute('data-preset-id'), 10);
+        // debug log removed (ESLint no-console)
+        if (!window.confirm('Delete this photo?')) return;
+
+        fetch('/api/v1/images/' + imageId, {
+            method: 'DELETE'
+        }).then(function (response) {
+            if (!response.ok) {
+                return window.parseJsonDetail(response).then(function (detail) {
+                    throw new Error(detail);
+                });
+            }
+            var path = '/admin/partials/gallery';
+            if (!isNaN(presetId)) {
+                path += '?preset_id=' + presetId;
+            }
+            window.refreshAdminContent(path);
+        }).catch(function (error) {
+            alert(error.message || 'Failed to delete image');
+        });
+    });
+
+    document.body.addEventListener('click', function (event) {
+        var syncButton = event.target.closest('#btn-sync-calendars');
+        if (!syncButton) return;
+
+        event.preventDefault();
+
+        syncButton.setAttribute('disabled', 'disabled');
+
+        var message = document.getElementById('cal-sync-msg');
+        if (message) {
+            message.classList.remove('d-none');
+            message.textContent = 'Syncing...';
+            message.style.color = '#9ae6b4';
+        }
+
+        fetch('/api/v1/calendar/sync', {
+            method: 'POST'
+        }).then(function (response) {
+            if (!response.ok) {
+                return parseJsonDetail(response).then(function (detail) {
+                    throw new Error(detail);
+                });
+            }
+            return response.json();
+        }).then(function () {
+            if (message) {
+                message.textContent = 'Sync complete';
+            }
+            refreshCalendarsPartial();
+        }).catch(function (error) {
+            if (message) {
+                message.textContent = 'Sync failed';
+                message.style.color = '#f87171';
+            }
+            alert(error.message || 'Failed to sync calendars');
+        }).finally(function () {
+            syncButton.removeAttribute('disabled');
+            setTimeout(function () {
+                if (message) {
+                    message.classList.add('d-none');
+                }
+            }, 2500);
+        });
+    });
+
+    document.body.addEventListener('change', function (event) {
+        var checkbox = event.target;
+        if (!checkbox || !checkbox.matches('[data-api-calendar-default-source-id]')) {
+            return;
+        }
+
+        var sourceId = parseInt(checkbox.getAttribute('data-api-calendar-default-source-id'), 10);
+        if (!sourceId) return;
+
+        putJson('/api/v1/calendar/sources/' + sourceId + '/default-alarm', {
+            default_alarm_for_all_events: checkbox.checked
+        }).then(function () {
+            refreshCalendarsPartial();
+        }).catch(function (error) {
+            checkbox.checked = !checkbox.checked;
+            alert(error.message || 'Failed to update default alarm policy');
+        });
+    });
+
+    document.body.addEventListener('click', function (event) {
+        var deleteCalendarButton = event.target.closest('[data-api-delete-calendar-source-id]');
+        if (!deleteCalendarButton) return;
+
+        event.preventDefault();
+
+        if (!window.confirm('Are you sure you want to remove this calendar?')) {
+            return;
+        }
+
+        var sourceId = parseInt(deleteCalendarButton.getAttribute('data-api-delete-calendar-source-id'), 10);
+        if (!sourceId) return;
+
+        fetch('/api/v1/calendar/sources/' + sourceId, {
+            method: 'DELETE'
+        }).then(function (response) {
+            if (!response.ok) {
+                return parseJsonDetail(response).then(function (detail) {
+                    throw new Error(detail);
+                });
+            }
+            refreshCalendarsPartial();
+        }).catch(function (error) {
+            alert(error.message || 'Failed to remove calendar source');
+        });
     });
 
 })();

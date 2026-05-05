@@ -34,18 +34,34 @@
         // Smart swap for alarms to prevent flickering on dismiss
         var lastAlarmContent = "";
         var hasAnimated = false;
-        // Ensure dismiss POST always forces an update: clear the cached content
-        document.body.addEventListener('htmx:beforeRequest', function (evt) {
-            try {
-                var verb = (evt.detail && evt.detail.verb) || '';
-                var path = (evt.detail && evt.detail.path) || '';
-                if (verb && verb.toUpperCase() === 'POST' && /\/api\/alarms\/.+\/dismiss/.test(path)) {
-                    lastAlarmContent = '';
-                }
-            } catch (e) {
-                // Non-fatal - don't block requests
+
+        function buildAlarmRefreshPath(tzOffset) {
+            if (tzOffset === undefined || tzOffset === null || tzOffset === '') {
+                return '/components/alarm';
             }
-        });
+            return '/components/alarm?tz_offset=' + encodeURIComponent(String(tzOffset));
+        }
+
+        function refreshAlarmPoller(tzOffset) {
+            lastAlarmContent = '';
+            var target = '#alarm-poller';
+            var path = buildAlarmRefreshPath(tzOffset);
+            if (window.htmx && typeof window.htmx.ajax === 'function') {
+                window.htmx.ajax('GET', path, target);
+                return;
+            }
+            fetch(path)
+                .then(function (response) { return response.text(); })
+                .then(function (html) {
+                    var container = document.getElementById('alarm-poller');
+                    if (container) {
+                        container.innerHTML = html;
+                    }
+                })
+                .catch(function () {
+                    // Non-fatal refresh failure.
+                });
+        }
         document.body.addEventListener('htmx:beforeSwap', function (evt) {
             if (evt.detail.target && evt.detail.target.id === 'alarm-poller') {
                 var newHtml = evt.detail.xhr.responseText || "";
@@ -76,6 +92,31 @@
                     console.error('formatAlarmTimes error', e);
                 }
             }
+        });
+
+        document.body.addEventListener('click', function (evt) {
+            var button = evt.target.closest('[data-api-dismiss-alarm-id]');
+            if (!button) return;
+
+            evt.preventDefault();
+
+            var alarmId = button.getAttribute('data-api-dismiss-alarm-id');
+            var mock = button.getAttribute('data-api-dismiss-mock') === 'true';
+            var tzOffset = button.getAttribute('data-api-dismiss-tz-offset');
+            var query = mock ? '?mock=true' : '';
+
+            fetch('/api/v1/alarms/' + encodeURIComponent(String(alarmId || '')) + '/dismiss' + query, {
+                method: 'POST'
+            }).then(function (response) {
+                if (!response.ok) {
+                    throw new Error('Failed to dismiss alarm');
+                }
+                return response.json();
+            }).then(function () {
+                refreshAlarmPoller(tzOffset);
+            }).catch(function () {
+                // Keep behavior unobtrusive in slideshow mode.
+            });
         });
 
         // Start clock updates

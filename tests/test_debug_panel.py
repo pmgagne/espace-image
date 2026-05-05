@@ -32,9 +32,9 @@ def test_simulate_alarm_creates_alarm_event(client, session):
     initial_alarm_count = len(initial_count)
 
     # Simulate an alarm with 5 second delay
-    response = client.post("/admin/debug/simulate-alarm", data={"delay_seconds": 5})
-    assert response.status_code == 200
-    assert "Success" in response.text or "Simulated alarm" in response.text
+    response = client.post("/api/v1/alarms/simulated", json={"delay_seconds": 5})
+    assert response.status_code == 201
+    assert response.headers["content-type"].startswith("application/json")
 
     # Check that alarm was created in database
     all_alarms = session.exec(select(AlarmEvent)).all()
@@ -59,8 +59,8 @@ def test_simulate_alarm_creates_alarm_event(client, session):
 
 def test_simulate_alarm_with_zero_delay(client, session):
     """Simulating an alarm with 0 delay should create alarm for now."""
-    response = client.post("/admin/debug/simulate-alarm", data={"delay_seconds": 0})
-    assert response.status_code == 200
+    response = client.post("/api/v1/alarms/simulated", json={"delay_seconds": 0})
+    assert response.status_code == 201
 
     # Get the newest alarm
     all_alarms = session.exec(select(AlarmEvent)).all()
@@ -76,8 +76,8 @@ def test_simulate_alarm_with_zero_delay(client, session):
 
 def test_simulate_alarm_uid_is_unique(client, session):
     """Each simulated alarm should have a unique UID."""
-    client.post("/admin/debug/simulate-alarm", data={"delay_seconds": 0})
-    client.post("/admin/debug/simulate-alarm", data={"delay_seconds": 0})
+    client.post("/api/v1/alarms/simulated", json={"delay_seconds": 0})
+    client.post("/api/v1/alarms/simulated", json={"delay_seconds": 0})
 
     all_alarms = session.exec(select(AlarmEvent)).all()
     ids = [str(alarm.id) for alarm in all_alarms]
@@ -93,14 +93,14 @@ def test_simulate_alarm_uid_is_unique(client, session):
 def test_simulated_alarm_can_be_dismissed(client, session):
     """Simulated alarms should be dismissible like normal alarms."""
     # Create a simulated alarm
-    client.post("/admin/debug/simulate-alarm", data={"delay_seconds": 0})
+    client.post("/api/v1/alarms/simulated", json={"delay_seconds": 0})
 
     # Get the alarm id (simulated alarms are identified by UUID)
     alarm = session.exec(select(AlarmEvent)).first()
     alarm_id = str(alarm.id)
 
     # Dismiss the alarm
-    response = client.post(f"/api/alarms/{alarm_id}/dismiss?mock=false")
+    response = client.post(f"/api/v1/alarms/{alarm_id}/dismiss?mock=false")
     assert response.status_code == 200
 
     # Need to refresh the session to get updated data

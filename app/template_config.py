@@ -27,7 +27,10 @@ templates.env.globals["debug_mode"] = os.getenv("WEBAPP_DEBUG", "").lower() in (
 
 # Expose intervals to templates so front-end uses same configuration
 templates.env.globals["weather_interval_seconds"] = METEO_SYNC_INTERVAL_MINUTES * 60
+# Millisecond intervals retained for the legacy (iPad2) UI scripts that
+# expect values in milliseconds rather than seconds.
 templates.env.globals["legacy_weather_interval_ms"] = METEO_SYNC_INTERVAL_MINUTES * 60 * 1000
 templates.env.globals["calendar_sync_interval_minutes"] = CALENDAR_SYNC_INTERVAL_MINUTES
 templates.env.globals["index_update_interval_seconds"] = INDEX_UPDATE_INTERVAL_SECONDS
+# Millisecond interval retained for legacy index refresh code paths.
 templates.env.globals["legacy_index_update_interval_ms"] = INDEX_UPDATE_INTERVAL_SECONDS * 1000

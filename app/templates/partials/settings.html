@@ -3,7 +3,7 @@
     <p class="text-muted-light text-sm mb-10">Backend timezone: <strong>{{ backend_timezone
             }}</strong> — Browser timezone: <strong id="browser-tz">Detecting…</strong></p>
 
-    <form hx-post="/admin/settings" hx-target="#admin-content">
+    <form id="admin-settings-form">
         <h2>Weather Configuration</h2>
         <p class="text-muted text-sm mb-15">
             Powered by Open-Meteo. Requires Latitude and Longitude.

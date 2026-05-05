@@ -2,21 +2,18 @@
 
 from typing import Any, Protocol
 
-from sqlmodel import Session
-
-from app.db.models import CalendarSource
+from app.modules.calendar.api.contracts import CalendarSourceDTO, SyncStatusDTO
 
 
 class ICalendarService(Protocol):
     """Public interface for calendar operations."""
 
-    async def sync_calendars(self, session: Session) -> None:
+    async def sync_calendars(self) -> None:
         """Sync all configured calendar sources."""
         ...
 
     async def get_calendar_events_in_window(
         self,
-        session: Session,
         days_back: int = 7,
         days_ahead: int = 7,
     ) -> list[dict[str, Any]]:
@@ -24,7 +21,6 @@ class ICalendarService(Protocol):
         Fetch calendar events within a time window.
 
         Args:
-            session: Database session.
             days_back: Number of days to look back.
             days_ahead: Number of days to look ahead.
 
@@ -45,14 +41,11 @@ class ICalendarService(Protocol):
         """
         ...
 
-    async def create_source(
-        self, session: Session, label: str, url: str, color: str
-    ) -> CalendarSource:
+    async def create_source(self, label: str, url: str, color: str) -> CalendarSourceDTO:
         """
         Create a new calendar source.
 
         Args:
-            session: Database session.
             label: Display label for the calendar.
             url: WebCal or ICS URL.
             color: Hex color code (e.g., "#3182ce").
@@ -63,13 +56,12 @@ class ICalendarService(Protocol):
         ...
 
     async def update_source_defaults(
-        self, session: Session, source_id: int, default_alarm: bool
-    ) -> CalendarSource:
+        self, source_id: int, default_alarm: bool
+    ) -> CalendarSourceDTO:
         """
         Update calendar source default alarm setting.
 
         Args:
-            session: Database session.
             source_id: Calendar source ID.
             default_alarm: Whether to add default alarms for events.
 
@@ -78,12 +70,11 @@ class ICalendarService(Protocol):
         """
         ...
 
-    async def delete_source(self, session: Session, source_id: int) -> bool:
+    async def delete_source(self, source_id: int) -> bool:
         """
         Delete a calendar source.
 
         Args:
-            session: Database session.
             source_id: Calendar source ID.
 
         Returns:
@@ -91,37 +82,29 @@ class ICalendarService(Protocol):
         """
         ...
 
-    async def get_sync_status(self, session: Session) -> list[dict[str, Any]]:  # noqa: ARG002
+    async def get_sync_status(self) -> list[SyncStatusDTO]:
         """
         Get synchronization status for all calendar sources.
 
         Args:
-            session: Database session.
-
         Returns:
             List of sync status dictionaries.
         """
         ...
 
-        async def get_calendars_for_ui(self, session: Session) -> dict[str, Any]:
-            """
-            Get calendar sources and their sync status formatted for UI rendering.
+    async def get_latest_sync_utc_iso(self) -> str:
+        """Return latest successful sync timestamp as an ISO string for UI polling."""
+        ...
 
-            Args:
-                session: Database session.
+    async def get_calendars_for_ui(self) -> dict[str, Any]:
+        """Get calendar sources and sync status formatted for UI rendering."""
+        ...
 
-            Returns:
-                Dictionary with 'sources' and 'sync_statuses' for template rendering.
-            """
-            ...
-
-    async def get_debug_calendar_state(self, session: Session) -> dict[str, Any]:
+    async def get_debug_calendar_state(self) -> dict[str, Any]:
         """
         Get calendar sources and sync status for debugging.
 
         Args:
-            session: Database session.
-
         Returns:
             Dictionary with 'sources' and 'statuses' keys.
         """

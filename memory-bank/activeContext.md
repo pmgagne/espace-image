@@ -1,6 +1,6 @@
 # Active Context
 
-**Last Updated**: 2026-04-30
+**Last Updated**: 2026-05-01
 
 ## Current Architecture State
 
@@ -13,8 +13,20 @@ The important current-state facts are:
 3. Former shared calendar, weather, and media services now live under module infrastructure.
 4. `app/services/` is no longer part of the active architecture.
 5. Calendar behavior testing has been consolidated into `tests/test_calendar_service.py`.
+6. Schema migrations are managed by **Alembic** (`alembic/`). The raw sqlite3 `migrate_database()` function has been removed from `app/db/engine.py`.
 
 ## Recently Completed
+
+### DB Layer — Alembic Migration System (2026-05-01)
+
+- Added `alembic>=1.16.0` dependency.
+- Scaffolded `alembic/` directory; configured `alembic/env.py` to use `SQLModel.metadata` and the shared `engine`.
+- Generated baseline revision `f823da104bcb` (empty upgrade = schema already current).
+- Stamped production DB at revision `0007 (head)`.
+- Converted all 7 historical raw sqlite3 migrations to chained Alembic revision files (`0001`–`0007`).
+- Deleted `migrate_database()` from `app/db/engine.py`; `create_db_and_tables()` now only calls `SQLModel.metadata.create_all(engine)`.
+- Wired `_run_alembic_upgrade()` into `app/main.py` lifespan startup before module init.
+- Fixed `cast(Any, col)` typing pattern in `alarms/repository.py` and `calendar/repository.py` (Sequence→list return types).
 
 ### Architecture Cleanup (2026-04-30)
 
@@ -35,6 +47,7 @@ The important current-state facts are:
 - prefer `api/interfaces.py` contracts for cross-module usage
 - keep infrastructure code inside `internal/infrastructure/`
 - do not reintroduce `app/services/`
+- **new columns**: add to `app/db/models.py`, then `alembic revision --autogenerate -m "<message>"` — do not add raw sql to `engine.py`
 
 ### For AI Agents
 
@@ -52,9 +65,16 @@ The important current-state facts are:
 ## Active Decisions
 
 - shared routers remain acceptable; per-module REST adapters are not currently required
+- defer extraction of page-shell template rendering (`/admin`, `/`, `/legacy`) until frontend migration to Vite to avoid duplicated transition work
 - SQLite remains the correct persistence choice for the current deployment model
 - no authentication remains acceptable for internal-network-only deployment
 - rate limiting is not implemented today; add it only if deployment shape changes or API volume increases
+- Alembic is the migration system; raw sqlite3 schema ops are no longer used
+
+## Deferred Work (Vite Migration)
+
+1. Move remaining shell template rendering out of routers as the frontend boundary shifts to Vite.
+2. Keep current router shell handlers stable until the Vite entrypoint and API contract are ready.
 
 ## Useful Anchors
 
@@ -62,6 +82,8 @@ The important current-state facts are:
 - `app/modules/loader.py`
 - `app/routers/dashboard.py`
 - `app/routers/admin.py`
+- `alembic/env.py`
+- `alembic/versions/`
 - `app/modules/calendar/internal/infrastructure/calendar_sync.py`
 - `app/modules/weather/internal/infrastructure/weather_api.py`
 - `app/modules/media/internal/infrastructure/image_ops.py`

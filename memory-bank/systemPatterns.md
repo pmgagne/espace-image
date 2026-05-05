@@ -1,6 +1,6 @@
 # System Patterns — Espace-Image
 
-**Last Updated**: 2026-04-30
+**Last Updated**: 2026-05-01
 
 ## Architecture Overview
 
@@ -141,6 +141,51 @@ Two slideshow experiences coexist:
 4. Docs and agent instructions must be updated when module boundaries change.
 5. Tests should prefer module DI overrides or module infrastructure imports over router-local patching.
 
+### 8. Schema Migration Pattern
+
+**Location**: `alembic/`, `alembic/env.py`, `alembic/versions/`
+
+Alembic manages all schema changes. Raw sqlite3 migrations have been removed.
+
+Rules:
+
+- add new columns or tables to `app/db/models.py` first
+- generate a revision with `alembic revision --autogenerate -m "<description>"`
+- review the generated file; adjust if autogenerate misses SQLite-specific nuances
+- use `render_as_batch=True` in `env.py` (already set) for SQLite ALTER TABLE support
+- do **not** add raw `cursor.execute()` DDL anywhere in the application code
+- on startup, `_run_alembic_upgrade()` in `app/main.py` calls `alembic upgrade head` automatically
+
+Current revision chain (9 revisions):
+
+```
+<base> -> f823da104bcb (baseline_schema)
+f823da104bcb -> 0001 (add_appsettings_default_alarm)
+0001 -> 0002 (add_calendar_cache_trigger_time)
+0002 -> 0003 (add_calendar_cache_optional_trigger)
+0003 -> 0004 (add_calendar_cache_event_tz)
+0004 -> 0005 (add_calendar_cache_all_day)
+0005 -> 0006 (add_calendarsource_default_alarm)
+0006 -> 0007 (migrate_alarmevent_uuid_pk)  ← head
+```
+
+### 9. SQLModel Nullable Column Filter Pattern
+
+**Location**: `alarms/repository.py`, `calendar/calendar_sync.py`
+
+SQLModel nullable column attributes (e.g. `dismissed_at: datetime | None`) are typed as `datetime | None` by Pylance, not as SQLAlchemy column descriptors. Calling `.is_()`, `.isnot()`, or comparison operators directly raises type errors.
+
+Pattern: cast the column attribute to `Any` before using SQL filter methods.
+
+```python
+from typing import Any, cast
+
+dismissed_col = cast(Any, AlarmEvent.dismissed_at)
+session.exec(select(AlarmEvent).where(dismissed_col.isnot(None)))
+```
+
+All repository `.all()` returns are wrapped with `list(...)` to satisfy `list[Model]` return type annotations.
+
 ## Validation Markers
 
 Current validated indicators:
@@ -148,7 +193,8 @@ Current validated indicators:
 - routers import module interfaces rather than former shared services
 - weather and media infrastructure live under their modules
 - calendar infrastructure lives under the calendar module
-- the test suite passes after the cleanup
+- Alembic manages all schema migrations; no raw sqlite3 DDL remains in application code
+- the test suite passes (72 tests) after all changes
 
 ## Related Files
 
@@ -157,3 +203,5 @@ Current validated indicators:
 - `app/modules/*/api/interfaces.py`
 - `app/modules/*/internal/application/service.py`
 - `app/modules/*/internal/infrastructure/*`
+- `alembic/env.py`
+- `alembic/versions/`

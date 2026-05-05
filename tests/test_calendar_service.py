@@ -12,7 +12,8 @@ from app.db.models import (
     CalendarSyncStatus,
     CalendarSyncStatusEntry,
 )
-from app.modules.alarms.internal.application.service import AlarmsService
+from app.db.session_factory import SessionFactory
+from app.modules.alarms.internal.application.service import create_alarms_service
 from app.modules.calendar.internal.infrastructure.calendar_sync import CalendarService
 
 # Sample ICS content
@@ -429,7 +430,9 @@ def get_alarm(session: Session, uid: str, ics_path: str | None = None) -> dict[s
             if uid in alarm["uid"]:
                 return alarm
         return None
-    alarms = asyncio.run(AlarmsService().get_active_alarms(session))
+    alarms = asyncio.run(
+        create_alarms_service(SessionFactory(session.get_bind())).get_active_alarms(session)
+    )
     for alarm in alarms:
         if uid in alarm["uid"]:
             return alarm
@@ -623,7 +626,9 @@ def test_comprehensive_calendar_parsing_and_alarms(session):
         session.add(prox_row)
     session.commit()
 
-    alarms = asyncio.run(AlarmsService().get_active_alarms(session))
+    alarms = asyncio.run(
+        create_alarms_service(SessionFactory(session.get_bind())).get_active_alarms(session)
+    )
 
     alarm_uids = {a["uid"] for a in alarms}
     assert any(

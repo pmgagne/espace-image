@@ -68,7 +68,17 @@
         var buttons = wrapper.querySelectorAll('.dismiss-btn-small');
         for (var i = 0; i < buttons.length; i++) {
             var btn = buttons[i];
-            var postUrl = btn.getAttribute('hx-post');
+            var alarmId = btn.getAttribute('data-api-dismiss-alarm-id');
+            var mock = btn.getAttribute('data-api-dismiss-mock');
+            var postUrl = null;
+            if (alarmId) {
+                postUrl = '/api/v1/alarms/' + encodeURIComponent(alarmId) + '/dismiss';
+                if (mock === 'true') {
+                    postUrl += '?mock=true';
+                }
+            } else {
+                postUrl = btn.getAttribute('hx-post');
+            }
             if (postUrl) {
                 btn.removeAttribute('hx-post'); // Prevent confusion
                 // Create a closure for the URL

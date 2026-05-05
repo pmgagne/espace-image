@@ -31,24 +31,23 @@ def test_check_alarm_empty(client, session):
     assert response.text == ""
 
 
-def test_dismiss_alarm_returns_updated_html(client, session):
-    """Verify that dismissing an alarm returns the updated alarm list HTML."""
+def test_dismiss_alarm_returns_json_status(client, session):
+    """Verify dismiss command returns JSON status on the v1 alarms API."""
     # Use a valid UUID string for the alarm id to match current API parsing
     uid = "00000000-0000-0000-0000-000000000000"
-    response = client.post(f"/api/alarms/{uid}/dismiss")
+    response = client.post(f"/api/v1/alarms/{uid}/dismiss")
     assert response.status_code == 200
-    # Should return empty string if no alarms left, or the container if some remain.
-    # In this empty test environment, it should be empty string because no sources are set.
-    assert response.text == ""
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["status"] == "dismissed"
 
 
 def test_dismiss_alarm_mock_remains_mock(client, session):
-    """Verify that dismissing a mock alarm returns mock data."""
+    """Verify mock dismiss mode is a no-op with explicit JSON status."""
     uid = "mock-1"
-    response = client.post(f"/api/alarms/{uid}/dismiss?mock=true")
+    response = client.post(f"/api/v1/alarms/{uid}/dismiss?mock=true")
     assert response.status_code == 200
-    assert "alarm-box-container" in response.text
-    assert "Dentist Appointment" in response.text
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["status"] == "mock-noop"
 
 
 @pytest.mark.anyio

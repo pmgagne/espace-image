@@ -1,6 +1,6 @@
 # Progress — Espace-Image
 
-**Last Updated**: 2026-04-30
+**Last Updated**: 2026-05-01
 
 ## What Works
 
@@ -25,10 +25,13 @@
 - shared router adapter layer depending on module DI contracts
 - former shared service layer removed from active architecture
 - consolidated calendar test coverage aligned to module ownership
+- **Alembic manages all schema migrations** (`alembic/versions/` — 8 revisions)
+- raw sqlite3 migration code removed from `app/db/engine.py`
+- `cast(Any, col)` pattern established for nullable SQLModel column filters
 
 ### Quality Gates
 
-- full Python test suite passing (`65` tests at last validation)
+- full Python test suite passing (`72` tests at last validation)
 - Ruff linting clean at last validation
 - route boundaries verified against module interfaces
 
@@ -43,6 +46,8 @@ The app remains a single FastAPI + SQLite deployment optimized for an internal-n
 **Status**: Stable and post-migration
 
 The large architecture modernization work is complete enough that new work should now be framed as feature work or incremental refactoring, not as broad structural migration.
+
+Final router-shell extraction is intentionally deferred until frontend migration to Vite, where that boundary change can happen once instead of being reworked twice.
 
 ## Known Constraints
 
@@ -73,6 +78,8 @@ The large architecture modernization work is complete enough that new work shoul
 - keep docs synchronized with module boundaries
 - add focused module-level tests when new module behavior is introduced
 - avoid introducing new cross-module shortcuts that bypass interfaces
+- prepare a Vite migration checklist that defines API contracts and shell handoff steps before removing remaining router shell template rendering
+- update `tests/conftest.py` to use `alembic upgrade head` against in-memory SQLite instead of `SQLModel.metadata.create_all()` (optional follow-on; currently deferred)
 
 ## Milestones
 
@@ -80,3 +87,4 @@ The large architecture modernization work is complete enough that new work shoul
 - `v0.2.0`: calendar integration
 - `v0.3.0`: `icalevents` migration
 - `v0.4.x`: modular-monolith boundary cleanup and module-owned infrastructure completion
+- `v0.5.0`: Alembic migration system; raw sqlite3 DDL removed
