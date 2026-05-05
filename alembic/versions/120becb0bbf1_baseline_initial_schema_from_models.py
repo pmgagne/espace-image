@@ -1,15 +1,16 @@
 """baseline: initial schema from models
 
 Revision ID: 120becb0bbf1
-Revises: f09dc931e3e2
+Revises: None
 Create Date: 2026-05-04 12:46:40.871678
 
 """
+
 from collections.abc import Sequence
 
 # revision identifiers, used by Alembic.
-revision: str = '120becb0bbf1'
-down_revision: str | Sequence[str] | None = 'f09dc931e3e2'
+revision: str = "120becb0bbf1"
+down_revision: str | Sequence[str] | None = "f09dc931e3e2"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
