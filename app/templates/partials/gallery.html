@@ -6,18 +6,23 @@
         <div class="preset-combo flex-1">
             <label for="preset-combo-box">Presets</label>
             <div class="d-flex align-center flex-gap-10">
-                <select id="preset-combo-box" name="preset_id" hx-get="/admin/partials/gallery" hx-target="#admin-content">
+                <select id="preset-combo-box" name="preset_id" hx-get="/admin/partials/gallery"
+                    hx-target="#admin-content">
                     {% if not presets %}
                     <option value="">No Presets Available</option>
                     {% endif %}
                     {% for preset in presets %}
-                    <option value="{{ preset.id }}" {% if selected_preset and selected_preset.id==preset.id %}selected{% endif %}>{{ preset.name }}</option>
+                    <option value="{{ preset.id }}" {% if selected_preset and selected_preset.id==preset.id %}selected{%
+                        endif %}>{{ preset.name }}</option>
                     {% endfor %}
                 </select>
-                <button id="delete-preset-btn" type="button" title="Delete selected preset" {% if not selected_preset %}disabled{% endif %}>🗑️</button>
-                <form id="admin-preset-create-form" class="d-flex align-center ml-10" onsubmit="return false;" autocomplete="off">
-                    <input type="text" name="name" id="add-preset-name" placeholder="Add new preset" style="width: 140px;" autocomplete="off">
-                    <button id="add-preset-btn" type="button" title="Add new preset">＋</button>
+                <button id="delete-preset-btn" type="button" title="Delete selected preset" {% if not selected_preset
+                    %}disabled{% endif %}>🗑️</button>
+                <form id="admin-preset-create-form" class="d-flex align-center ml-10" autocomplete="off">
+                    <label for="add-preset-name" class="sr-only">Preset name</label>
+                    <input type="text" name="name" id="add-preset-name" placeholder="Add new preset"
+                        class="preset-input" autocomplete="off">
+                    <button id="add-preset-btn" type="submit" title="Add new preset">＋</button>
                 </form>
             </div>
         </div>
@@ -55,12 +60,8 @@
         <div class="photo-card">
             <img src="/images/{{ photo.id }}?mode=modern" loading="lazy" alt="{{ photo.filename }}">
             <div class="photo-actions">
-                <button
-                    type="button"
-                    class="delete-btn"
-                    data-api-delete-image-id="{{ photo.id }}"
-                    data-preset-id="{{ selected_preset.id }}"
-                >Delete</button>
+                <button type="button" class="delete-btn" data-api-delete-image-id="{{ photo.id }}"
+                    data-preset-id="{{ selected_preset.id }}">Delete</button>
             </div>
         </div>
         {% endfor %}
