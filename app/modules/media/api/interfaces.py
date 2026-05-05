@@ -43,9 +43,6 @@ class IMediaService(Protocol):
     async def list_presets(self) -> list[PresetDTO]:
         """Return all presets as DTOs."""
 
-    async def get_current_preset(self) -> PresetDTO | None:
-        """Return the currently active preset, or None."""
-
     async def set_active_preset(self, preset_id: int) -> PresetDTO:
         """Set the given preset as active and return it."""
 

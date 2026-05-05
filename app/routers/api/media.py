@@ -6,7 +6,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.modules.media.api.interfaces import IMediaService, get_media_service
-from app.modules.settings.api.interfaces import ISettingsService, get_settings_service
 
 router = APIRouter(prefix="/api/v1", tags=["api-media"])
 
@@ -36,45 +35,6 @@ async def list_presets(
     return JSONResponse(content=jsonable_encoder(presets))
 
 
-@router.get("/presets/current")
-async def get_current_preset(
-    media_service: IMediaService = Depends(get_media_service),
-) -> JSONResponse:
-    """Return the currently active preset or 204 when none configured."""
-    preset = await media_service.get_current_preset()
-    if preset is None:
-        return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content={})
-    return JSONResponse(content=jsonable_encoder(preset))
-
-
-@router.put("/presets/{preset_id}/active")
-async def set_active_preset(
-    preset_id: int,
-    settings_service: ISettingsService = Depends(get_settings_service),
-) -> JSONResponse:
-    """Set the given preset as the active preset by delegating to settings service."""
-    # Use settings service to update the active preset while preserving other values
-    try:
-        current = settings_service.get_settings()
-        active_id = preset_id
-        latitude = current.weather_latitude if current else None
-        longitude = current.weather_longitude if current else None
-        duration = current.slideshow_duration if current else None
-        default_alarm = current.default_alarm_for_all_events if current else False
-
-        settings = settings_service.save_settings(
-            active_preset_id=active_id,
-            latitude=latitude,
-            longitude=longitude,
-            duration=duration,
-            default_alarm_for_all_events=default_alarm,
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    return JSONResponse(content=jsonable_encoder(settings))
-
-
 @router.get("/presets/{preset_id}/images")
 async def list_images_for_preset(
     preset_id: int,
@@ -84,22 +44,6 @@ async def list_images_for_preset(
 ) -> JSONResponse:
     """List images for a given preset (paged)."""
     photos, total = await media_service.list_photos_for_preset(preset_id, page=page, size=size)
-    return JSONResponse(
-        content=jsonable_encoder({"items": photos, "page": page, "size": size, "total": total})
-    )
-
-
-@router.get("/presets/current/images")
-async def list_images_for_current_preset(
-    page: int = 1,
-    size: int = 50,
-    media_service: IMediaService = Depends(get_media_service),
-) -> JSONResponse:
-    """List images for the currently active preset."""
-    preset = await media_service.get_current_preset()
-    if preset is None:
-        raise HTTPException(status_code=404, detail="No active preset configured")
-    photos, total = await media_service.list_photos_for_preset(preset.id, page=page, size=size)
     return JSONResponse(
         content=jsonable_encoder({"items": photos, "page": page, "size": size, "total": total})
     )
