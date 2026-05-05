@@ -22,25 +22,6 @@ from app.routers.api import settings as api_settings
 from app.routers.api import slideshow as api_slideshow
 from app.routers.api import weather as api_weather
 
-
-def _run_alembic_upgrade() -> None:
-    """Run Alembic migrations to head on startup."""
-
-    # TODO: fix
-    # import alembic.command
-    # import alembic.config
-
-    # logger.info("Starting Alembic upgrade to head")
-    # try:
-    #     cfg = alembic.config.Config("alembic.ini")
-    #     alembic.command.upgrade(cfg, "head")
-    #     logger.info("Alembic upgrade to head completed successfully")
-    # except Exception as e:
-    #     logger.exception("Alembic upgrade failed: %s", e)
-    #     raise
-    pass
-
-
 # Security Note: This application has NO authentication and is designed for
 # internal-network-only deployment. See SECURITY.md for details.
 
@@ -88,7 +69,6 @@ async def background_sync_calendars() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Startup
-    _run_alembic_upgrade()
     await app_init(_app)
     logger.info("Application startup (LOG_LEVEL=%s)", LOG_LEVEL)
 
