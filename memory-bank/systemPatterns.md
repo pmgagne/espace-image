@@ -65,6 +65,22 @@ Current examples:
 - weather HTTP client code in `weather/internal/infrastructure/weather_api.py`
 - media image and gallery operations in `media/internal/infrastructure/image_ops.py`
 
+### 3.5. Presenter Adapter Pattern (API/GUI Split)
+
+**Location**: `app/modules/<name>/internal/infrastructure/presenter.py`
+
+Each module that renders HTML exposes a dedicated presenter adapter:
+
+- All service APIs return transport-agnostic DTOs (`api/schemas.py`); they never return HTML
+- Presenters receive DTOs and render HTML fragments for GUI endpoints
+- Routers call presenters only; services never call presenters
+- Each presenter should have minimal unit tests to validate HTML rendering
+
+Flow:
+
+- **API route**: `router -> service.get_data() -> DTO -> return JSON`
+- **GUI route**: `router -> service.get_data() -> DTO -> presenter.render(dto) -> TemplateResponse(html)`
+
 ### 4. Shared Router Adapter Pattern
 
 **Location**: `app/routers/`

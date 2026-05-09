@@ -1,0 +1,17 @@
+from ..api.schemas import Create{{Entity}}Request, {{Entity}}Response
+from .repository import {{Entity}}Repository
+
+
+class {{Entity}}Service:
+    def __init__(self, repository: {{Entity}}Repository | None = None) -> None:
+        self._repository = repository or {{Entity}}Repository()
+
+    async def get_by_id(self, entity_id: str) -> {{Entity}}Response | None:
+        model = await self._repository.get_by_id(entity_id)
+        if model is None:
+            return None
+        return {{Entity}}Response(id=model.id, name=model.name)
+
+    async def create(self, payload: Create{{Entity}}Request) -> {{Entity}}Response:
+        model = await self._repository.create(payload.name)
+        return {{Entity}}Response(id=model.id, name=model.name)

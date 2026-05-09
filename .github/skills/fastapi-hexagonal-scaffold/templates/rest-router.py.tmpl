@@ -1,0 +1,25 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from ..api.interfaces import I{{Entity}}Service, get_{{entity}}_service
+from ..api.schemas import Create{{Entity}}Request, {{Entity}}Response
+
+router = APIRouter(prefix="/{{module}}", tags=["{{module}}"])
+
+
+@router.get("/{entity_id}", response_model={{Entity}}Response, operation_id="get_{{entity}}")
+async def get_{{entity}}(
+    entity_id: str,
+    service: I{{Entity}}Service = Depends(get_{{entity}}_service),
+) -> {{Entity}}Response:
+    result = await service.get_by_id(entity_id)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{Entity}} not found")
+    return result
+
+
+@router.post("", response_model={{Entity}}Response, status_code=status.HTTP_201_CREATED, operation_id="create_{{entity}}")
+async def create_{{entity}}(
+    payload: Create{{Entity}}Request,
+    service: I{{Entity}}Service = Depends(get_{{entity}}_service),
+) -> {{Entity}}Response:
+    return await service.create(payload)

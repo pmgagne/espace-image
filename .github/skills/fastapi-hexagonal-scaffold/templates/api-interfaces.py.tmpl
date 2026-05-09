@@ -1,0 +1,15 @@
+from typing import Protocol
+
+from .schemas import Create{{Entity}}Request, {{Entity}}Response
+
+
+class I{{Entity}}Service(Protocol):
+    async def get_by_id(self, entity_id: str) -> {{Entity}}Response | None: ...
+
+    async def create(self, payload: Create{{Entity}}Request) -> {{Entity}}Response: ...
+
+
+def get_{{entity}}_service() -> I{{Entity}}Service:
+    from ..internal.service import {{Entity}}Service
+
+    return {{Entity}}Service()

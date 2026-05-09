@@ -1,0 +1,7 @@
+from fastapi import FastAPI
+
+from .rest.router import router as {{module}}_router
+
+
+def post_init(app: FastAPI) -> None:
+    app.include_router({{module}}_router)

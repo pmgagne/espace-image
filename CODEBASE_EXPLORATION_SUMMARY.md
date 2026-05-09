@@ -29,8 +29,23 @@ FastAPI app (app/main.py)
   -> module API contracts (app/modules/*/api/interfaces.py)
   -> module application services (app/modules/*/internal/application/service.py)
   -> module infrastructure adapters (app/modules/*/internal/infrastructure/*)
+    -> (API: return DTOs to router)
+    -> (GUI: presenter.py renders HTML fragments)
   -> SQLModel + SQLite + filesystem + external HTTP APIs
 ```
+
+## API/GUI Separation and Presenter Pattern
+
+All module services return **transport-agnostic DTOs** defined in `api/schemas.py`. They never render HTML.
+
+GUI rendering is handled by dedicated presenter adapters in `internal/infrastructure/presenter.py` for each module:
+
+- **API routes**: router calls service → gets DTO → returns JSON directly
+- **GUI routes**: router calls service → gets DTO → calls presenter → returns HTML fragment
+
+Routers are the only place where presenters are invoked. Services never call presenters directly.
+
+Each presenter should have minimal unit tests to validate HTML rendering correctness.
 
 ## Module Map
 
