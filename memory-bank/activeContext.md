@@ -14,6 +14,7 @@ The important current-state facts are:
 4. `app/services/` is no longer part of the active architecture.
 5. Calendar behavior testing has been consolidated into `tests/test_calendar_service.py`.
 6. Schema migrations are managed by **Alembic** (`alembic/`). The raw sqlite3 `migrate_database()` function has been removed from `app/db/engine.py`.
+7. **Target architecture** (ADR-2026-05-04): Adopt Presenter Pattern with API/GUI split—all services return DTOs only; GUI rendering delegated to `internal/infrastructure/presenter.py` adapters.
 
 ## Recently Completed
 

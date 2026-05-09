@@ -28,6 +28,7 @@
 - **Alembic manages all schema migrations** (`alembic/versions/` — 8 revisions)
 - raw sqlite3 migration code removed from `app/db/engine.py`
 - `cast(Any, col)` pattern established for nullable SQLModel column filters
+- **Target architecture adopted** (ADR-2026-05-04): Presenter Pattern for API/GUI split with DTOs
 
 ### Quality Gates
 
@@ -75,6 +76,7 @@ Final router-shell extraction is intentionally deferred until frontend migration
 
 ### Architecture-Facing
 
+- **Implement Presenter Pattern**: Migrate GUI rendering to module-owned `internal/infrastructure/presenter.py` adapters; ensure services return DTOs only
 - keep docs synchronized with module boundaries
 - add focused module-level tests when new module behavior is introduced
 - avoid introducing new cross-module shortcuts that bypass interfaces

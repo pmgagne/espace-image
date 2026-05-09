@@ -2,13 +2,13 @@
 
 ## Architecture: Modular Monolith With Module-Owned Infrastructure
 
-Espace-Image uses a modular monolith pattern with per-module boundaries under `app/modules/<name>/`.
+Espace-Image uses a modular monolith pattern with per-module boundaries under `app/modules/<name>/` and applies hexagonal architecture with clear API/GUI separation.
 
 Each module exposes:
 
-- `api/` for public contracts and DI tokens
-- `internal/application/` for module behavior and orchestration
-- `internal/infrastructure/` for external API, file, and persistence-heavy helpers
+- `api/` for public contracts, DI tokens, and transport-agnostic DTOs
+- `internal/application/` for module behavior and orchestration (returns DTOs only, never HTML)
+- `internal/infrastructure/` for external API, file, persistence-heavy helpers, and GUI rendering
 
 The composition root in `app/modules/loader.py` wires all modules into the FastAPI app at startup.
 
@@ -42,12 +42,24 @@ The composition root in `app/modules/loader.py` wires all modules into the FastA
 - Put coordination and business logic in `internal/application/service.py`
 - Put HTTP clients, file operations, and low-level integration code in `internal/infrastructure/`
 - Infrastructure filenames can be role-specific; they do not need to be named `repository.py`
+- Application services return DTOs only; they never render HTML
+
+### 2.5. API/GUI Separation and Presenter Pattern Rule
+
+- All service APIs return transport-agnostic DTOs defined in `api/schemas.py`
+- GUI rendering (HTML fragments) is handled by dedicated `internal/infrastructure/presenter.py` adapters
+- Routers call module services to get DTOs, then pass DTOs to presenters for HTML rendering
+- Routers for API endpoints return JSON directly from service DTOs
+- Routers for GUI endpoints call presenters to render HTML fragments and return `TemplateResponse`
+- Do not embed HTML generation in application services or router handlers
+- Each presenter should have minimal unit tests to validate HTML rendering
 
 ### 3. Shared Router Rule
 
-- Shared routers in `app/routers/` are the current HTTP adapter layer
-- Keep routers thin: request parsing, dependency injection, response rendering
+- Shared routers in `app/routers/` are the HTTP adapter layer
+- Keep routers thin: request parsing, dependency injection, DTO-to-HTML presenter calls, response rendering
 - Do not move business logic back into routers
+- Routers are the only place where presenters are invoked; services never call presenters
 
 ### 4. No Shared Service Layer Rule
 
@@ -79,6 +91,8 @@ The composition root in `app/modules/loader.py` wires all modules into the FastA
 - Inject DB sessions via `Depends(get_session)`
 - Inject module services via `Depends(get_<module>_service)`
 - Route tests should prefer dependency overrides over patching internals
+- API routes: `service.get_data() -> DTO -> return JSONResponse(dto.dict())`
+- GUI routes: `service.get_data() -> DTO -> presenter.render(dto) -> TemplateResponse(html)`
 
 ## Frontend Conventions
 
