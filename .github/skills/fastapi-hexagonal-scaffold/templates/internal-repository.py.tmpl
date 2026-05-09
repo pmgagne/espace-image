@@ -1,0 +1,9 @@
+from .entities import {{Entity}}
+
+
+class {{Entity}}Repository:
+    async def get_by_id(self, entity_id: str) -> {{Entity}} | None:
+        return None
+
+    async def create(self, name: str) -> {{Entity}}:
+        return {{Entity}}(id="generated-id", name=name)
