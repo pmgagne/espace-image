@@ -4,17 +4,17 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from app.modules.alarms.api import render_alarms_fragment
 from app.modules.alarms.api.interfaces import IAlarmsService, get_alarms_service
-from app.modules.alarms.internal.infrastructure.presenter import render_alarms_fragment
 from app.modules.calendar.api.interfaces import ICalendarService, get_calendar_service
 from app.modules.settings.api.interfaces import ISettingsService, get_settings_service
+from app.modules.slideshow.api import render_slide_fragment
 from app.modules.slideshow.api.interfaces import (
     ISlideshowService,
     get_slideshow_service,
 )
-from app.modules.slideshow.internal.infrastructure.presenter import render_slide_fragment
+from app.modules.weather.api import render_weather_fragment
 from app.modules.weather.api.interfaces import IWeatherService, get_weather_service
-from app.modules.weather.internal.infrastructure.presenter import render_weather_fragment
 from app.schemas import SlideResponse, WeatherResponse
 from app.template_config import templates
 

@@ -3,25 +3,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
 
 from app.modules.calendar.api.interfaces import ICalendarService, get_calendar_service
 
+from .schemas import CreateCalendarSourceRequest, UpdateCalendarDefaultAlarmRequest
+
 router = APIRouter(prefix="/api/v1/calendar", tags=["api-calendar"])
-
-
-class CreateCalendarSourceRequest(BaseModel):
-    """Request payload for creating a calendar source."""
-
-    label: str = Field(min_length=1)
-    url: str = Field(min_length=1)
-    color: str = "#3182ce"
-
-
-class UpdateCalendarDefaultAlarmRequest(BaseModel):
-    """Request payload for updating default alarm policy on a source."""
-
-    default_alarm_for_all_events: bool
 
 
 @router.get("/sources")

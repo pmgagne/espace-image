@@ -12,15 +12,15 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 # Import configuration constants
 from app.config import CALENDAR_SYNC_INTERVAL_MINUTES
 from app.db.session_factory import SessionFactory
+from app.modules.alarms.rest import router as alarms_rest_router
 from app.modules.calendar.loader import build_calendar_service
+from app.modules.calendar.rest import router as calendar_rest_router
 from app.modules.loader import app_init, app_post_init, app_teardown
+from app.modules.media.rest import router as media_rest_router
+from app.modules.settings.rest import router as settings_rest_router
+from app.modules.slideshow.rest import router as slideshow_rest_router
+from app.modules.weather.rest import router as weather_rest_router
 from app.routers import admin, dashboard, media
-from app.routers.api import alarms as api_alarms
-from app.routers.api import calendar as api_calendar
-from app.routers.api import media as api_media
-from app.routers.api import settings as api_settings
-from app.routers.api import slideshow as api_slideshow
-from app.routers.api import weather as api_weather
 
 # Security Note: This application has NO authentication and is designed for
 # internal-network-only deployment. See SECURITY.md for details.
@@ -120,12 +120,12 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(dashboard.router)
 app.include_router(media.router)
 app.include_router(admin.router)
-app.include_router(api_alarms.router)
-app.include_router(api_calendar.router)
-app.include_router(api_media.router)
-app.include_router(api_settings.router)
-app.include_router(api_weather.router)
-app.include_router(api_slideshow.router)
+app.include_router(alarms_rest_router)
+app.include_router(calendar_rest_router)
+app.include_router(media_rest_router)
+app.include_router(settings_rest_router)
+app.include_router(weather_rest_router)
+app.include_router(slideshow_rest_router)
 
 
 @app.get("/health")

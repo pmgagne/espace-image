@@ -1162,7 +1162,7 @@ The first slice should create a visible split in the FastAPI layer without forci
 #### Proposed Router Groups
 
 - GUI routes: `app/routers/dashboard.py` for slideshow-facing pages and fragments, and `app/routers/admin.py` for admin shell and fragment queries only.
-- API routes: new `app/routers/api/media.py` and `app/routers/api/settings.py`, followed later by `app/routers/api/calendar.py`, `app/routers/api/alarms.py`, `app/routers/api/weather.py`, and `app/routers/api/slideshow.py`.
+- API routes: provided by module-owned REST routers under `app/modules/*/rest/`; compatibility shims under `app/routers/api/` were used during migration and have since been removed.
 
 #### First-Slice Route Mapping
 
@@ -1195,7 +1195,7 @@ The first implementation pass should touch a small, predictable set of files.
 #### Likely HTTP Adapter Files
 
 - `app/routers/admin.py`
-- new API router files under `app/routers/api/`
+- module-owned REST routers under `app/modules/*/rest/`
 - `app/main.py` only to include new routers if needed
 
 #### Likely Test Files
@@ -1217,7 +1217,7 @@ The first implementation pass should touch a small, predictable set of files.
 
 1. Execute the Phase 0 checklist for media/settings tests.
 2. Change the media and settings public interfaces to the first-slice contract delta.
-3. Introduce `app/routers/api/media.py` and `app/routers/api/settings.py` for atomic JSON routes.
+3. Introduce module-owned REST routers under `app/modules/<module>/rest/` for atomic JSON routes (compatibility shims in `app/routers/api/` were temporary and removed).
 4. Keep admin partial routes as GUI-only adapters while the UI migrates.
 
 ## Phase 4: Pure Hexagonal Closure Plan
