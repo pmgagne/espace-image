@@ -24,9 +24,11 @@ class IMediaService(Protocol):
         preset_name: str = "Default",
     ) -> tuple[Path, str]:
         """Save an uploaded image and return path plus stored filename."""
+        ...
 
     def delete_photo(self, filename: str, preset_name: str = "Default") -> bool:
         """Delete an image file from storage."""
+        ...
 
     async def create_preset(self, name: str) -> PresetDTO:
         """
@@ -42,9 +44,11 @@ class IMediaService(Protocol):
 
     async def list_presets(self) -> list[PresetDTO]:
         """Return all presets as DTOs."""
+        ...
 
     async def set_active_preset(self, preset_id: int) -> PresetDTO:
         """Set the given preset as active and return it."""
+        ...
 
     async def list_photos_for_preset(
         self, preset_id: int, page: int = 1, size: int = 50
@@ -53,6 +57,7 @@ class IMediaService(Protocol):
 
         Returns a tuple of (photos, total_count).
         """
+        ...
 
     async def upload_photos(self, preset_id: int, files: list[UploadFile]) -> list[PhotoDTO]:
         """
