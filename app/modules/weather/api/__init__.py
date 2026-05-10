@@ -13,3 +13,7 @@ __all__ = [
     "WeatherLocationResult",
     "get_weather_service",
 ]
+
+from app.modules.weather.internal.infrastructure.presenter import render_weather_fragment
+
+__all__.append("render_weather_fragment")

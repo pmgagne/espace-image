@@ -5,17 +5,12 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
 
 from app.modules.alarms.api.interfaces import IAlarmsService, get_alarms_service
 
+from .schemas import SimulateAlarmRequest
+
 router = APIRouter(prefix="/api/v1/alarms", tags=["api-alarms"])
-
-
-class SimulateAlarmRequest(BaseModel):
-    """Request payload for creating a simulated alarm."""
-
-    delay_seconds: int = Field(ge=0)
 
 
 @router.get("/active")

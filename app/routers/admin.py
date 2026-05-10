@@ -4,13 +4,13 @@ import os
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from app.modules.alarms.internal.infrastructure.presenter import render_debug_fragment
+from app.modules.alarms.api import render_debug_fragment
+from app.modules.calendar.api import render_calendars_fragment
 from app.modules.calendar.api.interfaces import ICalendarService, get_calendar_service
-from app.modules.calendar.internal.infrastructure.presenter import render_calendars_fragment
+from app.modules.media.api import render_gallery_fragment
 from app.modules.media.api.interfaces import IMediaService, get_media_service
-from app.modules.media.internal.infrastructure.presenter import render_gallery_fragment
+from app.modules.settings.api import render_settings_fragment
 from app.modules.settings.api.interfaces import ISettingsService, get_settings_service
-from app.modules.settings.internal.infrastructure.presenter import render_settings_fragment
 from app.modules.weather.api.interfaces import IWeatherService, get_weather_service
 from app.template_config import templates
 

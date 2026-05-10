@@ -3,37 +3,18 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 
 from app.modules.settings.api.exceptions import PresetNotFoundError
 from app.modules.settings.api.interfaces import ISettingsService, get_settings_service
 
+from .schemas import (
+    ActivePresetRequest,
+    DefaultAlarmPolicyRequest,
+    SlideshowDurationRequest,
+    WeatherLocationRequest,
+)
+
 router = APIRouter(prefix="/api/v1/settings", tags=["api-settings"])
-
-
-class ActivePresetRequest(BaseModel):
-    """Request payload for changing the active preset."""
-
-    active_preset_id: int | None
-
-
-class SlideshowDurationRequest(BaseModel):
-    """Request payload for changing slideshow duration."""
-
-    slideshow_duration: int
-
-
-class WeatherLocationRequest(BaseModel):
-    """Request payload for changing weather coordinates."""
-
-    latitude: float | None
-    longitude: float | None
-
-
-class DefaultAlarmPolicyRequest(BaseModel):
-    """Request payload for changing the global default alarm policy."""
-
-    default_alarm_for_all_events: bool
 
 
 def _current_settings_values(

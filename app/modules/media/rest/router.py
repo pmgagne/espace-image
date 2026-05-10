@@ -3,17 +3,12 @@
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
 
 from app.modules.media.api.interfaces import IMediaService, get_media_service
 
+from .schemas import CreatePresetRequest
+
 router = APIRouter(prefix="/api/v1", tags=["api-media"])
-
-
-class CreatePresetRequest(BaseModel):
-    """Request payload for creating a media preset."""
-
-    name: str = Field(min_length=1)
 
 
 @router.post("/presets")
