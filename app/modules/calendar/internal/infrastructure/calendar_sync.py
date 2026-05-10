@@ -444,8 +444,26 @@ class CalendarService:
         Returns:
             str | None: The ICS content as a string, or None if fetch fails.
         """
+        # Support the webcal:// scheme
         if url.startswith("webcal://"):
             url = url.replace("webcal://", "https://", 1)
+
+        # If the configured CalDAV calendar matches this URL and CalDAV is enabled,
+        # try fetching via the CalDAV client adapter which may provide server-side
+        # event access (useful for iCloud/private calendars).
+        try:
+            from app.config import CALDAV_CALENDAR
+            from app.modules.calendar.internal.infrastructure.caldav_client import (
+                fetch_caldav_calendar_ics,
+            )
+
+            if CALDAV_CALENDAR and (CALDAV_CALENDAR in url or url in CALDAV_CALENDAR):
+                content = await fetch_caldav_calendar_ics()
+                if content is not None:
+                    return content
+        except Exception:
+            # If anything goes wrong, fall back to HTTP fetch below.
+            pass
 
         # Use icalevents' ICalDownload to fetch and normalize iCal content.
         downloader = ICalDownload()
@@ -1185,6 +1203,33 @@ class CalendarService:
         window_end = utc_now + timedelta(days=7)
 
         sources = session.exec(select(CalendarSource)).all()
+        # If a CalDAV calendar is configured via env and not present in DB,
+        # create a lightweight CalendarSource so it participates in sync.
+        try:
+            from app.config import CALDAV_URL, CALDAV_CALENDAR, CALDAV_SYNC_ENABLED
+
+            if CALDAV_SYNC_ENABLED and CALDAV_CALENDAR:
+                found = False
+                for s in sources:
+                    try:
+                        if s.url == CALDAV_CALENDAR:
+                            found = True
+                            break
+                    except Exception:
+                        continue
+                if not found:
+                    logger.info("Registering env CalDAV calendar as CalendarSource: %s", CALDAV_CALENDAR)
+                    try:
+                        new_source = CalendarSource(label="CalDAV (env)", url=CALDAV_CALENDAR)
+                        session.add(new_source)
+                        session.commit()
+                        session.refresh(new_source)
+                        sources.append(new_source)
+                    except Exception:
+                        session.rollback()
+        except Exception:
+            # If config import or DB creation fails, continue without CalDAV env source
+            pass
         if not sources:
             logger.info("No calendar sources configured.")
             return
