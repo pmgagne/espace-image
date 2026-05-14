@@ -11,7 +11,7 @@ from typing import Any
 
 from sqlmodel import Session
 
-from app.db.models import AlarmEvent
+from app.db.models import AlarmEntryType, AlarmEvent
 from app.db.session_factory import SessionFactory
 from app.modules.alarms.api.contracts import AlarmEventDTO
 from app.modules.alarms.api.repositories import IAlarmsRepository
@@ -55,7 +55,19 @@ class AlarmsService:
             else None,
             calendar_source_id=alarm.calendar_source_id,
             calendar_event_uid=alarm.calendar_event_uid,
+            entry_type=str(alarm.entry_type),
         )
+
+    @staticmethod
+    def _parse_calendar_entry_uid(entry_uid: str | None) -> tuple[str | None, str | None]:
+        """Return entry kind and base event UID from stored calendar entry identifier."""
+        if not entry_uid:
+            return (None, None)
+
+        parts = entry_uid.split("|")
+        if len(parts) < 2:
+            return (None, entry_uid)
+        return (parts[0], parts[1])
 
     async def get_active_alarms(self, session: Session | None = None) -> list[dict[str, Any]]:
         """
@@ -87,79 +99,73 @@ class AlarmsService:
             alarm = AlarmEvent(
                 id=uuid4(),
                 trigger_time=trigger_time,
+                entry_type=AlarmEntryType.SIMULATED,
             )
             active_session.add(alarm)
             active_session.commit()
             return self._alarm_to_dto(alarm)
 
     async def _fetch_calendar_alarms(self, session: Session) -> list[dict[str, Any]]:
-        """Fetch alarms from cached calendar events and filter dismissed ones."""
+        """Fetch typed calendar alarm/event rows and enrich with calendar metadata."""
         utc_now = datetime.now(UTC)
         window_start = utc_now - timedelta(days=7)
-        window_end = utc_now + timedelta(days=7)
+        active_alarms: list[dict[str, Any]] = []
 
-        sources = self._repository.list_calendar_sources(session)
-        active_alarms: list[dict] = []
+        for alarm_row in self._repository.list_all_alarms(session):
+            if alarm_row.calendar_source_id is None:
+                continue
+            if alarm_row.dismissed_at is not None:
+                continue
 
-        for source in sources:
-            cached_events = self._repository.list_cached_events_in_window(
+            try:
+                trigger_aware = ensure_utc_aware(alarm_row.trigger_time)
+            except Exception:
+                continue
+
+            if trigger_aware < window_start or trigger_aware > utc_now:
+                continue
+
+            _, base_uid = self._parse_calendar_entry_uid(alarm_row.calendar_event_uid)
+            if not base_uid:
+                continue
+
+            cached_event = self._repository.get_cached_event_by_uid(
                 session,
-                source.id,
-                window_start,
-                window_end,
+                alarm_row.calendar_source_id,
+                base_uid,
             )
 
-            for event in cached_events:
-                # Determine effective trigger time (fallback to event_start)
-                trigger = (
-                    event.trigger_time
-                    if hasattr(event, "trigger_time") and event.trigger_time is not None
-                    else event.event_start
-                )
+            entry_type = str(alarm_row.entry_type)
+            start_value = trigger_aware
+            end_value = trigger_aware + timedelta(hours=1)
+            name = base_uid
+            tzid = None
+            all_day = False
 
-                # Normalize trigger to UTC-aware for safe comparisons
-                try:
-                    trigger_aware = ensure_utc_aware(trigger) if trigger is not None else None
-                except Exception:
-                    if trigger is None:
-                        continue
-                    trigger_aware = (
-                        trigger
-                        if getattr(trigger, "tzinfo", None) is not None
-                        else trigger.replace(tzinfo=UTC)
-                    )
+            if cached_event is not None:
+                name = cached_event.summary or base_uid
+                tzid = getattr(cached_event, "event_tz", None)
+                all_day = bool(getattr(cached_event, "all_day", False))
+                if (
+                    entry_type == AlarmEntryType.EVENT.value
+                    and cached_event.event_start is not None
+                ):
+                    start_value = cached_event.event_start
+                if cached_event.event_end is not None:
+                    end_value = cached_event.event_end
 
-                # Only show alarms when their trigger_time has been reached
-                if trigger_aware is None or trigger_aware > utc_now:
-                    continue
-
-                composite_uid = f"{event.calendar_source_id}:{event.uid}"
-
-                # Check if alarm was dismissed
-                dismissed = self._repository.get_alarm_by_calendar_uid(
-                    session,
-                    event.calendar_source_id,
-                    event.uid,
-                )
-
-                if not dismissed or dismissed.dismissed_at is None:
-                    alarm = {
-                        "uid": composite_uid,
-                        "name": event.summary,
-                        "start": event.event_start,
-                        "end": event.event_end,
-                        "tzid": getattr(event, "event_tz", None),
-                        "all_day": getattr(event, "all_day", False)
-                        or (
-                            getattr(event, "event_start", None) is not None
-                            and getattr(event, "event_end", None) is not None
-                            and getattr(event, "event_start", None).hour == 0
-                            and getattr(event, "event_start", None).minute == 0
-                            and (event.event_end - event.event_start).days >= 1
-                        ),
-                        "trigger_time": trigger,
-                    }
-                    active_alarms.append(alarm)
+            active_alarms.append(
+                {
+                    "uid": f"{alarm_row.calendar_source_id}:{alarm_row.calendar_event_uid}",
+                    "name": name,
+                    "start": start_value,
+                    "end": end_value,
+                    "tzid": tzid,
+                    "all_day": all_day,
+                    "trigger_time": trigger_aware,
+                    "entry_type": entry_type,
+                }
+            )
 
         return active_alarms
 
@@ -190,6 +196,7 @@ class AlarmsService:
                 "all_day": False,
                 "trigger_time": alarm_event.trigger_time,
                 "tzid": None,
+                "entry_type": AlarmEntryType.SIMULATED.value,
             }
             alarms.append(alarm)
 
@@ -267,6 +274,11 @@ class AlarmsService:
                         dismissed_at=datetime.now(UTC),
                         calendar_source_id=source_id,
                         calendar_event_uid=event_uid,
+                        entry_type=(
+                            AlarmEntryType.EVENT
+                            if event_uid.startswith("event|")
+                            else AlarmEntryType.ALARM
+                        ),
                     )
                     self._repository.add_alarm(active_session, alarm)
 
@@ -348,6 +360,7 @@ class AlarmsService:
                         "id": str(a.id),  # Convert UUID to string
                         "calendar_source_id": a.calendar_source_id,
                         "calendar_event_uid": a.calendar_event_uid,
+                        "entry_type": str(a.entry_type),
                         "trigger_time": trig_iso,
                         "dismissed_at": dismissed_iso,
                     }
@@ -524,6 +537,7 @@ class AlarmsService:
                     "start_iso": start_iso,
                     "end_iso": end_iso,
                     "all_day": "true" if all_day else "false",
+                    "entry_type": alarm.get("entry_type", AlarmEntryType.ALARM.value),
                     "mock": mock,
                     "tz_query": tz_query,
                     "tz_offset": tz_offset,

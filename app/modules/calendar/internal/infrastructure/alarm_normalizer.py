@@ -13,7 +13,7 @@ from typing import Any
 
 from sqlmodel import Session, select
 
-from app.db.models import AlarmEvent, CalendarElement, CalendarSource
+from app.db.models import AlarmEntryType, AlarmEvent, CalendarElement, CalendarSource
 from app.modules.calendar.internal.infrastructure.calendar_sync import CalendarService
 from app.utils.timezone import normalize_datetime
 
@@ -44,6 +44,35 @@ class CalendarAlarmNormalizer:
                 return start_utc + trigger_value
 
         return start_utc
+
+    @staticmethod
+    def _extract_trigger_times(event: Any, start_utc: datetime) -> list[datetime]:
+        """Return one normalized trigger datetime for each VALARM on the event."""
+        raw_component = getattr(event, "raw", None)
+        subcomponents = getattr(raw_component, "subcomponents", None)
+        if not subcomponents:
+            return []
+
+        trigger_times: list[datetime] = []
+        for sub in subcomponents:
+            if getattr(sub, "name", "").upper() != "VALARM":
+                continue
+
+            trigger = sub.get("TRIGGER")
+            if trigger is None:
+                continue
+
+            trigger_value = getattr(trigger, "dt", trigger)
+            if isinstance(trigger_value, datetime):
+                normalized = normalize_datetime(trigger_value)
+                if normalized is not None:
+                    trigger_times.append(normalized)
+                continue
+
+            if isinstance(trigger_value, timedelta):
+                trigger_times.append(start_utc + trigger_value)
+
+        return trigger_times
 
     @staticmethod
     def _window_bounds(
@@ -114,24 +143,42 @@ class CalendarAlarmNormalizer:
                     base_uid = str(getattr(event, "uid", "") or element.uid).strip()
                     if not base_uid:
                         continue
-                    occurrence_uid = f"{base_uid}:{start_utc.isoformat()}"
+                    occurrence_key = f"{base_uid}|{start_utc.isoformat()}"
 
-                    dedupe_key = (source_id, occurrence_uid)
-                    if dedupe_key in seen:
-                        continue
-                    seen.add(dedupe_key)
-
-                    trigger_time = CalendarAlarmNormalizer._extract_trigger_time(event, start_utc)
-                    dismissed_at = dismissed_map.get(dedupe_key)
-                    session.add(
-                        AlarmEvent(
-                            trigger_time=trigger_time,
-                            dismissed_at=dismissed_at,
-                            calendar_source_id=source_id,
-                            calendar_event_uid=occurrence_uid,
+                    event_uid = f"event|{occurrence_key}"
+                    event_dedupe_key = (source_id, event_uid)
+                    if event_dedupe_key not in seen:
+                        seen.add(event_dedupe_key)
+                        session.add(
+                            AlarmEvent(
+                                trigger_time=start_utc,
+                                dismissed_at=dismissed_map.get(event_dedupe_key),
+                                calendar_source_id=source_id,
+                                calendar_event_uid=event_uid,
+                                entry_type=AlarmEntryType.EVENT,
+                            )
                         )
-                    )
-                    inserted += 1
+                        inserted += 1
+
+                    trigger_times = CalendarAlarmNormalizer._extract_trigger_times(event, start_utc)
+                    for trigger_time in trigger_times:
+                        alarm_uid = f"alarm|{occurrence_key}|{trigger_time.isoformat()}"
+                        alarm_dedupe_key = (source_id, alarm_uid)
+                        if alarm_dedupe_key in seen:
+                            continue
+                        seen.add(alarm_dedupe_key)
+
+                        dismissed_at = dismissed_map.get(alarm_dedupe_key)
+                        session.add(
+                            AlarmEvent(
+                                trigger_time=trigger_time,
+                                dismissed_at=dismissed_at,
+                                calendar_source_id=source_id,
+                                calendar_event_uid=alarm_uid,
+                                entry_type=AlarmEntryType.ALARM,
+                            )
+                        )
+                        inserted += 1
 
             session.commit()
             return inserted

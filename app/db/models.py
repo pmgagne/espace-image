@@ -15,6 +15,14 @@ class CalendarSyncStatus(StrEnum):
     FAILED = "failed"
 
 
+class AlarmEntryType(StrEnum):
+    """Type discriminator for rows stored in the alarm table."""
+
+    EVENT = "event"
+    ALARM = "alarm"
+    SIMULATED = "simulated"
+
+
 class Preset(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str
@@ -66,6 +74,7 @@ class AlarmEvent(SQLModel, table=True):
     # Optional: Link to calendar event (null for test/simulated alarms)
     calendar_source_id: int | None = Field(default=None, index=True)
     calendar_event_uid: str | None = Field(default=None, index=True)
+    entry_type: AlarmEntryType = Field(default=AlarmEntryType.ALARM)
 
 
 class CalendarElement(SQLModel, table=True):

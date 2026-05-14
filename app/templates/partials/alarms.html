@@ -1,9 +1,11 @@
 {% if alarms %}
 <div id="alarm-box" class="alarm-box-container">
     {% for alarm in alarms %}
-    <div class="alarm-item">
+    <div class="alarm-item" data-entry-type="{{ alarm.entry_type }}">
         <div class="alarm-header">
-            <span class="alarm-icon">📅</span>
+            <span class="alarm-icon">
+                {% if alarm.entry_type == 'alarm' %}⏰{% elif alarm.entry_type == 'event' %}📅{% else %}🧪{% endif %}
+            </span>
             <span class="alarm-title">{{ alarm.name }}</span>
         </div>
         <div class="alarm-body">
