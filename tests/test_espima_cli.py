@@ -1,7 +1,7 @@
 """Tests for espima CLI command surface and selectors."""
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from typer.testing import CliRunner
 
@@ -27,6 +27,8 @@ class DummyCalendarService:
         self.sources: list[DummySource] = []
         self.synced = False
         self.normalized_count = 0
+        self.last_normalize_start_date: date | None = None
+        self.last_normalize_days = 0
 
     async def get_calendars_for_ui(self) -> dict[str, list[DummySource]]:
         return {"sources": self.sources}
@@ -46,8 +48,14 @@ class DummyCalendarService:
     async def sync_calendars(self) -> None:
         self.synced = True
 
-    async def normalize_alarm_occurrences(self) -> int:
+    async def normalize_alarm_occurrences(
+        self,
+        start_date: date | None = None,
+        days: int = 30,
+    ) -> int:
         self.normalized_count += 1
+        self.last_normalize_start_date = start_date
+        self.last_normalize_days = days
         return 7
 
     async def get_sync_status(self) -> list[object]:
@@ -68,6 +76,23 @@ class DummyCalendarService:
                 event_count=3,
             )
         ]
+
+
+class DummyAlarmsService:
+    """Minimal async service mock for espima alarms commands."""
+
+    async def get_debug_alarm_state(self) -> dict[str, list[dict[str, str | int | None]]]:
+        return {
+            "alarm_events": [
+                {
+                    "id": "alarm-1",
+                    "calendar_source_id": 1,
+                    "calendar_event_uid": "uid-1",
+                    "trigger_time": "2026-01-15T09:45:00+00:00",
+                    "dismissed_at": None,
+                }
+            ]
+        }
 
 
 def test_root_help_shows_command_groups() -> None:
@@ -150,16 +175,40 @@ def test_caldav_sync_runs_service(monkeypatch) -> None:
     assert service.synced is True
 
 
-def test_caldav_normalize_alarms_runs_service(monkeypatch) -> None:
-    """caldav normalize-alarms should invoke normalization pipeline."""
+def test_alarms_process_runs_service(monkeypatch) -> None:
+    """alarms process should invoke normalization pipeline."""
     service = DummyCalendarService()
     monkeypatch.setattr("espima.cli._build_calendar_service", lambda: service)
 
-    result = runner.invoke(cli.app, ["caldav", "normalize-alarms"])
+    result = runner.invoke(
+        cli.app,
+        [
+            "alarms",
+            "process",
+            "--start-date",
+            "2026-01-15",
+            "--days",
+            "14",
+        ],
+    )
 
     assert result.exit_code == 0
     assert service.normalized_count == 1
+    assert service.last_normalize_start_date == date(2026, 1, 15)
+    assert service.last_normalize_days == 14
     assert "Normalized alarm occurrences" in result.stdout
+
+
+def test_alarms_list_shows_rows(monkeypatch) -> None:
+    """alarms list should render alarm events stored in DB state."""
+    service = DummyAlarmsService()
+    monkeypatch.setattr("espima.cli._build_alarms_service", lambda: service)
+
+    result = runner.invoke(cli.app, ["alarms", "list"])
+
+    assert result.exit_code == 0
+    assert "Alarm events" in result.stdout
+    assert "alarm-1" in result.stdout
 
 
 def test_caldav_added_lists_db_sources(monkeypatch) -> None:

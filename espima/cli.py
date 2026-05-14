@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from dataclasses import dataclass
-from datetime import UTC, datetime, tzinfo
+from datetime import UTC, date, datetime, tzinfo
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -24,8 +24,13 @@ console = Console()
 app = typer.Typer(help="Project management CLI for espace-image.", no_args_is_help=True)
 db_app = typer.Typer(help="Database commands.", no_args_is_help=True)
 caldav_app = typer.Typer(help="CalDAV commands.", no_args_is_help=True)
+alarms_app = typer.Typer(
+    help="Alarm and event processing commands.",
+    no_args_is_help=True,
+)
 app.add_typer(db_app, name="db")
 app.add_typer(caldav_app, name="caldav")
+app.add_typer(alarms_app, name="alarms")
 
 
 @app.callback()
@@ -59,6 +64,19 @@ def _build_calendar_service() -> Any:
     from app.modules.calendar.loader import build_calendar_service
 
     return build_calendar_service(SessionFactory(engine))
+
+
+def _build_alarms_service() -> Any:
+    """Build alarms service using the app's module composition wiring."""
+    from app.db.engine import engine
+    from app.db.session_factory import SessionFactory
+    from app.modules.alarms.internal.application.service import create_alarms_service
+    from app.modules.alarms.internal.infrastructure.repository import AlarmsRepository
+
+    return create_alarms_service(
+        SessionFactory(engine),
+        AlarmsRepository(),
+    )
 
 
 def _initialize_database() -> None:
@@ -255,6 +273,16 @@ def _ensure_caldav_url(base_url: str) -> None:
     """Validate CalDAV URL input."""
     if not base_url:
         raise typer.BadParameter("Missing CalDAV URL. Set --url or CALDAV_URL.")
+
+
+def _parse_start_date(value: str | None) -> date | None:
+    """Parse optional YYYY-MM-DD date for alarm processing windows."""
+    if value is None:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise typer.BadParameter("--start-date must be in YYYY-MM-DD format.") from exc
 
 
 @db_app.command("init")
@@ -481,15 +509,63 @@ def caldav_sync(
     asyncio.run(_sync_sources())
 
 
-@caldav_app.command("normalize-alarms")
-def caldav_normalize_alarms() -> None:
-    """Normalize recurring occurrences/alarms from calendar_elements into alarmevent."""
+@alarms_app.command("process")
+def alarms_process(
+    start_date: str | None = typer.Option(
+        default=None,
+        help="Start date for recurrence expansion (YYYY-MM-DD). Defaults to today UTC.",
+    ),
+    days: int = typer.Option(
+        default=30,
+        min=1,
+        help="Number of days to process from start-date.",
+    ),
+) -> None:
+    """Process events and alarms from calendar_elements into alarmevent over a date range."""
 
     async def _normalize() -> None:
         service = _build_calendar_service()
+        parsed_start_date = _parse_start_date(start_date)
         with console.status("Normalizing alarm occurrences..."):
-            count = await service.normalize_alarm_occurrences()
+            count = await service.normalize_alarm_occurrences(
+                start_date=parsed_start_date,
+                days=days,
+            )
 
         console.print(f"[green]Normalized alarm occurrences:[/green] {count}")
 
     asyncio.run(_normalize())
+
+
+@alarms_app.command("list")
+def alarms_list() -> None:
+    """List alarm occurrences stored in alarmevent."""
+
+    async def _list() -> None:
+        service = _build_alarms_service()
+        state = await service.get_debug_alarm_state()
+        alarms = list(state.get("alarm_events", []))
+
+        if not alarms:
+            console.print("[yellow]No alarms found.[/yellow]")
+            return
+
+        table = Table(title="Alarm events")
+        table.add_column("ID")
+        table.add_column("Source ID", justify="right")
+        table.add_column("Event UID")
+        table.add_column("Trigger")
+        table.add_column("Dismissed")
+
+        for alarm in alarms:
+            table.add_row(
+                str(alarm.get("id", "")),
+                str(alarm.get("calendar_source_id", "")),
+                str(alarm.get("calendar_event_uid", "")),
+                str(alarm.get("trigger_time", "")),
+                str(alarm.get("dismissed_at") or "-"),
+            )
+
+        console.print(table)
+
+    asyncio.run(_list())

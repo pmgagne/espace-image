@@ -1,6 +1,7 @@
 """Tests for calendar element alarm normalization pipeline."""
 
 import asyncio
+from datetime import date
 
 from sqlmodel import select
 
@@ -46,7 +47,13 @@ END:VCALENDAR
     )
     session.commit()
 
-    inserted = asyncio.run(CalendarAlarmNormalizer.normalize(session))
+    inserted = asyncio.run(
+        CalendarAlarmNormalizer.normalize(
+            session,
+            start_date=date(2026, 1, 1),
+            days=3,
+        )
+    )
 
     alarms = list(
         session.exec(select(AlarmEvent).where(AlarmEvent.calendar_source_id == source.id)).all()

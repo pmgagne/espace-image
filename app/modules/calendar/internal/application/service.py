@@ -2,7 +2,7 @@
 
 import logging
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlmodel import Session
@@ -68,10 +68,19 @@ class CalendarService:
         with self._session_scope(session) as active_session:
             await self._sync_gateway.sync_calendar_events(active_session)
 
-    async def normalize_alarm_occurrences(self, session: Session | None = None) -> int:
+    async def normalize_alarm_occurrences(
+        self,
+        start_date: date | None = None,
+        days: int = 30,
+        session: Session | None = None,
+    ) -> int:
         """Build normalized alarm occurrences from stored calendar elements."""
         with self._session_scope(session) as active_session:
-            return await self._sync_gateway.normalize_alarm_occurrences(active_session)
+            return await self._sync_gateway.normalize_alarm_occurrences(
+                active_session,
+                start_date=start_date,
+                days=days,
+            )
 
     async def get_calendar_events_in_window(
         self,

@@ -8,7 +8,7 @@ while this normalizer expands recurrence and computes trigger times to populate
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlmodel import Session, select
@@ -46,16 +46,27 @@ class CalendarAlarmNormalizer:
         return start_utc
 
     @staticmethod
-    def _window_bounds() -> tuple[datetime, datetime]:
-        """Return wide recurrence expansion bounds for normalized occurrences."""
-        return (datetime(2000, 1, 1, tzinfo=UTC), datetime(2100, 1, 1, tzinfo=UTC))
+    def _window_bounds(
+        start_date: date | None,
+        days: int,
+    ) -> tuple[datetime, datetime]:
+        """Return recurrence expansion bounds for normalized occurrences."""
+        effective_days = max(1, days)
+        base_date = start_date or datetime.now(UTC).date()
+        start = datetime(base_date.year, base_date.month, base_date.day, tzinfo=UTC)
+        end = start + timedelta(days=effective_days)
+        return (start, end)
 
     @staticmethod
-    async def normalize(session: Session) -> int:
+    async def normalize(
+        session: Session,
+        start_date: date | None = None,
+        days: int = 30,
+    ) -> int:
         """Rebuild calendar-linked `alarmevent` rows from `calendar_elements`."""
 
         def _run() -> int:
-            window_start, window_end = CalendarAlarmNormalizer._window_bounds()
+            window_start, window_end = CalendarAlarmNormalizer._window_bounds(start_date, days)
             source_by_id = {
                 source.id: source
                 for source in session.exec(select(CalendarSource)).all()

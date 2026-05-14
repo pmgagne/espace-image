@@ -4,6 +4,8 @@ Delegates calendar sync orchestration and ICS fetching to the
 `CalendarService` implementation used by the module.
 """
 
+from datetime import date
+
 from sqlmodel import Session
 
 from app.modules.calendar.api.sync_gateway import ICalendarSyncGateway
@@ -22,9 +24,18 @@ class CalendarSyncGateway(ICalendarSyncGateway):
         """Sync all configured calendar events using the given session."""
         await CalendarService.sync_calendar_events(session)
 
-    async def normalize_alarm_occurrences(self, session: Session) -> int:
+    async def normalize_alarm_occurrences(
+        self,
+        session: Session,
+        start_date: date | None = None,
+        days: int = 30,
+    ) -> int:
         """Normalize recurring occurrences and alarm triggers from calendar elements."""
-        return await CalendarAlarmNormalizer.normalize(session)
+        return await CalendarAlarmNormalizer.normalize(
+            session,
+            start_date=start_date,
+            days=days,
+        )
 
     async def fetch_ics(self, url: str) -> str | None:
         """Fetch ICS content for a source URL."""
