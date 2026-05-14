@@ -68,7 +68,9 @@ def upgrade() -> None:
     if _has_table("calendar_elements"):
         with op.batch_alter_table("calendar_elements") as batch_op:
             if not _has_column("calendar_elements", "href"):
-                batch_op.add_column(sa.Column("href", sa.String(), nullable=False, server_default=""))
+                batch_op.add_column(
+                    sa.Column("href", sa.String(), nullable=False, server_default="")
+                )
             if not _has_column("calendar_elements", "etag"):
                 batch_op.add_column(sa.Column("etag", sa.String(), nullable=True))
             if not _has_column("calendar_elements", "raw_ics"):
