@@ -397,7 +397,27 @@ def load_and_cache_events(
         window_end=window_end,
     )
     latest_by_uid = CalendarService._select_latest_by_uid(events)
-    CalendarService._add_cache_entries(session, latest_by_uid, source_id)
+    from app.db.models import CalendarEvent
+
+    for uid, event in latest_by_uid.items():
+        session.add(
+            CalendarEvent(
+                calendar_source_id=source_id,
+                uid=uid,
+                event_start=event.get("event_start"),
+                event_end=event.get("event_end"),
+                event_tz=event.get("tzid"),
+                summary=event.get("summary", ""),
+                description=event.get("description", ""),
+                location=event.get("location", ""),
+                all_day=bool(event.get("all_day", False)),
+                trigger_time=event.get("trigger_time"),
+                optional_trigger=False,
+                href="",
+                etag=None,
+                raw_ics="",
+            )
+        )
     session.commit()
     return events
 
@@ -596,7 +616,27 @@ def test_comprehensive_calendar_parsing_and_alarms(session):
     assert "proximity-alarm@example.com" in prox
 
     latest_by_uid = CalendarService._select_latest_by_uid(events)
-    CalendarService._add_cache_entries(session, latest_by_uid, source_id=1)
+    from app.db.models import CalendarEvent
+
+    for uid, event in latest_by_uid.items():
+        session.add(
+            CalendarEvent(
+                calendar_source_id=1,
+                uid=uid,
+                event_start=event.get("event_start"),
+                event_end=event.get("event_end"),
+                event_tz=event.get("tzid"),
+                summary=event.get("summary", ""),
+                description=event.get("description", ""),
+                location=event.get("location", ""),
+                all_day=bool(event.get("all_day", False)),
+                trigger_time=event.get("trigger_time"),
+                optional_trigger=False,
+                href="",
+                etag=None,
+                raw_ics="",
+            )
+        )
     session.commit()
 
     now = datetime.now(UTC)

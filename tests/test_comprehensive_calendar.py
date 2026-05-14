@@ -45,9 +45,29 @@ def test_comprehensive_calendar_parsing_and_alarms(session):
     prox = CalendarService._detect_proximity_uids(ics_content)
     assert "proximity-alarm@example.com" in prox
 
-    # Insert cache entries into DB using existing helper methods
+    # Insert cache entries into DB directly from parsed events.
     latest_by_uid = CalendarService._select_latest_by_uid(events)
-    CalendarService._add_cache_entries(session, latest_by_uid, source_id=1)
+    from app.db.models import CalendarEvent
+
+    for uid, event in latest_by_uid.items():
+        session.add(
+            CalendarEvent(
+                calendar_source_id=1,
+                uid=uid,
+                event_start=event.get("event_start"),
+                event_end=event.get("event_end"),
+                event_tz=event.get("tzid"),
+                summary=event.get("summary", ""),
+                description=event.get("description", ""),
+                location=event.get("location", ""),
+                all_day=bool(event.get("all_day", False)),
+                trigger_time=event.get("trigger_time"),
+                optional_trigger=False,
+                href="",
+                etag=None,
+                raw_ics="",
+            )
+        )
     session.commit()
 
     # Force the single event and proximity event to be visible now
@@ -55,8 +75,6 @@ def test_comprehensive_calendar_parsing_and_alarms(session):
     # UIDs in cache include occurrence IDs (e.g., "single-alarm@example.com#2026-02-15T10:00:00+00:00")
     # so we need to search for UIDs that start with the base UID
     try:
-        from app.db.models import CalendarEvent
-
         # Find rows where UID starts with the base UID (accounts for occurrence IDs)
         all_rows = session.exec(
             select(CalendarEvent).where(CalendarEvent.calendar_source_id == 1)
