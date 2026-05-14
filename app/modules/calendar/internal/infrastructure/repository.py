@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlmodel import Session, select
 
-from app.db.models import CalendarEventCache, CalendarSource, CalendarSyncStatusEntry
+from app.db.models import CalendarElement, CalendarSource, CalendarSyncStatusEntry
 from app.modules.calendar.api.repositories import ICalendarRepository
 
 
@@ -14,18 +14,11 @@ class CalendarRepository(ICalendarRepository):
     def list_events_in_window(
         self,
         session: Session,
-        window_start: datetime,
-        window_end: datetime,
-    ) -> list[CalendarEventCache]:
-        """Return cached events intersecting the requested time window."""
-        return list(
-            session.exec(
-                select(CalendarEventCache).where(
-                    (CalendarEventCache.event_start <= window_end)
-                    & (CalendarEventCache.event_end >= window_start)
-                )
-            ).all()
-        )
+        _window_start: datetime,
+        _window_end: datetime,
+    ) -> list[CalendarElement]:
+        """Return raw calendar elements for the requested source window call."""
+        return list(session.exec(select(CalendarElement)).all())
 
     def create_source(
         self,
@@ -60,6 +53,17 @@ class CalendarRepository(ICalendarRepository):
     def list_statuses(self, session: Session) -> list[CalendarSyncStatusEntry]:
         """Return all sync status rows."""
         return list(session.exec(select(CalendarSyncStatusEntry)).all())
+
+    def count_events_for_source(self, session: Session, source_id: int) -> int:
+        """Return the number of cached events for one source."""
+        from sqlmodel import func
+
+        result = session.exec(
+            select(func.count()).select_from(CalendarElement).where(
+                CalendarElement.calendar_source_id == source_id
+            )
+        ).one()
+        return result or 0
 
     def list_sources(self, session: Session) -> list[CalendarSource]:
         """Return all calendar source rows."""

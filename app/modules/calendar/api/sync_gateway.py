@@ -12,6 +12,10 @@ class ICalendarSyncGateway(Protocol):
         """Sync all configured calendar events using the given session."""
         ...
 
+    async def normalize_alarm_occurrences(self, session: Session) -> int:
+        """Normalize recurring occurrences and alarm triggers from calendar elements."""
+        ...
+
     async def fetch_ics(self, url: str) -> str | None:
         """Fetch ICS content for a source URL."""
         ...

@@ -86,6 +86,40 @@ uv run pytest tests/ -v --cov=app --cov-report=xml
 
 All current tests are unit/integration; no Docker build test is required.
 
+## Espima CLI
+
+The project provides an `espima` command for database and CalDAV workflows.
+
+Initialize database tables and seed default rows:
+
+```bash
+uv run espima db init
+```
+
+Apply Alembic migrations:
+
+```bash
+uv run espima db migrate
+```
+
+List calendars from a CalDAV account:
+
+```bash
+uv run espima caldav list --url <caldav-url> --username <user> --password <pass>
+```
+
+Add a calendar source using one selector (`--guid`, `--index`, or `--name`):
+
+```bash
+uv run espima caldav add --index 1 --url <caldav-url> --username <user> --password <pass>
+```
+
+Run calendar sync:
+
+```bash
+uv run espima caldav sync
+```
+
 ### Code Quality & Validation
 
 Lint and validate HTML, CSS, and JavaScript:

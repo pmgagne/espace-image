@@ -12,6 +12,10 @@ class ICalendarService(Protocol):
         """Sync all configured calendar sources."""
         ...
 
+    async def normalize_alarm_occurrences(self) -> int:
+        """Build normalized alarm occurrences from stored calendar elements."""
+        ...
+
     async def get_calendar_events_in_window(
         self,
         days_back: int = 7,

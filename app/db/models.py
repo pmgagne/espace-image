@@ -68,33 +68,32 @@ class AlarmEvent(SQLModel, table=True):
     calendar_event_uid: str | None = Field(default=None, index=True)
 
 
-class CalendarEventCache(SQLModel, table=True):
-    """Cached calendar events from ICS sources within the 1-week window."""
+class CalendarElement(SQLModel, table=True):
+    """Raw calendar items fetched from calendar sources without event processing."""
 
-    __tablename__ = "calendar_event_cache"
+    __tablename__ = "calendar_elements"
     __table_args__ = (UniqueConstraint("calendar_source_id", "uid"),)
 
     id: int | None = Field(default=None, primary_key=True)
     calendar_source_id: int = Field(foreign_key="calendarsource.id", index=True)
     uid: str = Field(index=True)
-    event_start: datetime = Field(index=True)  # Stored in UTC
-    event_end: datetime = Field(index=True)  # Stored in UTC
-    # Original event timezone identifier (e.g. "America/Toronto").
-    # Preserve the source TZID so the application can display and
-    # expand recurrences using the original timezone.
+    event_start: datetime | None = Field(default=None, index=True)
+    event_end: datetime | None = Field(default=None, index=True)
     event_tz: str | None = Field(default=None, index=True)
-    summary: str
+    summary: str = Field(default="")
     description: str = Field(default="")
     location: str = Field(default="")
-    # Whether the original event was an all-day event (DATE type in ICS)
     all_day: bool = Field(default=False, index=True)
-    trigger_time: datetime | None = Field(default=None, index=True)  # Stored in UTC if set
-    optional_trigger: bool = Field(
-        default=False,
-        index=True,
-        description="True if trigger is a default (not from VALARM)",
-    )
+    trigger_time: datetime | None = Field(default=None, index=True)
+    optional_trigger: bool = Field(default=False, index=True)
+    href: str = Field(default="")
+    etag: str | None = Field(default=None)
+    raw_ics: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+# Compatibility alias during transition from parsed event cache to raw elements.
+CalendarEvent = CalendarElement
 
 
 class CalendarSyncStatusEntry(SQLModel, table=True):
@@ -110,3 +109,4 @@ class CalendarSyncStatusEntry(SQLModel, table=True):
     error_message: str = Field(default="")
     error_count: int = Field(default=0)
     last_error_at: datetime | None = Field(default=None)
+    sync_token: str | None = Field(default=None)

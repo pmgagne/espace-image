@@ -20,6 +20,10 @@ dependencies = [
     "sqlmodel>=0.0.31",
     "uvicorn>=0.40.0",
     "urllib3",
+    "icalendar>=5.0.13",
+    "typer>=0.25.1",
+    "rich>=15.0.0",
+    "dotenv>=0.9.9",
 ]
 
 [dependency-groups]
@@ -84,8 +88,11 @@ ignore = ["E501"]     # line too long (handled by ruff)
 # deterministic in flat-layout repos.
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["app*"]
+include = ["app*", "espima*"]
 exclude = ["alembic*"]
+
+[project.scripts]
+espima = "espima.cli:app"
 
 [build-system]
 requires = ["setuptools>=65.5.1", "wheel"]

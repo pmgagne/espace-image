@@ -55,11 +55,11 @@ def test_comprehensive_calendar_parsing_and_alarms(session):
     # UIDs in cache include occurrence IDs (e.g., "single-alarm@example.com#2026-02-15T10:00:00+00:00")
     # so we need to search for UIDs that start with the base UID
     try:
-        from app.db.models import CalendarEventCache
+        from app.db.models import CalendarEvent
 
         # Find rows where UID starts with the base UID (accounts for occurrence IDs)
         all_rows = session.exec(
-            select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == 1)
+            select(CalendarEvent).where(CalendarEvent.calendar_source_id == 1)
         ).all()
 
         single_row = None

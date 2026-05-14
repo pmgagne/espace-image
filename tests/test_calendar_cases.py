@@ -15,7 +15,7 @@ from typing import Any
 
 from sqlmodel import Session, select
 
-from app.db.models import CalendarEventCache
+from app.db.models import CalendarEvent
 from app.db.session_factory import SessionFactory
 from app.modules.alarms.internal.application.service import create_alarms_service
 from app.modules.calendar.internal.infrastructure.calendar_sync import (
@@ -48,7 +48,7 @@ def load_and_cache_events(
 
 
 def set_event_time(session: Session, uid: str, start: datetime, end: datetime) -> None:
-    row = session.exec(select(CalendarEventCache).where(CalendarEventCache.uid == uid)).first()
+    row = session.exec(select(CalendarEvent).where(CalendarEvent.uid == uid)).first()
     if row:
         row.event_start = start
         row.event_end = end

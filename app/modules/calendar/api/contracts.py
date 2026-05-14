@@ -24,6 +24,7 @@ class SyncStatusDTO:
     sync_status: str
     error_message: str | None = None
     error_count: int = 0
+    event_count: int = 0
 
 
 @dataclass(frozen=True)

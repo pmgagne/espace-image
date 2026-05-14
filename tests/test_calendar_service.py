@@ -7,7 +7,7 @@ import pytest
 from sqlmodel import Session, select
 
 from app.db.models import (
-    CalendarEventCache,
+    CalendarEvent,
     CalendarSource,
     CalendarSyncStatus,
     CalendarSyncStatusEntry,
@@ -99,7 +99,7 @@ def test_sync_calendar_events_success(session):
         CalendarService.fetch_ics = original_fetch
 
     cached = session.exec(
-        select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == source.id)
+        select(CalendarEvent).where(CalendarEvent.calendar_source_id == source.id)
     ).all()
 
     assert len(cached) == 1
@@ -404,9 +404,9 @@ def load_and_cache_events(
 
 def set_event_time(session: Session, uid: str, start: datetime, end: datetime) -> None:
     """Update cached event time."""
-    from app.db.models import CalendarEventCache
+    from app.db.models import CalendarEvent
 
-    row = session.exec(select(CalendarEventCache).where(CalendarEventCache.uid == uid)).first()
+    row = session.exec(select(CalendarEvent).where(CalendarEvent.uid == uid)).first()
     if row:
         row.event_start = start
         row.event_end = end
@@ -600,10 +600,10 @@ def test_comprehensive_calendar_parsing_and_alarms(session):
     session.commit()
 
     now = datetime.now(UTC)
-    from app.db.models import CalendarEventCache
+    from app.db.models import CalendarEvent
 
     all_rows = session.exec(
-        select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == 1)
+        select(CalendarEvent).where(CalendarEvent.calendar_source_id == 1)
     ).all()
 
     single_row = None
