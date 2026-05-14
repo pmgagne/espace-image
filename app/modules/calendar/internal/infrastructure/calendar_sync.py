@@ -1012,10 +1012,13 @@ class CalendarService:
                 looks_like_icloud_caldav = "caldav.icloud.com" in source.url
                 has_caldav_credentials = bool(CALDAV_URL and CALDAV_USERNAME and CALDAV_PASSWORD)
                 matches_configured_calendar = bool(
-                    CALDAV_CALENDAR and (CALDAV_CALENDAR in source.url or source.url in CALDAV_CALENDAR)
+                    CALDAV_CALENDAR
+                    and (CALDAV_CALENDAR in source.url or source.url in CALDAV_CALENDAR)
                 )
 
-                if has_caldav_credentials and (looks_like_icloud_caldav or matches_configured_calendar):
+                if has_caldav_credentials and (
+                    looks_like_icloud_caldav or matches_configured_calendar
+                ):
                     caldav_result = await fetch_caldav_calendar_ics_with_metadata(
                         calendar_url=source.url,
                         sync_token=sync_status.sync_token,
@@ -1132,7 +1135,9 @@ class CalendarService:
                     except Exception:
                         continue
                 if not found:
-                    logger.info("Registering env CalDAV calendar as CalendarSource: %s", CALDAV_CALENDAR)
+                    logger.info(
+                        "Registering env CalDAV calendar as CalendarSource: %s", CALDAV_CALENDAR
+                    )
                     try:
                         new_source = CalendarSource(label="CalDAV (env)", url=CALDAV_CALENDAR)
                         session.add(new_source)

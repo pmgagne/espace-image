@@ -86,9 +86,7 @@ def _build_calendar_ics(items: list[str]) -> str | None:
     return (
         "BEGIN:VCALENDAR\n"
         "VERSION:2.0\n"
-        "PRODID:-//espace-image//CalDAV sync//EN\n"
-        + "\n".join(components)
-        + "\nEND:VCALENDAR\n"
+        "PRODID:-//espace-image//CalDAV sync//EN\n" + "\n".join(components) + "\nEND:VCALENDAR\n"
     )
 
 

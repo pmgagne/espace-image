@@ -62,8 +62,7 @@ class AlarmsRepository(IAlarmsRepository):
         """Return cached event by source and UID."""
         return session.exec(
             select(CalendarEvent).where(
-                (CalendarEvent.calendar_source_id == source_id)
-                & (CalendarEvent.uid == event_uid)
+                (CalendarEvent.calendar_source_id == source_id) & (CalendarEvent.uid == event_uid)
             )
         ).first()
 

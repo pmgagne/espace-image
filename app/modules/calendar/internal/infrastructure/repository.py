@@ -59,9 +59,9 @@ class CalendarRepository(ICalendarRepository):
         from sqlmodel import func
 
         result = session.exec(
-            select(func.count()).select_from(CalendarElement).where(
-                CalendarElement.calendar_source_id == source_id
-            )
+            select(func.count())
+            .select_from(CalendarElement)
+            .where(CalendarElement.calendar_source_id == source_id)
         ).one()
         return result or 0
 

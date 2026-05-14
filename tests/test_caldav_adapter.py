@@ -9,9 +9,7 @@ def test_fetch_caldav_disabled(monkeypatch):
     monkeypatch.setattr(cfg, "CALDAV_URL", "")
     monkeypatch.setattr(cfg, "CALDAV_CALENDAR", "")
 
-    client = importlib.import_module(
-        "app.modules.calendar.internal.infrastructure.caldav_client"
-    )
+    client = importlib.import_module("app.modules.calendar.internal.infrastructure.caldav_client")
     # Call the async function via asyncio
     import asyncio
 
@@ -32,9 +30,7 @@ def test_fetch_caldav_import_error(monkeypatch):
 
     sys.modules.pop("caldav", None)
 
-    client = importlib.import_module(
-        "app.modules.calendar.internal.infrastructure.caldav_client"
-    )
+    client = importlib.import_module("app.modules.calendar.internal.infrastructure.caldav_client")
     import asyncio
 
     res = asyncio.run(client.fetch_caldav_calendar_ics())
@@ -43,9 +39,7 @@ def test_fetch_caldav_import_error(monkeypatch):
 
 def test_fetch_caldav_matches_object_href(monkeypatch):
     """CalDAV matching should work even if calendar href is not a plain string."""
-    client = importlib.import_module(
-        "app.modules.calendar.internal.infrastructure.caldav_client"
-    )
+    client = importlib.import_module("app.modules.calendar.internal.infrastructure.caldav_client")
 
     monkeypatch.setattr(client, "CALDAV_SYNC_ENABLED", True)
     monkeypatch.setattr(client, "CALDAV_URL", "https://caldav.icloud.com")
@@ -99,9 +93,7 @@ def test_fetch_caldav_matches_object_href(monkeypatch):
 
 def test_fetch_caldav_with_sync_token_no_changes(monkeypatch):
     """No-change sync-token fetch should skip full event download."""
-    client = importlib.import_module(
-        "app.modules.calendar.internal.infrastructure.caldav_client"
-    )
+    client = importlib.import_module("app.modules.calendar.internal.infrastructure.caldav_client")
 
     monkeypatch.setattr(client, "CALDAV_SYNC_ENABLED", True)
     monkeypatch.setattr(client, "CALDAV_URL", "https://caldav.icloud.com")
@@ -153,9 +145,7 @@ def test_fetch_caldav_with_sync_token_no_changes(monkeypatch):
 
 def test_fetch_caldav_fail_on_error_raises(monkeypatch):
     """Strict mode should raise on authenticated CalDAV failures."""
-    client = importlib.import_module(
-        "app.modules.calendar.internal.infrastructure.caldav_client"
-    )
+    client = importlib.import_module("app.modules.calendar.internal.infrastructure.caldav_client")
 
     monkeypatch.setattr(client, "CALDAV_SYNC_ENABLED", True)
     monkeypatch.setattr(client, "CALDAV_URL", "https://caldav.icloud.com")

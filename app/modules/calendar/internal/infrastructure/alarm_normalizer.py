@@ -57,7 +57,9 @@ class CalendarAlarmNormalizer:
         def _run() -> int:
             window_start, window_end = CalendarAlarmNormalizer._window_bounds()
             source_by_id = {
-                source.id: source for source in session.exec(select(CalendarSource)).all() if source.id
+                source.id: source
+                for source in session.exec(select(CalendarSource)).all()
+                if source.id
             }
             elements = session.exec(select(CalendarElement)).all()
 
@@ -73,7 +75,9 @@ class CalendarAlarmNormalizer:
                     and alarm.calendar_source_id is not None
                     and alarm.calendar_event_uid is not None
                 ):
-                    dismissed_map[(alarm.calendar_source_id, alarm.calendar_event_uid)] = alarm.dismissed_at
+                    dismissed_map[(alarm.calendar_source_id, alarm.calendar_event_uid)] = (
+                        alarm.dismissed_at
+                    )
                 session.delete(alarm)
             session.flush()
 

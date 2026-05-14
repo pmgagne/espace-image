@@ -49,9 +49,7 @@ END:VCALENDAR
     inserted = asyncio.run(CalendarAlarmNormalizer.normalize(session))
 
     alarms = list(
-        session.exec(
-            select(AlarmEvent).where(AlarmEvent.calendar_source_id == source.id)
-        ).all()
+        session.exec(select(AlarmEvent).where(AlarmEvent.calendar_source_id == source.id)).all()
     )
 
     assert inserted == 2
