@@ -44,6 +44,10 @@ class ICalendarRepository(Protocol):
         """Return all sync status rows."""
         ...
 
+    def count_events_for_source(self, session: Session, source_id: int) -> int:
+        """Return the number of cached events for one source."""
+        ...
+
     def list_sources(self, session: Session) -> list[Any]:
         """Return all calendar source rows."""
         ...

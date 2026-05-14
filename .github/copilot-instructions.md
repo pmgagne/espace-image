@@ -106,6 +106,7 @@ The composition root in `app/modules/loader.py` wires all modules into the FastA
 - Store event and alarm times in UTC
 - Preserve original event timezone metadata when needed for recurrence/display
 - Keep all-day events date-safe rather than timezone-shifted
+- Convert user-facing timestamps to the user's timezone before rendering (for example, sync status like "last synced")
 
 ## Integration Notes
 

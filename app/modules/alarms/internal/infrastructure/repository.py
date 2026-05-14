@@ -6,7 +6,7 @@ from uuid import UUID
 
 from sqlmodel import Session, select
 
-from app.db.models import AlarmEvent, CalendarEventCache, CalendarSource
+from app.db.models import AlarmEvent, CalendarEvent, CalendarSource
 from app.modules.alarms.api.repositories import IAlarmsRepository
 
 
@@ -23,14 +23,14 @@ class AlarmsRepository(IAlarmsRepository):
         source_id: int,
         window_start: datetime,
         window_end: datetime,
-    ) -> list[CalendarEventCache]:
+    ) -> list[CalendarEvent]:
         """Return cached events in a time window for one source."""
         return list(
             session.exec(
-                select(CalendarEventCache).where(
-                    (CalendarEventCache.calendar_source_id == source_id)
-                    & (CalendarEventCache.event_start <= window_end)
-                    & (CalendarEventCache.event_end >= window_start)
+                select(CalendarEvent).where(
+                    (CalendarEvent.calendar_source_id == source_id)
+                    & (CalendarEvent.event_start <= window_end)
+                    & (CalendarEvent.event_end >= window_start)
                 )
             ).all()
         )
@@ -58,12 +58,11 @@ class AlarmsRepository(IAlarmsRepository):
         session: Session,
         source_id: int,
         event_uid: str,
-    ) -> CalendarEventCache | None:
+    ) -> CalendarEvent | None:
         """Return cached event by source and UID."""
         return session.exec(
-            select(CalendarEventCache).where(
-                (CalendarEventCache.calendar_source_id == source_id)
-                & (CalendarEventCache.uid == event_uid)
+            select(CalendarEvent).where(
+                (CalendarEvent.calendar_source_id == source_id) & (CalendarEvent.uid == event_uid)
             )
         ).first()
 
@@ -108,9 +107,9 @@ class AlarmsRepository(IAlarmsRepository):
         """Delete one alarm row in current transaction."""
         session.delete(alarm)
 
-    def list_cached_events(self, session: Session) -> list[CalendarEventCache]:
+    def list_cached_events(self, session: Session) -> list[CalendarEvent]:
         """Return all cached events for debug view."""
-        return list(session.exec(select(CalendarEventCache)).all())
+        return list(session.exec(select(CalendarEvent)).all())
 
     def list_all_alarms(self, session: Session) -> list[AlarmEvent]:
         """Return all alarm rows for debug view."""

@@ -1,5 +1,6 @@
 """Calendar module public interface."""
 
+from datetime import date
 from typing import Any, Protocol
 
 from app.modules.calendar.api.contracts import CalendarSourceDTO, SyncStatusDTO
@@ -10,6 +11,14 @@ class ICalendarService(Protocol):
 
     async def sync_calendars(self) -> None:
         """Sync all configured calendar sources."""
+        ...
+
+    async def normalize_alarm_occurrences(
+        self,
+        start_date: date | None = None,
+        days: int = 30,
+    ) -> int:
+        """Build normalized alarm occurrences from stored calendar elements."""
         ...
 
     async def get_calendar_events_in_window(

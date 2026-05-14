@@ -2,7 +2,7 @@
 
 import logging
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlmodel import Session
@@ -51,7 +51,7 @@ class CalendarService:
         )
 
     @staticmethod
-    def _status_to_dto(status: CalendarSyncStatusEntry) -> SyncStatusDTO:
+    def _status_to_dto(status: CalendarSyncStatusEntry, event_count: int = 0) -> SyncStatusDTO:
         """Convert CalendarSyncStatusEntry ORM to SyncStatusDTO."""
         return SyncStatusDTO(
             calendar_source_id=status.calendar_source_id,
@@ -60,12 +60,27 @@ class CalendarService:
             sync_status=status.sync_status.value,
             error_message=status.error_message,
             error_count=status.error_count,
+            event_count=event_count,
         )
 
     async def sync_calendars(self, session: Session | None = None) -> None:
         """Sync all configured calendar sources."""
         with self._session_scope(session) as active_session:
             await self._sync_gateway.sync_calendar_events(active_session)
+
+    async def normalize_alarm_occurrences(
+        self,
+        start_date: date | None = None,
+        days: int = 30,
+        session: Session | None = None,
+    ) -> int:
+        """Build normalized alarm occurrences from stored calendar elements."""
+        with self._session_scope(session) as active_session:
+            return await self._sync_gateway.normalize_alarm_occurrences(
+                active_session,
+                start_date=start_date,
+                days=days,
+            )
 
     async def get_calendar_events_in_window(
         self,
@@ -167,7 +182,15 @@ class CalendarService:
         """Get synchronization status for all calendar sources."""
         with self._session_scope(session) as active_session:
             statuses = self._repository.list_statuses(active_session)
-            return [self._status_to_dto(status) for status in statuses]
+            return [
+                self._status_to_dto(
+                    status,
+                    event_count=self._repository.count_events_for_source(
+                        active_session, status.calendar_source_id
+                    ),
+                )
+                for status in statuses
+            ]
 
     async def get_latest_sync_utc_iso(self, session: Session | None = None) -> str:
         """Return latest successful sync timestamp as an ISO string for UI polling."""

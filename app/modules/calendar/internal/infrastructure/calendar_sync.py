@@ -17,12 +17,12 @@ from sqlmodel import Session, select
 
 from app.db.models import (
     AlarmEvent,
-    CalendarEventCache,
+    CalendarElement,
     CalendarSource,
     CalendarSyncStatus,
     CalendarSyncStatusEntry,
 )
-from app.utils.timezone import ensure_utc_aware, normalize_datetime
+from app.utils.timezone import normalize_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -444,8 +444,39 @@ class CalendarService:
         Returns:
             str | None: The ICS content as a string, or None if fetch fails.
         """
+        # Support the webcal:// scheme
         if url.startswith("webcal://"):
             url = url.replace("webcal://", "https://", 1)
+
+        # For private CalDAV URLs (for example iCloud), prefer authenticated
+        # CalDAV fetch over anonymous ICS download.
+        try:
+            from app.config import CALDAV_CALENDAR, CALDAV_PASSWORD, CALDAV_URL, CALDAV_USERNAME
+            from app.modules.calendar.internal.infrastructure.caldav_client import (
+                CalDAVFetchError,
+                fetch_caldav_calendar_ics,
+            )
+
+            looks_like_icloud_caldav = "caldav.icloud.com" in url
+            has_caldav_credentials = bool(CALDAV_URL and CALDAV_USERNAME and CALDAV_PASSWORD)
+            matches_configured_calendar = bool(
+                CALDAV_CALENDAR and (CALDAV_CALENDAR in url or url in CALDAV_CALENDAR)
+            )
+
+            if has_caldav_credentials and (looks_like_icloud_caldav or matches_configured_calendar):
+                content = await fetch_caldav_calendar_ics(calendar_url=url, fail_on_error=True)
+                if content is not None:
+                    return content
+                # Authenticated CalDAV fetch completed but returned no content.
+                # Do not attempt anonymous ICS fallback for private CalDAV URLs.
+                return None
+        except CalDAVFetchError:
+            # Avoid fallback to anonymous ICS for private CalDAV URLs when
+            # authenticated CalDAV fetch fails.
+            raise
+        except Exception:
+            # If anything goes wrong, fall back to HTTP fetch below.
+            pass
 
         # Use icalevents' ICalDownload to fetch and normalize iCal content.
         downloader = ICalDownload()
@@ -552,7 +583,6 @@ class CalendarService:
                         dt = event.start
                         weekday = dt.weekday()
                         # Expand for each week in window
-                        first_in_window = window_start
                         # Find first occurrence of this weekday >= window_start
                         days_ahead = (weekday - window_start.weekday()) % 7
                         first_occurrence = window_start + timedelta(days=days_ahead)
@@ -814,12 +844,12 @@ class CalendarService:
         logger.warning(f"Failed to sync calendar {source_id}: {label}")
 
     @staticmethod
-    def _clear_existing_cache(session: Session, source_id: int) -> None:
+    def _clear_existing_elements(session: Session, source_id: int) -> None:
         existing = session.exec(
-            select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == source_id)
+            select(CalendarElement).where(CalendarElement.calendar_source_id == source_id)
         ).all()
-        for existing_event in existing:
-            session.delete(existing_event)
+        for existing_element in existing:
+            session.delete(existing_element)
         session.flush()
 
     @staticmethod
@@ -873,189 +903,26 @@ class CalendarService:
         return result
 
     @staticmethod
-    def _add_cache_entries(
+    def _add_raw_elements(
         session: Session,
-        latest_by_uid: dict[str, dict[str, Any]],
-        source: CalendarSource | None = None,
-        source_id: int | None = None,
+        source_id: int,
+        elements: list[dict[str, str | None]],
     ) -> None:
-        # Backwards-compatible: callers may pass either a CalendarSource
-        # object (new) or a source_id int (older tests/calls). Resolve to
-        # a CalendarSource instance.
-        if isinstance(source, int):
-            source_id = source
-            source = None
-        if source is None and source_id is not None:
-            source = session.get(CalendarSource, source_id)
-        if source is None:
-            # If no CalendarSource row exists for this id (tests may pass a raw id),
-            # we'll still proceed using the numeric source_id for calendar_source_id.
-            if source_id is None:
-                raise ValueError("Calendar source not provided to _add_cache_entries")
+        for element in elements:
+            uid = element.get("uid") or ""
+            raw_ics = element.get("raw_ics") or ""
+            if not uid or not raw_ics:
+                continue
 
-        # Determine calendar_source_id for DB entries
-        if source is not None:
-            try:
-                calendar_source_id = source.id
-            except Exception:
-                # Fallback if a raw int slipped through as `source`
-                calendar_source_id = int(source)
-        else:
-            calendar_source_id = source_id
-
-        from app.db.models import CalendarEventCache
-
-        for uid, event in latest_by_uid.items():
-            try:
-                # All event times are stored in UTC for consistency.
-                # Preserve original timezone identifier in `event_tz` metadata
-                # so displays and conversions can reference the source timezone.
-                ev_start = event.get("event_start")
-                ev_end = event.get("event_end")
-                tzid = event.get("tzid")
-                is_all_day = event.get("all_day", False)
-                local_tz = CalendarService._get_local_tz()
-
-                # Convert to UTC if timezone-aware; if naive, attach timezone first
-                try:
-                    if isinstance(ev_start, datetime) and ev_start.tzinfo is None and tzid:
-                        ev_start = ev_start.replace(tzinfo=ZoneInfo(tzid))
-                    elif (
-                        isinstance(ev_start, datetime)
-                        and ev_start.tzinfo is None
-                        and local_tz is not None
-                    ):
-                        ev_start = ev_start.replace(tzinfo=local_tz)
-                    # Convert to UTC
-                    if isinstance(ev_start, datetime) and ev_start.tzinfo is not None:
-                        ev_start = ensure_utc_aware(ev_start)
-                        # Fix for all-day events: icalevents returns them at midnight UTC,
-                        # which shifts to the previous day when converted to negative UTC offsets.
-                        # Shift all-day events to noon UTC so they display correctly in all timezones.
-                        if is_all_day and ev_start.hour == 0 and ev_start.minute == 0:
-                            ev_start = ev_start.replace(hour=12)
-                except Exception:
-                    pass
-
-                try:
-                    if isinstance(ev_end, datetime) and ev_end.tzinfo is None and tzid:
-                        ev_end = ev_end.replace(tzinfo=ZoneInfo(tzid))
-                    elif (
-                        isinstance(ev_end, datetime)
-                        and ev_end.tzinfo is None
-                        and local_tz is not None
-                    ):
-                        ev_end = ev_end.replace(tzinfo=local_tz)
-                    # Convert to UTC
-                    if isinstance(ev_end, datetime) and ev_end.tzinfo is not None:
-                        ev_end = ensure_utc_aware(ev_end)
-                        # Fix for all-day events: shift end time to noon UTC as well
-                        if is_all_day and ev_end.hour == 0 and ev_end.minute == 0:
-                            ev_end = ev_end.replace(hour=12)
-                except Exception:
-                    pass
-            except Exception:
-                pass
-
-            # Trigger time is already converted to UTC in extract_trigger_time()
-            trigger_time = event.get("trigger_time")
-            if trigger_time is not None:
-                try:
-                    trigger_time = ensure_utc_aware(trigger_time)
-                except Exception:
-                    pass
-
-            # Determine if we should add a default midnight alarm for events without VALARM
-            optional_trigger_flag = False
-            try:
-                use_default_alarm = (
-                    bool(getattr(source, "default_alarm_for_all_events", False))
-                    if source is not None
-                    else False
-                )
-            except Exception:
-                use_default_alarm = False
-
-            if trigger_time is None and use_default_alarm:
-                # Compute midnight at event start's date in the event timezone (or local tz)
-                try:
-                    ev_start_orig = event.get("event_start")
-                    if ev_start_orig is not None:
-                        local_tz = CalendarService._get_local_tz()
-                        if isinstance(ev_start_orig, datetime):
-                            midnight = datetime.combine(ev_start_orig.date(), datetime.min.time())
-                            if ev_start_orig.tzinfo is not None:
-                                midnight = midnight.replace(tzinfo=ev_start_orig.tzinfo)
-                            elif local_tz is not None:
-                                midnight = midnight.replace(tzinfo=local_tz)
-                        else:
-                            # ev_start_orig likely a date
-                            midnight = datetime.combine(ev_start_orig, datetime.min.time())
-                            if local_tz is not None:
-                                midnight = midnight.replace(tzinfo=local_tz)
-                        trigger_time = ensure_utc_aware(midnight)
-                        optional_trigger_flag = True
-                except Exception:
-                    optional_trigger_flag = False
-
-            # For recurring events, we may have multiple occurrences with the same UID
-            # but different start times (e.g., Feb 13 and Feb 27 for biweekly events).
-            # Try to find and update existing entry first, or insert if none found.
-            try:
-                existing = session.exec(
-                    select(CalendarEventCache).where(
-                        (CalendarEventCache.calendar_source_id == calendar_source_id)
-                        & (CalendarEventCache.uid == uid)
-                    )
-                ).first()
-
-                if existing:
-                    # Update existing entry
-                    existing.event_start = cast(Any, ev_start)
-                    existing.event_end = cast(Any, ev_end)
-                    existing.event_tz = tzid
-                    existing.summary = event["summary"]
-                    existing.description = event["description"]
-                    existing.location = event["location"]
-                    # Persist whether this was an all-day event
-                    try:
-                        existing.all_day = bool(event.get("all_day", False))
-                    except Exception:
-                        existing.all_day = False
-                    existing.trigger_time = trigger_time
-                    existing.optional_trigger = optional_trigger_flag
-                    session.add(existing)
-                else:
-                    # Insert new entry
-                    cache_entry = CalendarEventCache(
-                        calendar_source_id=calendar_source_id,
-                        uid=uid,
-                        event_start=cast(Any, ev_start),
-                        event_end=cast(Any, ev_end),
-                        event_tz=tzid,
-                        summary=event["summary"],
-                        description=event["description"],
-                        location=event["location"],
-                        all_day=bool(event.get("all_day", False)),
-                        trigger_time=trigger_time,
-                        optional_trigger=optional_trigger_flag,
-                    )
-                    session.add(cache_entry)
-            except Exception as e:
-                # If update fails, still try to add as new
-                cache_entry = CalendarEventCache(
-                    calendar_source_id=calendar_source_id,
+            session.add(
+                CalendarElement(
+                    calendar_source_id=source_id,
                     uid=uid,
-                    event_start=cast(Any, ev_start),
-                    event_end=cast(Any, ev_end),
-                    event_tz=tzid,
-                    summary=event["summary"],
-                    description=event["description"],
-                    location=event["location"],
-                    trigger_time=trigger_time,
-                    optional_trigger=optional_trigger_flag,
+                    href=element.get("href") or "",
+                    etag=element.get("etag"),
+                    raw_ics=raw_ics,
                 )
-                session.add(cache_entry)
+            )
 
     @staticmethod
     def _finalize_success(
@@ -1064,11 +931,14 @@ class CalendarService:
         utc_now: datetime,
         events: list[dict[str, Any]],
         source: CalendarSource,
+        sync_token: str | None = None,
     ) -> None:
         sync_status.sync_status = CalendarSyncStatus.SUCCESS
         sync_status.last_synced_at = utc_now
         sync_status.error_count = 0
         sync_status.error_message = ""
+        if sync_token:
+            sync_status.sync_token = sync_token
         session.add(sync_status)
         session.commit()
         logger.info(
@@ -1127,7 +997,83 @@ class CalendarService:
         CalendarService._mark_syncing(session, sync_status)
 
         try:
-            ics_content = await CalendarService.fetch_ics(source.url)
+            ics_content: str | None = None
+            next_sync_token = sync_status.sync_token
+            raw_elements: list[dict[str, str | None]] = []
+
+            # Prefer sync-token aware CalDAV fetch for private CalDAV URLs.
+            try:
+                from app.config import CALDAV_CALENDAR, CALDAV_PASSWORD, CALDAV_URL, CALDAV_USERNAME
+                from app.modules.calendar.internal.infrastructure.caldav_client import (
+                    CalDAVFetchError,
+                    fetch_caldav_calendar_ics_with_metadata,
+                )
+
+                looks_like_icloud_caldav = "caldav.icloud.com" in source.url
+                has_caldav_credentials = bool(CALDAV_URL and CALDAV_USERNAME and CALDAV_PASSWORD)
+                matches_configured_calendar = bool(
+                    CALDAV_CALENDAR
+                    and (CALDAV_CALENDAR in source.url or source.url in CALDAV_CALENDAR)
+                )
+
+                if has_caldav_credentials and (
+                    looks_like_icloud_caldav or matches_configured_calendar
+                ):
+                    caldav_result = await fetch_caldav_calendar_ics_with_metadata(
+                        calendar_url=source.url,
+                        sync_token=sync_status.sync_token,
+                        fail_on_error=True,
+                    )
+                    next_sync_token = caldav_result.sync_token or sync_status.sync_token
+                    if not caldav_result.changed:
+                        CalendarService._finalize_success(
+                            session,
+                            sync_status,
+                            utc_now,
+                            [],
+                            source,
+                            sync_token=next_sync_token,
+                        )
+                        logger.info(
+                            "No CalDAV changes for calendar %s (%s); token advanced.",
+                            source.id,
+                            source.label,
+                        )
+                        return
+                    ics_content = caldav_result.content
+                    raw_elements = [
+                        {
+                            "uid": element.uid,
+                            "href": element.href,
+                            "etag": element.etag,
+                            "raw_ics": element.raw_ics,
+                        }
+                        for element in caldav_result.elements
+                    ]
+                else:
+                    ics_content = await CalendarService.fetch_ics(source.url)
+                    if ics_content is not None:
+                        raw_elements = [
+                            {
+                                "uid": f"source-{source_id}",
+                                "href": source.url,
+                                "etag": None,
+                                "raw_ics": ics_content,
+                            }
+                        ]
+            except CalDAVFetchError:
+                raise
+            except Exception:
+                ics_content = await CalendarService.fetch_ics(source.url)
+                if ics_content is not None:
+                    raw_elements = [
+                        {
+                            "uid": f"source-{source_id}",
+                            "href": source.url,
+                            "etag": None,
+                            "raw_ics": ics_content,
+                        }
+                    ]
 
             if ics_content is None:
                 CalendarService._handle_fetch_failure(
@@ -1135,24 +1081,9 @@ class CalendarService:
                 )
                 return
 
-            fix_icloud = "icloud.com" in source.url
-            events = CalendarService.extract_events_from_ics(
-                ics_content,
-                source_id,
-                window_start,
-                window_end,
-                fix_icloud=fix_icloud,
-            )
-
-            # Remove cached events for this source (we'll re-insert)
-            CalendarService._clear_existing_cache(session, source_id)
-
-            latest_by_uid = CalendarService._select_latest_by_uid(events)
-            CalendarService._add_cache_entries(
-                session,
-                latest_by_uid,
-                source,
-            )
+            # Remove existing raw elements and replace with latest payloads.
+            CalendarService._clear_existing_elements(session, source_id)
+            CalendarService._add_raw_elements(session, source_id, raw_elements)
 
             session.commit()
 
@@ -1160,8 +1091,9 @@ class CalendarService:
                 session,
                 sync_status,
                 utc_now,
-                events,
+                raw_elements,
                 source,
+                sync_token=next_sync_token,
             )
 
         except Exception as e:
@@ -1181,10 +1113,42 @@ class CalendarService:
         window and handles errors gracefully.
         """
         utc_now = datetime.now(UTC)
-        window_start = utc_now - timedelta(days=7)
-        window_end = utc_now + timedelta(days=7)
+        # No date window — store all events from the calendar.
+        # Use a wide static range to avoid recurrence-rule explosion on
+        # unbounded FREQ= rules while still capturing everything practical.
+        window_start = datetime(2000, 1, 1, tzinfo=UTC)
+        window_end = datetime(2100, 1, 1, tzinfo=UTC)
 
         sources = session.exec(select(CalendarSource)).all()
+        # If a CalDAV calendar is configured via env and not present in DB,
+        # create a lightweight CalendarSource so it participates in sync.
+        try:
+            from app.config import CALDAV_CALENDAR, CALDAV_SYNC_ENABLED
+
+            if CALDAV_SYNC_ENABLED and CALDAV_CALENDAR:
+                found = False
+                for s in sources:
+                    try:
+                        if s.url == CALDAV_CALENDAR:
+                            found = True
+                            break
+                    except Exception:
+                        continue
+                if not found:
+                    logger.info(
+                        "Registering env CalDAV calendar as CalendarSource: %s", CALDAV_CALENDAR
+                    )
+                    try:
+                        new_source = CalendarSource(label="CalDAV (env)", url=CALDAV_CALENDAR)
+                        session.add(new_source)
+                        session.commit()
+                        session.refresh(new_source)
+                        sources.append(new_source)
+                    except Exception:
+                        session.rollback()
+        except Exception:
+            # If config import or DB creation fails, continue without CalDAV env source
+            pass
         if not sources:
             logger.info("No calendar sources configured.")
             return

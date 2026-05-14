@@ -29,6 +29,7 @@ app/
 - When refactoring, migrate all template rendering to presenters and ensure services return DTOs only.
 - When adding tests, include at least one unit test per presenter.
 - Never mix HTML rendering with business logic or service APIs.
+- Keep storage timestamps in UTC, but convert user-facing timestamps to the user's timezone when rendering (for example, "last synced").
 
 ## Reference
 See ADR-2026-05-04-modular-monolith-presenter-pattern.md for rationale and details.

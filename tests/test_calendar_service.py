@@ -7,7 +7,7 @@ import pytest
 from sqlmodel import Session, select
 
 from app.db.models import (
-    CalendarEventCache,
+    CalendarEvent,
     CalendarSource,
     CalendarSyncStatus,
     CalendarSyncStatusEntry,
@@ -99,7 +99,7 @@ def test_sync_calendar_events_success(session):
         CalendarService.fetch_ics = original_fetch
 
     cached = session.exec(
-        select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == source.id)
+        select(CalendarEvent).where(CalendarEvent.calendar_source_id == source.id)
     ).all()
 
     assert len(cached) == 1
@@ -397,16 +397,36 @@ def load_and_cache_events(
         window_end=window_end,
     )
     latest_by_uid = CalendarService._select_latest_by_uid(events)
-    CalendarService._add_cache_entries(session, latest_by_uid, source_id)
+    from app.db.models import CalendarEvent
+
+    for uid, event in latest_by_uid.items():
+        session.add(
+            CalendarEvent(
+                calendar_source_id=source_id,
+                uid=uid,
+                event_start=event.get("event_start"),
+                event_end=event.get("event_end"),
+                event_tz=event.get("tzid"),
+                summary=event.get("summary", ""),
+                description=event.get("description", ""),
+                location=event.get("location", ""),
+                all_day=bool(event.get("all_day", False)),
+                trigger_time=event.get("trigger_time"),
+                optional_trigger=False,
+                href="",
+                etag=None,
+                raw_ics="",
+            )
+        )
     session.commit()
     return events
 
 
 def set_event_time(session: Session, uid: str, start: datetime, end: datetime) -> None:
     """Update cached event time."""
-    from app.db.models import CalendarEventCache
+    from app.db.models import CalendarEvent
 
-    row = session.exec(select(CalendarEventCache).where(CalendarEventCache.uid == uid)).first()
+    row = session.exec(select(CalendarEvent).where(CalendarEvent.uid == uid)).first()
     if row:
         row.event_start = start
         row.event_end = end
@@ -596,14 +616,34 @@ def test_comprehensive_calendar_parsing_and_alarms(session):
     assert "proximity-alarm@example.com" in prox
 
     latest_by_uid = CalendarService._select_latest_by_uid(events)
-    CalendarService._add_cache_entries(session, latest_by_uid, source_id=1)
+    from app.db.models import CalendarEvent
+
+    for uid, event in latest_by_uid.items():
+        session.add(
+            CalendarEvent(
+                calendar_source_id=1,
+                uid=uid,
+                event_start=event.get("event_start"),
+                event_end=event.get("event_end"),
+                event_tz=event.get("tzid"),
+                summary=event.get("summary", ""),
+                description=event.get("description", ""),
+                location=event.get("location", ""),
+                all_day=bool(event.get("all_day", False)),
+                trigger_time=event.get("trigger_time"),
+                optional_trigger=False,
+                href="",
+                etag=None,
+                raw_ics="",
+            )
+        )
     session.commit()
 
     now = datetime.now(UTC)
-    from app.db.models import CalendarEventCache
+    from app.db.models import CalendarEvent
 
     all_rows = session.exec(
-        select(CalendarEventCache).where(CalendarEventCache.calendar_source_id == 1)
+        select(CalendarEvent).where(CalendarEvent.calendar_source_id == 1)
     ).all()
 
     single_row = None
