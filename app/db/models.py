@@ -110,3 +110,4 @@ class CalendarSyncStatusEntry(SQLModel, table=True):
     error_count: int = Field(default=0)
     last_error_at: datetime | None = Field(default=None)
     sync_token: str | None = Field(default=None)
+    last_general_sync_at: datetime | None = Field(default=None)

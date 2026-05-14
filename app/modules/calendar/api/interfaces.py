@@ -3,7 +3,11 @@
 from datetime import date
 from typing import Any, Protocol
 
-from app.modules.calendar.api.contracts import CalendarSourceDTO, SyncStatusDTO
+from app.modules.calendar.api.contracts import (
+    CalendarSourceDTO,
+    GeneralSyncResultDTO,
+    SyncStatusDTO,
+)
 
 
 class ICalendarService(Protocol):
@@ -11,6 +15,14 @@ class ICalendarService(Protocol):
 
     async def sync_calendars(self) -> None:
         """Sync all configured calendar sources."""
+        ...
+
+    async def general_sync(
+        self,
+        start_date: date | None = None,
+        days: int = 30,
+    ) -> GeneralSyncResultDTO:
+        """Run calendar sync followed by alarm normalization with skip logic."""
         ...
 
     async def normalize_alarm_occurrences(

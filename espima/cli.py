@@ -509,8 +509,52 @@ def caldav_sync(
     asyncio.run(_sync_sources())
 
 
-@alarms_app.command("process")
-def alarms_process(
+@app.command("sync")
+def sync_full(
+    start_date: str | None = typer.Option(
+        default=None,
+        help="Start date for alarm sync (YYYY-MM-DD). Defaults to today UTC.",
+    ),
+    days: int = typer.Option(
+        default=30,
+        min=1,
+        help="Number of days to sync from start-date.",
+    ),
+) -> None:
+    """Run general sync: calendars first, then alarm normalization."""
+
+    async def _sync() -> None:
+        service = _build_calendar_service()
+        parsed_start_date = _parse_start_date(start_date)
+
+        with console.status("Running general sync..."):
+            result = await service.general_sync(
+                start_date=parsed_start_date,
+                days=days,
+            )
+
+        if result.alarms_skipped:
+            console.print(
+                f"[yellow]Skipped alarm sync:[/yellow] {result.alarms_skip_reason or 'skip-policy'}"
+            )
+        else:
+            console.print(
+                f"[green]Normalized alarm occurrences:[/green] {result.normalized_alarm_count}"
+            )
+
+        if not result.calendar_sync_success:
+            console.print("[yellow]Calendar sync stage had one or more failures.[/yellow]")
+
+        if not (result.calendar_sync_success and result.alarms_sync_success):
+            raise typer.Exit(code=1)
+
+        console.print("[green]General sync completed.[/green]")
+
+    asyncio.run(_sync())
+
+
+@alarms_app.command("sync")
+def alarms_sync(
     start_date: str | None = typer.Option(
         default=None,
         help="Start date for recurrence expansion (YYYY-MM-DD). Defaults to today UTC.",
@@ -518,10 +562,10 @@ def alarms_process(
     days: int = typer.Option(
         default=30,
         min=1,
-        help="Number of days to process from start-date.",
+        help="Number of days to sync from start-date.",
     ),
 ) -> None:
-    """Process events and alarms from calendar_elements into alarmevent over a date range."""
+    """Sync alarm occurrences from calendar_elements into alarmevent over a date range."""
 
     async def _normalize() -> None:
         service = _build_calendar_service()

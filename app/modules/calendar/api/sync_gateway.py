@@ -5,12 +5,18 @@ from typing import Protocol
 
 from sqlmodel import Session
 
+from app.modules.calendar.api.contracts import CalendarSyncReportDTO
+
 
 class ICalendarSyncGateway(Protocol):
     """Infrastructure gateway for calendar synchronization and ICS fetches."""
 
     async def sync_calendar_events(self, session: Session) -> None:
         """Sync all configured calendar events using the given session."""
+        ...
+
+    async def sync_calendar_events_with_report(self, session: Session) -> CalendarSyncReportDTO:
+        """Sync calendar events and return a per-source report for orchestration decisions."""
         ...
 
     async def normalize_alarm_occurrences(
@@ -24,4 +30,8 @@ class ICalendarSyncGateway(Protocol):
 
     async def fetch_ics(self, url: str) -> str | None:
         """Fetch ICS content for a source URL."""
+        ...
+
+    async def mark_general_sync_completed(self, session: Session, source_ids: list[int]) -> None:
+        """Persist completion timestamp for one general sync run across source statuses."""
         ...

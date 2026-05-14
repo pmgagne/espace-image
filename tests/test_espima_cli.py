@@ -29,6 +29,7 @@ class DummyCalendarService:
         self.normalized_count = 0
         self.last_normalize_start_date: date | None = None
         self.last_normalize_days = 0
+        self.general_sync_called = False
 
     async def get_calendars_for_ui(self) -> dict[str, list[DummySource]]:
         return {"sources": self.sources}
@@ -57,6 +58,31 @@ class DummyCalendarService:
         self.last_normalize_start_date = start_date
         self.last_normalize_days = days
         return 7
+
+    async def general_sync(
+        self,
+        start_date: date | None = None,
+        days: int = 30,
+    ) -> object:
+        self.general_sync_called = True
+        self.last_normalize_start_date = start_date
+        self.last_normalize_days = days
+
+        @dataclass
+        class Result:
+            calendar_sync_success: bool
+            alarms_sync_success: bool
+            alarms_skipped: bool
+            alarms_skip_reason: str | None
+            normalized_alarm_count: int
+
+        return Result(
+            calendar_sync_success=True,
+            alarms_sync_success=True,
+            alarms_skipped=False,
+            alarms_skip_reason=None,
+            normalized_alarm_count=7,
+        )
 
     async def get_sync_status(self) -> list[object]:
         @dataclass
@@ -175,8 +201,8 @@ def test_caldav_sync_runs_service(monkeypatch) -> None:
     assert service.synced is True
 
 
-def test_alarms_process_runs_service(monkeypatch) -> None:
-    """alarms process should invoke normalization pipeline."""
+def test_alarms_sync_runs_service(monkeypatch) -> None:
+    """alarms sync should invoke normalization pipeline."""
     service = DummyCalendarService()
     monkeypatch.setattr("espima.cli._build_calendar_service", lambda: service)
 
@@ -184,7 +210,7 @@ def test_alarms_process_runs_service(monkeypatch) -> None:
         cli.app,
         [
             "alarms",
-            "process",
+            "sync",
             "--start-date",
             "2026-01-15",
             "--days",
@@ -197,6 +223,29 @@ def test_alarms_process_runs_service(monkeypatch) -> None:
     assert service.last_normalize_start_date == date(2026, 1, 15)
     assert service.last_normalize_days == 14
     assert "Normalized alarm occurrences" in result.stdout
+
+
+def test_sync_runs_general_sync(monkeypatch) -> None:
+    """top-level sync should call general sync with parsed alarm window."""
+    service = DummyCalendarService()
+    monkeypatch.setattr("espima.cli._build_calendar_service", lambda: service)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "sync",
+            "--start-date",
+            "2026-01-15",
+            "--days",
+            "14",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert service.general_sync_called is True
+    assert service.last_normalize_start_date == date(2026, 1, 15)
+    assert service.last_normalize_days == 14
+    assert "General sync completed" in result.stdout
 
 
 def test_alarms_list_shows_rows(monkeypatch) -> None:
