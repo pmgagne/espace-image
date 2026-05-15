@@ -52,7 +52,6 @@ class CalendarService:
             label=source.label,
             url=source.url,
             color=source.color or "#3182ce",
-            default_alarm_for_all_events=source.default_alarm_for_all_events,
         )
 
     @staticmethod
@@ -257,22 +256,6 @@ class CalendarService:
             source = self._repository.create_source(active_session, label, url, color)
             return self._source_to_dto(source)
 
-    async def update_source_defaults(
-        self,
-        source_id: int,
-        default_alarm: bool,
-        session: Session | None = None,
-    ) -> CalendarSourceDTO:
-        """Update calendar source default alarm setting."""
-        with self._session_scope(session) as active_session:
-            source = self._repository.get_source(active_session, source_id)
-            if not source:
-                msg = f"Calendar source {source_id} not found"
-                raise ValueError(msg)
-            source.default_alarm_for_all_events = default_alarm
-            source = self._repository.save_source(active_session, source)
-            return self._source_to_dto(source)
-
     async def delete_source(self, source_id: int, session: Session | None = None) -> bool:
         """Delete a calendar source."""
         with self._session_scope(session) as active_session:
@@ -299,11 +282,13 @@ class CalendarService:
     async def get_latest_sync_utc_iso(self, session: Session | None = None) -> str:
         """Return latest successful sync timestamp as an ISO string for UI polling."""
         statuses = await self.get_sync_status(session=session)
-        latest_sync = ""
+        latest_sync: datetime | None = None
         for status in statuses:
-            if status.last_synced_at and status.last_synced_at > latest_sync:
+            if status.last_synced_at and (
+                latest_sync is None or status.last_synced_at > latest_sync
+            ):
                 latest_sync = status.last_synced_at
-        return latest_sync
+        return latest_sync.isoformat() if latest_sync else ""
 
     async def get_debug_calendar_state(self, session: Session | None = None) -> dict[str, Any]:
         """Get calendar sources and sync status for debugging."""

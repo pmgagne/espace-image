@@ -1,7 +1,8 @@
 """Tests for calendar element alarm normalization pipeline."""
 
 import asyncio
-from datetime import date
+from datetime import UTC, date, datetime
+from unittest.mock import patch
 
 from sqlmodel import select
 
@@ -127,3 +128,19 @@ END:VCALENDAR
     assert len(alarms) == 3
     assert len(event_rows) == 1
     assert len(alarm_rows) == 2
+
+
+def test_default_window_bounds_include_previous_utc_day() -> None:
+    """Default normalization window should include the prior UTC day for local-evening events."""
+    mocked_now = datetime(2026, 5, 15, 1, 30, tzinfo=UTC)
+
+    with patch(
+        "app.modules.calendar.internal.infrastructure.alarm_normalizer.datetime"
+    ) as mocked_datetime:
+        mocked_datetime.now.return_value = mocked_now
+        mocked_datetime.side_effect = datetime
+
+        start, end = CalendarAlarmNormalizer._window_bounds(start_date=None, days=30)
+
+    assert start == datetime(2026, 5, 14, 0, 0, tzinfo=UTC)
+    assert end == datetime(2026, 6, 13, 0, 0, tzinfo=UTC)

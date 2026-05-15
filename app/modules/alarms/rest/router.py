@@ -22,6 +22,16 @@ async def get_active_alarms(
     return JSONResponse(content=jsonable_encoder(alarms))
 
 
+@router.get("/today")
+async def get_today_payload(
+    tz_offset: int | None = Query(None),
+    alarms_service: IAlarmsService = Depends(get_alarms_service),
+) -> JSONResponse:
+    """Return today's alarms and events payload for frontend scheduling."""
+    payload = await alarms_service.get_today_payload(tz_offset=tz_offset)
+    return JSONResponse(content=jsonable_encoder(payload))
+
+
 @router.post("/{alarm_id}/dismiss")
 async def dismiss_alarm(
     alarm_id: str,

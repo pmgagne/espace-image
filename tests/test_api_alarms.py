@@ -13,6 +13,19 @@ def test_api_get_active_alarms_returns_json_list(client):
     assert isinstance(response.json(), list)
 
 
+def test_api_get_today_payload_returns_expected_shape(client):
+    response = client.get("/api/v1/alarms/today?tz_offset=0")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+
+    payload = response.json()
+    assert "fetched_at_utc" in payload
+    assert "day_start_utc" in payload
+    assert "day_end_utc" in payload
+    assert isinstance(payload.get("alarms"), list)
+    assert isinstance(payload.get("events"), list)
+
+
 def test_api_create_simulated_alarm_returns_json_and_persists(client, session):
     response = client.post("/api/v1/alarms/simulated", json={"delay_seconds": 5})
     assert response.status_code == 201

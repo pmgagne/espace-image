@@ -47,7 +47,6 @@ class SettingsModuleService(ISettingsService):
             weather_latitude=settings.weather_latitude,
             weather_longitude=settings.weather_longitude,
             slideshow_duration=settings.slideshow_duration,
-            default_alarm_for_all_events=settings.default_alarm_for_all_events,
         )
 
     def get_settings(self, session: Session | None = None) -> AppSettingsDTO | None:
@@ -74,7 +73,6 @@ class SettingsModuleService(ISettingsService):
         latitude: float | None,
         longitude: float | None,
         duration: int | None,
-        default_alarm_for_all_events: bool,
         session: Session | None = None,
     ) -> AppSettingsDTO:
         """Persist settings updates and return resulting row."""
@@ -93,7 +91,6 @@ class SettingsModuleService(ISettingsService):
             settings.weather_longitude = longitude
             if duration is not None:
                 settings.slideshow_duration = duration
-            settings.default_alarm_for_all_events = default_alarm_for_all_events
 
             saved_settings = self._repository.save(active_session, settings)
             return self._settings_to_dto(saved_settings)

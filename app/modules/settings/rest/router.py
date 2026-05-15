@@ -9,7 +9,6 @@ from app.modules.settings.api.interfaces import ISettingsService, get_settings_s
 
 from .schemas import (
     ActivePresetRequest,
-    DefaultAlarmPolicyRequest,
     SlideshowDurationRequest,
     WeatherLocationRequest,
 )
@@ -19,7 +18,7 @@ router = APIRouter(prefix="/api/v1/settings", tags=["api-settings"])
 
 def _current_settings_values(
     settings_service: ISettingsService,
-) -> dict[str, int | float | bool | None]:
+) -> dict[str, int | float | None]:
     """Return current settings values or model defaults for partial updates."""
     current = settings_service.get_settings()
     if current is None:
@@ -28,7 +27,6 @@ def _current_settings_values(
             "latitude": None,
             "longitude": None,
             "duration": 30,
-            "default_alarm_for_all_events": False,
         }
 
     return {
@@ -36,7 +34,6 @@ def _current_settings_values(
         "latitude": current.weather_latitude,
         "longitude": current.weather_longitude,
         "duration": current.slideshow_duration,
-        "default_alarm_for_all_events": current.default_alarm_for_all_events,
     }
 
 
@@ -47,7 +44,6 @@ def _save_settings(
     latitude: float | None,
     longitude: float | None,
     duration: int | None,
-    default_alarm_for_all_events: bool,
 ) -> JSONResponse:
     """Validate and persist settings changes, translating public errors to HTTP."""
     try:
@@ -57,7 +53,6 @@ def _save_settings(
             latitude=latitude,
             longitude=longitude,
             duration=duration,
-            default_alarm_for_all_events=default_alarm_for_all_events,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -96,7 +91,6 @@ async def set_active_preset(
         latitude=current["latitude"],
         longitude=current["longitude"],
         duration=current["duration"],
-        default_alarm_for_all_events=current["default_alarm_for_all_events"],
     )
 
 
@@ -113,7 +107,6 @@ async def set_slideshow_duration(
         latitude=current["latitude"],
         longitude=current["longitude"],
         duration=payload.slideshow_duration,
-        default_alarm_for_all_events=current["default_alarm_for_all_events"],
     )
 
 
@@ -130,22 +123,4 @@ async def set_weather_location(
         latitude=payload.latitude,
         longitude=payload.longitude,
         duration=current["duration"],
-        default_alarm_for_all_events=current["default_alarm_for_all_events"],
-    )
-
-
-@router.put("/default-alarm-policy")
-async def set_default_alarm_policy(
-    payload: DefaultAlarmPolicyRequest,
-    settings_service: ISettingsService = Depends(get_settings_service),
-) -> JSONResponse:
-    """Set the default alarm policy while preserving other settings values."""
-    current = _current_settings_values(settings_service)
-    return _save_settings(
-        settings_service,
-        active_preset_id=current["active_preset_id"],
-        latitude=current["latitude"],
-        longitude=current["longitude"],
-        duration=current["duration"],
-        default_alarm_for_all_events=payload.default_alarm_for_all_events,
     )

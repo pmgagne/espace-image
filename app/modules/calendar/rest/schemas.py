@@ -9,9 +9,3 @@ class CreateCalendarSourceRequest(BaseModel):
     label: str = Field(min_length=1)
     url: str = Field(min_length=1)
     color: str = "#3182ce"
-
-
-class UpdateCalendarDefaultAlarmRequest(BaseModel):
-    """Request payload for updating default alarm policy on a source."""
-
-    default_alarm_for_all_events: bool

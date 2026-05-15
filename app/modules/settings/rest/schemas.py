@@ -20,9 +20,3 @@ class WeatherLocationRequest(BaseModel):
 
     latitude: float | None
     longitude: float | None
-
-
-class DefaultAlarmPolicyRequest(BaseModel):
-    """Request payload for changing the global default alarm policy."""
-
-    default_alarm_for_all_events: bool

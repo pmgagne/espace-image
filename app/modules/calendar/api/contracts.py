@@ -11,7 +11,6 @@ class CalendarSourceDTO:
     label: str
     url: str
     color: str
-    default_alarm_for_all_events: bool
 
 
 @dataclass(frozen=True)

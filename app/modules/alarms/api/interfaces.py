@@ -51,6 +51,13 @@ class IAlarmsService(Protocol):
         """Return alarm payloads transformed for template rendering."""
         ...
 
+    async def get_today_payload(
+        self,
+        tz_offset: int | None,
+    ) -> dict[str, Any]:
+        """Return today's alarms and events payload for frontend scheduling."""
+        ...
+
 
 def get_alarms_service() -> IAlarmsService:
     """Dependency injection token for alarms service."""

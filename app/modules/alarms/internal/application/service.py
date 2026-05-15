@@ -69,6 +69,57 @@ class AlarmsService:
             return (None, entry_uid)
         return (parts[0], parts[1])
 
+    @staticmethod
+    def _extract_summary_from_raw_ics(raw_ics: str | None) -> str | None:
+        """Return unfolded ICS SUMMARY text when present."""
+        if not raw_ics:
+            return None
+
+        unfolded_lines: list[str] = []
+        for line in raw_ics.splitlines():
+            if line.startswith((" ", "\t")) and unfolded_lines:
+                unfolded_lines[-1] += line[1:]
+                continue
+            unfolded_lines.append(line)
+
+        for line in unfolded_lines:
+            upper = line.upper()
+            if not upper.startswith("SUMMARY"):
+                continue
+            _, _, value = line.partition(":")
+            summary = value.strip()
+            return summary or None
+
+        return None
+
+    def _resolve_calendar_alarm_metadata(
+        self,
+        session: Session,
+        source_id: int,
+        base_uid: str,
+    ) -> tuple[str, str | None, bool, datetime | None, datetime | None]:
+        """Resolve display metadata for one calendar occurrence from cached raw elements."""
+        cached_event = self._repository.get_cached_event_by_uid(session, source_id, base_uid)
+        name = base_uid
+        tzid = None
+        all_day = False
+        start_value = None
+        end_value = None
+
+        if cached_event is None:
+            return (name, tzid, all_day, start_value, end_value)
+
+        name = (
+            getattr(cached_event, "summary", None)
+            or self._extract_summary_from_raw_ics(getattr(cached_event, "raw_ics", None))
+            or base_uid
+        )
+        tzid = getattr(cached_event, "event_tz", None)
+        all_day = bool(getattr(cached_event, "all_day", False))
+        start_value = getattr(cached_event, "event_start", None)
+        end_value = getattr(cached_event, "event_end", None)
+        return (name, tzid, all_day, start_value, end_value)
+
     async def get_active_alarms(self, session: Session | None = None) -> list[dict[str, Any]]:
         """
         Fetch active alarms that should be displayed.
@@ -106,7 +157,7 @@ class AlarmsService:
             return self._alarm_to_dto(alarm)
 
     async def _fetch_calendar_alarms(self, session: Session) -> list[dict[str, Any]]:
-        """Fetch typed calendar alarm/event rows and enrich with calendar metadata."""
+        """Fetch active calendar alarms (VALARM rows) and enrich with metadata."""
         utc_now = datetime.now(UTC)
         window_start = utc_now - timedelta(days=7)
         active_alarms: list[dict[str, Any]] = []
@@ -122,6 +173,10 @@ class AlarmsService:
             except Exception:
                 continue
 
+            entry_type = str(alarm_row.entry_type)
+            if entry_type != AlarmEntryType.ALARM.value:
+                continue
+
             if trigger_aware < window_start or trigger_aware > utc_now:
                 continue
 
@@ -129,30 +184,17 @@ class AlarmsService:
             if not base_uid:
                 continue
 
-            cached_event = self._repository.get_cached_event_by_uid(
+            start_value = trigger_aware
+            end_value = trigger_aware + timedelta(hours=1)
+            name, tzid, all_day, cached_start, cached_end = self._resolve_calendar_alarm_metadata(
                 session,
                 alarm_row.calendar_source_id,
                 base_uid,
             )
-
-            entry_type = str(alarm_row.entry_type)
-            start_value = trigger_aware
-            end_value = trigger_aware + timedelta(hours=1)
-            name = base_uid
-            tzid = None
-            all_day = False
-
-            if cached_event is not None:
-                name = cached_event.summary or base_uid
-                tzid = getattr(cached_event, "event_tz", None)
-                all_day = bool(getattr(cached_event, "all_day", False))
-                if (
-                    entry_type == AlarmEntryType.EVENT.value
-                    and cached_event.event_start is not None
-                ):
-                    start_value = cached_event.event_start
-                if cached_event.event_end is not None:
-                    end_value = cached_event.event_end
+            if cached_start is not None:
+                start_value = cached_start
+            if cached_end is not None:
+                end_value = cached_end
 
             active_alarms.append(
                 {
@@ -201,6 +243,129 @@ class AlarmsService:
             alarms.append(alarm)
 
         return alarms
+
+    @staticmethod
+    def _local_day_window_utc(tz_offset: int | None) -> tuple[datetime, datetime]:
+        """Return today's local-day window converted to UTC bounds."""
+        offset_minutes = int(tz_offset) if tz_offset is not None else 0
+        now_utc = datetime.now(UTC)
+        now_local = now_utc - timedelta(minutes=offset_minutes)
+        local_day_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        utc_day_start = local_day_start + timedelta(minutes=offset_minutes)
+        utc_day_end = utc_day_start + timedelta(days=1)
+        return (utc_day_start, utc_day_end)
+
+    async def get_today_payload(
+        self,
+        tz_offset: int | None,
+        session: Session | None = None,
+    ) -> dict[str, Any]:
+        """Return today's alarms and events payload for frontend scheduling."""
+        day_start_utc, day_end_utc = self._local_day_window_utc(tz_offset)
+        now_utc = datetime.now(UTC)
+        overdue_window_start = now_utc - timedelta(days=7)
+
+        with self._session_scope(session) as active_session:
+            alarms_for_popup: list[dict[str, Any]] = []
+            events_for_day: list[dict[str, Any]] = []
+
+            for alarm_row in self._repository.list_all_alarms(active_session):
+                try:
+                    trigger_aware = ensure_utc_aware(alarm_row.trigger_time)
+                except Exception:
+                    continue
+
+                # Simulated alarms are popup-only and never part of the event list.
+                if alarm_row.calendar_source_id is None:
+                    if alarm_row.dismissed_at is not None:
+                        continue
+                    if trigger_aware <= day_end_utc:
+                        alarms_for_popup.append(
+                            {
+                                "uid": str(alarm_row.id),
+                                "name": "Simulated Event",
+                                "start": trigger_aware,
+                                "end": trigger_aware + timedelta(hours=1),
+                                "all_day": False,
+                                "trigger_time": trigger_aware,
+                                "tzid": None,
+                                "entry_type": AlarmEntryType.SIMULATED.value,
+                            }
+                        )
+                    continue
+
+                if alarm_row.calendar_event_uid is None:
+                    continue
+
+                entry_type = str(alarm_row.entry_type)
+                _, base_uid = self._parse_calendar_entry_uid(alarm_row.calendar_event_uid)
+                if not base_uid:
+                    continue
+
+                start_value = trigger_aware
+                end_value = trigger_aware + timedelta(hours=1)
+                name, tzid, all_day, cached_start, cached_end = (
+                    self._resolve_calendar_alarm_metadata(
+                        active_session,
+                        alarm_row.calendar_source_id,
+                        base_uid,
+                    )
+                )
+                if cached_start is not None:
+                    start_value = cached_start
+                if cached_end is not None:
+                    end_value = cached_end
+
+                if entry_type == AlarmEntryType.ALARM.value:
+                    if alarm_row.dismissed_at is not None:
+                        continue
+                    if overdue_window_start <= trigger_aware <= day_end_utc:
+                        alarms_for_popup.append(
+                            {
+                                "uid": f"{alarm_row.calendar_source_id}:{alarm_row.calendar_event_uid}",
+                                "name": name,
+                                "start": start_value,
+                                "end": end_value,
+                                "tzid": tzid,
+                                "all_day": all_day,
+                                "trigger_time": trigger_aware,
+                                "entry_type": entry_type,
+                            }
+                        )
+                    continue
+
+                if entry_type == AlarmEntryType.EVENT.value:
+                    if day_start_utc <= trigger_aware < day_end_utc:
+                        events_for_day.append(
+                            {
+                                "uid": f"{alarm_row.calendar_source_id}:{alarm_row.calendar_event_uid}",
+                                "name": name,
+                                "start": start_value,
+                                "end": end_value,
+                                "tzid": tzid,
+                                "all_day": all_day,
+                                "trigger_time": trigger_aware,
+                                "entry_type": entry_type,
+                            }
+                        )
+
+            alarm_contexts = self._alarms_to_context(
+                alarms_for_popup,
+                mock=False,
+                tz_offset=tz_offset,
+            )
+            event_contexts = self._alarms_to_context(
+                events_for_day,
+                mock=False,
+                tz_offset=tz_offset,
+            )
+            return {
+                "fetched_at_utc": now_utc.isoformat(),
+                "day_start_utc": day_start_utc.isoformat(),
+                "day_end_utc": day_end_utc.isoformat(),
+                "alarms": alarm_contexts,
+                "events": event_contexts,
+            }
 
     async def dismiss_alarm(self, alarm_uid: str, session: Session | None = None) -> None:
         """
@@ -428,17 +593,15 @@ class AlarmsService:
         end_obj: object,
         all_day_flag: bool,
         start_iso_str: str,
+        tz_offset: int | None,
     ) -> str:
         """Format a human-readable fallback datetime (French locale labels)."""
         try:
             if not dt_obj:
                 return ""
-            now_local = datetime.now(UTC)
-            start_dt = (
-                dt_obj
-                if getattr(dt_obj, "tzinfo", None) is not None
-                else dt_obj.replace(tzinfo=UTC)
-            )
+            offset_minutes = int(tz_offset) if tz_offset is not None else 0
+            now_local = datetime.now(UTC) - timedelta(minutes=offset_minutes)
+            start_dt = ensure_utc_aware(dt_obj) - timedelta(minutes=offset_minutes)
 
             days = [
                 "Dimanche",
@@ -477,7 +640,7 @@ class AlarmsService:
 
             t1 = f"{pad(start_dt.hour)}:{pad(start_dt.minute)}"
             if end_obj:
-                end_dt = end_obj if end_obj.tzinfo is not None else end_obj.replace(tzinfo=UTC)
+                end_dt = ensure_utc_aware(end_obj) - timedelta(minutes=offset_minutes)
                 t2 = f"{pad(end_dt.hour)}:{pad(end_dt.minute)}"
                 time_text = f"{t1}-{t2}" if t1 != t2 else t1
             else:
@@ -527,6 +690,7 @@ class AlarmsService:
                 alarm.get("end"),
                 all_day,
                 start_iso,
+                tz_offset,
             )
 
             contexts.append(
@@ -534,6 +698,7 @@ class AlarmsService:
                     "uid": alarm.get("uid"),
                     "name": alarm.get("name", ""),
                     "fallback_text": fallback_text,
+                    "trigger_iso": self._isoformat_safe(alarm.get("trigger_time"), tzid),
                     "start_iso": start_iso,
                     "end_iso": end_iso,
                     "all_day": "true" if all_day else "false",

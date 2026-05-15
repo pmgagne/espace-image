@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.modules.calendar.api.interfaces import ICalendarService, get_calendar_service
 
-from .schemas import CreateCalendarSourceRequest, UpdateCalendarDefaultAlarmRequest
+from .schemas import CreateCalendarSourceRequest
 
 router = APIRouter(prefix="/api/v1/calendar", tags=["api-calendar"])
 
@@ -28,24 +28,6 @@ async def create_source(
     """Create a calendar source and return the created resource."""
     source = await calendar_service.create_source(payload.label, payload.url, payload.color)
     return JSONResponse(status_code=status.HTTP_201_CREATED, content=jsonable_encoder(source))
-
-
-@router.put("/sources/{source_id}/default-alarm")
-async def update_source_defaults(
-    source_id: int,
-    payload: UpdateCalendarDefaultAlarmRequest,
-    calendar_service: ICalendarService = Depends(get_calendar_service),
-) -> JSONResponse:
-    """Update default alarm policy for a calendar source."""
-    try:
-        source = await calendar_service.update_source_defaults(
-            source_id=source_id,
-            default_alarm=payload.default_alarm_for_all_events,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    return JSONResponse(content=jsonable_encoder(source))
 
 
 @router.delete("/sources/{source_id}")
@@ -74,8 +56,16 @@ async def sync_calendars(
     calendar_service: ICalendarService = Depends(get_calendar_service),
 ) -> JSONResponse:
     """Trigger calendar synchronization and return a JSON operation result."""
-    await calendar_service.sync_calendars()
-    return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={"status": "sync-complete"})
+    result = await calendar_service.general_sync()
+    payload = {
+        "status": "sync-complete" if result.calendar_sync_success else "sync-partial",
+        "calendar_sync_success": result.calendar_sync_success,
+        "alarms_sync_success": result.alarms_sync_success,
+        "alarms_skipped": result.alarms_skipped,
+        "alarms_skip_reason": result.alarms_skip_reason,
+        "normalized_alarm_count": result.normalized_alarm_count,
+    }
+    return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=payload)
 
 
 @router.get("/events")

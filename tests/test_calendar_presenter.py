@@ -14,7 +14,6 @@ def test_render_calendars_fragment_with_source():
             "label": "Work",
             "url": "https://calendar.example/ical",
             "color": "#3182ce",
-            "default_alarm_for_all_events": True,
         }
     ]
     sync_statuses = {

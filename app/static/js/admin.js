@@ -583,6 +583,11 @@ document.body.addEventListener('change', function (event) {
             if (message) {
                 message.textContent = 'Sync complete';
             }
+            try {
+                localStorage.setItem('espaceImageCalendarSyncAt', new Date().toISOString());
+            } catch (e) {
+                // Ignore localStorage write failures.
+            }
             refreshCalendarsPartial();
         }).catch(function (error) {
             if (message) {
@@ -597,25 +602,6 @@ document.body.addEventListener('change', function (event) {
                     message.classList.add('d-none');
                 }
             }, 2500);
-        });
-    });
-
-    document.body.addEventListener('change', function (event) {
-        var checkbox = event.target;
-        if (!checkbox || !checkbox.matches('[data-api-calendar-default-source-id]')) {
-            return;
-        }
-
-        var sourceId = parseInt(checkbox.getAttribute('data-api-calendar-default-source-id'), 10);
-        if (!sourceId) return;
-
-        putJson('/api/v1/calendar/sources/' + sourceId + '/default-alarm', {
-            default_alarm_for_all_events: checkbox.checked
-        }).then(function () {
-            refreshCalendarsPartial();
-        }).catch(function (error) {
-            checkbox.checked = !checkbox.checked;
-            alert(error.message || 'Failed to update default alarm policy');
         });
     });
 

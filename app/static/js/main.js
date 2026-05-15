@@ -34,6 +34,15 @@
         // Smart swap for alarms to prevent flickering on dismiss
         var lastAlarmContent = "";
         var hasAnimated = false;
+        var dayPayload = { alarms: [], events: [] };
+        var dayPayloadTimerId = null;
+        var nextAlarmTimerId = null;
+        var DAY_FETCH_BASE_MS = 2 * 60 * 60 * 1000;
+        var DAY_FETCH_JITTER_MS = 15 * 60 * 1000;
+
+        function getBrowserTzOffset() {
+            return (new Date()).getTimezoneOffset();
+        }
 
         function buildAlarmRefreshPath(tzOffset) {
             if (tzOffset === undefined || tzOffset === null || tzOffset === '') {
@@ -62,6 +71,133 @@
                     // Non-fatal refresh failure.
                 });
         }
+
+        function renderTodayEvents(events) {
+            var wrapper = document.getElementById('today-events-wrapper');
+            var list = document.getElementById('today-events-list');
+            var count = document.getElementById('today-events-count');
+            if (!wrapper || !list || !count) return;
+
+            var safeEvents = Array.isArray(events) ? events : [];
+            count.innerText = String(safeEvents.length);
+            if (safeEvents.length === 0) {
+                wrapper.classList.add('d-none');
+                list.innerHTML = '<li class="today-events-empty">No events today.</li>';
+                return;
+            }
+
+            wrapper.classList.remove('d-none');
+            list.innerHTML = safeEvents.map(function (event) {
+                var title = event && event.name ? String(event.name) : 'Untitled event';
+                var whenText = event && event.fallback_text ? String(event.fallback_text) : '';
+                return '<li class="today-event-item">'
+                    + '<span class="today-event-title">' + title + '</span>'
+                    + '<span class="today-event-time">' + whenText + '</span>'
+                    + '</li>';
+            }).join('');
+        }
+
+        function scheduleNextDayPayloadFetch() {
+            if (dayPayloadTimerId) {
+                clearTimeout(dayPayloadTimerId);
+            }
+            var jitter = Math.floor((Math.random() * (2 * DAY_FETCH_JITTER_MS + 1)) - DAY_FETCH_JITTER_MS);
+            var delay = DAY_FETCH_BASE_MS + jitter;
+            dayPayloadTimerId = setTimeout(function () {
+                fetchDayPayload('scheduled');
+            }, delay);
+        }
+
+        function scheduleNextAlarmCheck() {
+            if (nextAlarmTimerId) {
+                clearTimeout(nextAlarmTimerId);
+            }
+
+            var alarms = Array.isArray(dayPayload.alarms) ? dayPayload.alarms : [];
+            var nowMs = Date.now();
+            var hasDueAlarm = false;
+            var nextTs = null;
+
+            for (var i = 0; i < alarms.length; i++) {
+                var alarm = alarms[i] || {};
+                var triggerIso = alarm.trigger_iso || alarm.start_iso;
+                if (!triggerIso) continue;
+                var ts = Date.parse(triggerIso);
+                if (isNaN(ts)) continue;
+                if (ts <= nowMs) {
+                    hasDueAlarm = true;
+                    continue;
+                }
+                if (nextTs === null || ts < nextTs) {
+                    nextTs = ts;
+                }
+            }
+
+            if (hasDueAlarm) {
+                refreshAlarmPoller(getBrowserTzOffset());
+            }
+
+            if (nextTs === null) {
+                return;
+            }
+
+            var waitMs = Math.max(1000, nextTs - nowMs + 1000);
+            nextAlarmTimerId = setTimeout(function () {
+                refreshAlarmPoller(getBrowserTzOffset());
+                fetchDayPayload('alarm-trigger');
+            }, waitMs);
+        }
+
+        function fetchDayPayload(reason) {
+            var tzOffset = getBrowserTzOffset();
+            var url = '/api/v1/alarms/today?tz_offset=' + encodeURIComponent(String(tzOffset));
+            fetch(url)
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch day payload');
+                    }
+                    return response.json();
+                })
+                .then(function (payload) {
+                    dayPayload = payload || { alarms: [], events: [] };
+                    renderTodayEvents(dayPayload.events || []);
+                    if (reason === 'init' || reason === 'sync-event') {
+                        refreshAlarmPoller(tzOffset);
+                    }
+                    scheduleNextAlarmCheck();
+                    scheduleNextDayPayloadFetch();
+                })
+                .catch(function () {
+                    scheduleNextDayPayloadFetch();
+                });
+        }
+
+        function bindEventsPanelToggle() {
+            var toggle = document.getElementById('today-events-toggle');
+            var panel = document.getElementById('today-events-panel');
+            if (!toggle || !panel) return;
+
+            toggle.addEventListener('click', function () {
+                var isHidden = panel.classList.contains('d-none');
+                if (isHidden) {
+                    panel.classList.remove('d-none');
+                    toggle.setAttribute('aria-label', 'Hide Today\'s Events');
+                } else {
+                    panel.classList.add('d-none');
+                    toggle.setAttribute('aria-label', 'Show Today\'s Events');
+                }
+            });
+        }
+
+        function bindCrossTabSyncRefresh() {
+            window.addEventListener('storage', function (event) {
+                if (event.key !== 'espaceImageCalendarSyncAt') {
+                    return;
+                }
+                fetchDayPayload('sync-event');
+            });
+        }
+
         document.body.addEventListener('htmx:beforeSwap', function (evt) {
             if (evt.detail.target && evt.detail.target.id === 'alarm-poller') {
                 var newHtml = evt.detail.xhr.responseText || "";
@@ -122,28 +258,9 @@
         // Start clock updates
         updateTime();
         setInterval(updateTime, 1000);
-        // initial formatting of any alarm times already present
-        try { formatAlarmTimes(); } catch (e) { /* ignore */ }
-        // Ensure a short client-side index-refresh to pick up new alarms
-        // quickly (uses HTMX to request /components/index-refresh which
-        // returns out-of-band fragments). This complements the server-side
-        // configured interval and helps surface new alarms faster.
-        (function () {
-            var INDEX_AUTO_REFRESH_MS = 30 * 1000; // 30 seconds
-            if (window.htmx && typeof window.setInterval === 'function') {
-                try {
-                    setInterval(function () {
-                        try {
-                            window.htmx.ajax('GET', '/components/index-refresh');
-                        } catch (e) {
-                            console.error('htmx ajax error', e);
-                        }
-                    }, INDEX_AUTO_REFRESH_MS);
-                } catch (e) {
-                    console.error('Failed to start index auto-refresh', e);
-                }
-            }
-        })();
+        bindEventsPanelToggle();
+        bindCrossTabSyncRefresh();
+        fetchDayPayload('init');
     });
 
     function updateTime() {

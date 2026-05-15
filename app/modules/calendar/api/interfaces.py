@@ -76,21 +76,6 @@ class ICalendarService(Protocol):
         """
         ...
 
-    async def update_source_defaults(
-        self, source_id: int, default_alarm: bool
-    ) -> CalendarSourceDTO:
-        """
-        Update calendar source default alarm setting.
-
-        Args:
-            source_id: Calendar source ID.
-            default_alarm: Whether to add default alarms for events.
-
-        Returns:
-            Updated CalendarSource.
-        """
-        ...
-
     async def delete_source(self, source_id: int) -> bool:
         """
         Delete a calendar source.

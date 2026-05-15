@@ -81,7 +81,7 @@ class CalendarAlarmNormalizer:
     ) -> tuple[datetime, datetime]:
         """Return recurrence expansion bounds for normalized occurrences."""
         effective_days = max(1, days)
-        base_date = start_date or datetime.now(UTC).date()
+        base_date = start_date or (datetime.now(UTC).date() - timedelta(days=1))
         start = datetime(base_date.year, base_date.month, base_date.day, tzinfo=UTC)
         end = start + timedelta(days=effective_days)
         return (start, end)

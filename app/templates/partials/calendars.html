@@ -69,13 +69,6 @@
             </div>
 
             <div class="d-flex flex-column align-end">
-                <label class="text-sm mb-5">
-                    <input type="checkbox" name="default_alarm_for_all_events" value="1" {% if
-                        source.default_alarm_for_all_events %}checked{% endif %}
-                        data-api-calendar-default-source-id="{{ source.id }}">
-                    Display at midnight events without alarm
-                </label>
-
                 <button type="button" class="delete-btn" data-api-delete-calendar-source-id="{{ source.id }}"
                     hx-confirm="Are you sure you want to remove this calendar?">
                     Remove

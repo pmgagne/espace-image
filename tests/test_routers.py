@@ -77,7 +77,7 @@ def test_admin_calendars_partial_uses_api_write_controls(client, session):
     assert response.status_code == 200
     assert 'id="admin-calendar-create-form"' in response.text
     assert 'id="btn-sync-calendars"' in response.text
-    assert "data-api-calendar-default-source-id" in response.text
+    assert "data-api-calendar-default-source-id" not in response.text
     assert "data-api-delete-calendar-source-id" in response.text
     assert 'hx-post="/admin/calendars"' not in response.text
     assert 'hx-post="/admin/calendars/' not in response.text
