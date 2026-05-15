@@ -26,7 +26,7 @@ class AlarmEntryType(StrEnum):
 
 
 class AlarmEntryTypeType(TypeDecorator[str]):
-    """Store AlarmEntryType as lowercase strings with legacy-read compatibility."""
+    """Store AlarmEntryType as lowercase strings."""
 
     impl = String(16)
     cache_ok = True
@@ -52,7 +52,7 @@ class AlarmEntryTypeType(TypeDecorator[str]):
         if value is None:
             return AlarmEntryType.ALARM
         try:
-            return AlarmEntryType(value.lower())
+            return AlarmEntryType(value)
         except ValueError:
             return AlarmEntryType.ALARM
 

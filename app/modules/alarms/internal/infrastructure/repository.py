@@ -59,19 +59,10 @@ class AlarmsRepository(IAlarmsRepository):
         source_id: int,
         event_uid: str,
     ) -> CalendarEvent | None:
-        """Return cached event by source and UID, tolerating CalDAV `.ics` href suffixes."""
-        cached_event = session.exec(
-            select(CalendarEvent).where(
-                (CalendarEvent.calendar_source_id == source_id) & (CalendarEvent.uid == event_uid)
-            )
-        ).first()
-        if cached_event is not None or event_uid.endswith(".ics"):
-            return cached_event
-
+        """Return cached event by source and UID."""
         return session.exec(
             select(CalendarEvent).where(
-                (CalendarEvent.calendar_source_id == source_id)
-                & (CalendarEvent.uid == f"{event_uid}.ics")
+                (CalendarEvent.calendar_source_id == source_id) & (CalendarEvent.uid == event_uid)
             )
         ).first()
 

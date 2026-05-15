@@ -66,7 +66,7 @@ class AlarmsService:
 
         parts = entry_uid.split("|")
         if len(parts) < 2:
-            return (None, entry_uid)
+            return (None, None)
         return (parts[0], parts[1])
 
     @staticmethod
@@ -255,7 +255,7 @@ class AlarmsService:
         utc_day_end = utc_day_start + timedelta(days=1)
         return (utc_day_start, utc_day_end)
 
-    async def get_today_payload(
+    async def get_today_payload(  # noqa: C901
         self,
         tz_offset: int | None,
         session: Session | None = None,
@@ -334,20 +334,22 @@ class AlarmsService:
                         )
                     continue
 
-                if entry_type == AlarmEntryType.EVENT.value:
-                    if day_start_utc <= trigger_aware < day_end_utc:
-                        events_for_day.append(
-                            {
-                                "uid": f"{alarm_row.calendar_source_id}:{alarm_row.calendar_event_uid}",
-                                "name": name,
-                                "start": start_value,
-                                "end": end_value,
-                                "tzid": tzid,
-                                "all_day": all_day,
-                                "trigger_time": trigger_aware,
-                                "entry_type": entry_type,
-                            }
-                        )
+                if (
+                    entry_type == AlarmEntryType.EVENT.value
+                    and day_start_utc <= trigger_aware < day_end_utc
+                ):
+                    events_for_day.append(
+                        {
+                            "uid": f"{alarm_row.calendar_source_id}:{alarm_row.calendar_event_uid}",
+                            "name": name,
+                            "start": start_value,
+                            "end": end_value,
+                            "tzid": tzid,
+                            "all_day": all_day,
+                            "trigger_time": trigger_aware,
+                            "entry_type": entry_type,
+                        }
+                    )
 
             alarm_contexts = self._alarms_to_context(
                 alarms_for_popup,

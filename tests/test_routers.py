@@ -1,6 +1,9 @@
+from datetime import UTC, datetime
+from uuid import uuid4
+
 from sqlmodel import select
 
-from app.db.models import AppSettings, CalendarSource, Preset
+from app.db.models import AlarmEvent, AppSettings, CalendarSource, Preset
 
 
 def test_dashboard_modern(client):
@@ -22,6 +25,39 @@ def test_dashboard_legacy(client):
     assert response.status_code == 200
     assert "Legacy" in response.text
     assert "display: grid" not in response.text  # Ensure no grid CSS
+
+
+def test_legacy_page_backend_fragments_with_seeded_data(client, session):
+    settings = AppSettings(
+        weather_latitude=45.5,
+        weather_longitude=-73.5,
+        slideshow_duration=42,
+    )
+    session.add(settings)
+    session.add(
+        AlarmEvent(
+            id=uuid4(),
+            trigger_time=datetime.now(UTC).replace(tzinfo=None),
+            dismissed_at=None,
+            calendar_source_id=None,
+            calendar_event_uid=None,
+        )
+    )
+    session.commit()
+
+    legacy_response = client.get("/legacy")
+    assert legacy_response.status_code == 200
+    assert "legacy.js" in legacy_response.text
+    assert "slideInterval: 42 * 1000" in legacy_response.text
+
+    weather_response = client.get("/components/weather")
+    assert weather_response.status_code == 200
+    assert "weather-info" in weather_response.text
+
+    alarm_response = client.get("/components/alarm?tz_offset=0")
+    assert alarm_response.status_code == 200
+    assert "alarm-box-container" in alarm_response.text
+    assert "Simulated Event" in alarm_response.text
 
 
 def test_admin_page(client):

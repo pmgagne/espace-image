@@ -87,7 +87,7 @@ class CalendarAlarmNormalizer:
         return (start, end)
 
     @staticmethod
-    async def normalize(
+    async def normalize(  # noqa: C901
         session: Session,
         start_date: date | None = None,
         days: int = 30,
