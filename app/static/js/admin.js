@@ -123,6 +123,10 @@ document.body.addEventListener('change', function (event) {
                 var target = document.getElementById('admin-content');
                 if (target) {
                     target.innerHTML = html;
+                    // Fallback path bypasses HTMX lifecycle events.
+                    // Re-apply user-facing time formatting after manual DOM replacement.
+                    try { formatLastSyncedTimes(); } catch (e) { /* ignore */ }
+                    try { setBrowserTimezone(); } catch (e) { /* ignore */ }
                 }
             })
             .catch(function () {
@@ -212,8 +216,28 @@ document.body.addEventListener('change', function (event) {
         // ignore
     }
 
+    function applyCalendarTimeFormattingWhenReady(attemptsLeft) {
+        var remaining = (typeof attemptsLeft === 'number') ? attemptsLeft : 8;
+        var hasSyncFields = !!document.querySelector('.last-synced, .next-sync');
+
+        if (hasSyncFields) {
+            try { formatLastSyncedTimes(); } catch (e) { /* ignore */ }
+            try { setBrowserTimezone(); } catch (e) { /* ignore */ }
+            return;
+        }
+
+        if (remaining <= 0) {
+            return;
+        }
+
+        setTimeout(function () {
+            applyCalendarTimeFormattingWhenReady(remaining - 1);
+        }, 150);
+    }
+
     function refreshCalendarsPartial() {
         refreshAdminContent('/admin/partials/calendars');
+        applyCalendarTimeFormattingWhenReady();
     }
 
     function refreshDebugPartial() {
@@ -234,41 +258,40 @@ document.body.addEventListener('change', function (event) {
         return d;
     }
 
+    function formatUtcElement(el, emptyLabel) {
+        var utc = el.getAttribute('data-utc') || el.textContent || '';
+        utc = (typeof utc === 'string') ? utc.trim() : '';
+
+        if (!utc || utc === '—' || utc.toLowerCase() === 'never') {
+            el.textContent = emptyLabel;
+            return;
+        }
+
+        try {
+            var d = parseUtcStringToDate(utc);
+            if (!d) {
+                var alt = utc.replace(' ', 'T') + 'Z';
+                d = parseUtcStringToDate(alt);
+            }
+            if (!d) {
+                el.textContent = emptyLabel;
+                return;
+            }
+            el.textContent = d.toLocaleString();
+        } catch (e) {
+            el.textContent = emptyLabel;
+        }
+    }
+
     function formatLastSyncedTimes() {
         var els = document.querySelectorAll('.last-synced');
         els.forEach(function (el) {
-            var utc = el.getAttribute('data-utc') || el.textContent || '';
-            utc = (typeof utc === 'string') ? utc.trim() : '';
-            if (!utc) return;
-            try {
-                var d = parseUtcStringToDate(utc);
-                if (!d) {
-                    var alt = utc.replace(' ', 'T') + 'Z';
-                    d = parseUtcStringToDate(alt);
-                }
-                if (!d) return;
-                el.textContent = d.toLocaleString();
-            } catch (e) {
-                // Silently ignore parse errors
-            }
+            formatUtcElement(el, 'Never');
         });
         // Also format next-sync times
         var nextEls = document.querySelectorAll('.next-sync');
         nextEls.forEach(function (el) {
-            var utc = el.getAttribute('data-utc') || el.textContent || '';
-            utc = (typeof utc === 'string') ? utc.trim() : '';
-            if (!utc || utc === '—') return;
-            try {
-                var d = parseUtcStringToDate(utc);
-                if (!d) {
-                    var alt = utc.replace(' ', 'T') + 'Z';
-                    d = parseUtcStringToDate(alt);
-                }
-                if (!d) return;
-                el.textContent = d.toLocaleString();
-            } catch (e) {
-                // Failed to parse timestamp (silently ignore)
-            }
+            formatUtcElement(el, '—');
         });
     }
 

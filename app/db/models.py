@@ -2,7 +2,8 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Column, String, UniqueConstraint
+from sqlalchemy.types import TypeDecorator
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -21,6 +22,38 @@ class AlarmEntryType(StrEnum):
     EVENT = "event"
     ALARM = "alarm"
     SIMULATED = "simulated"
+
+
+class AlarmEntryTypeType(TypeDecorator):
+    """Store AlarmEntryType as lowercase strings with legacy-read compatibility."""
+
+    impl = String(16)
+    cache_ok = True
+
+    def process_bind_param(
+        self,
+        value: AlarmEntryType | str | None,
+        dialect: object,
+    ) -> str:
+        del dialect
+        if value is None:
+            return AlarmEntryType.ALARM.value
+        if isinstance(value, AlarmEntryType):
+            return value.value
+        return str(value).lower()
+
+    def process_result_value(
+        self,
+        value: str | None,
+        dialect: object,
+    ) -> AlarmEntryType:
+        del dialect
+        if value is None:
+            return AlarmEntryType.ALARM
+        try:
+            return AlarmEntryType(value.lower())
+        except ValueError:
+            return AlarmEntryType.ALARM
 
 
 class Preset(SQLModel, table=True):
@@ -74,7 +107,14 @@ class AlarmEvent(SQLModel, table=True):
     # Optional: Link to calendar event (null for test/simulated alarms)
     calendar_source_id: int | None = Field(default=None, index=True)
     calendar_event_uid: str | None = Field(default=None, index=True)
-    entry_type: AlarmEntryType = Field(default=AlarmEntryType.ALARM)
+    entry_type: AlarmEntryType = Field(
+        default=AlarmEntryType.ALARM,
+        sa_column=Column(
+            AlarmEntryTypeType(),
+            nullable=False,
+            server_default=AlarmEntryType.ALARM.value,
+        ),
+    )
 
 
 class CalendarElement(SQLModel, table=True):

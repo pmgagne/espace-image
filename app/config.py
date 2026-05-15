@@ -5,6 +5,11 @@ Centralized configuration values that can be overridden via environment variable
 
 import os
 
+from dotenv import load_dotenv
+
+# Keep app runtime env behavior aligned with the CLI by loading .env defaults.
+load_dotenv()
+
 # Sync interval constants (can be overridden via env vars)
 # Calendar sync interval: default 3 hours (in minutes)
 CALENDAR_SYNC_INTERVAL_MINUTES = int(os.getenv("CALENDAR_SYNC_INTERVAL_MINUTES", 180))

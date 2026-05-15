@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -16,6 +17,15 @@ from app.template_config import templates
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
+ADMIN_JS_PATH = Path("app/static/js/admin.js")
+
+
+def _admin_asset_version() -> str:
+    """Return a deterministic version token for admin JS cache busting."""
+    try:
+        return str(ADMIN_JS_PATH.stat().st_mtime_ns)
+    except OSError:
+        return "dev"
 
 
 # --- Main Shell ---
@@ -24,7 +34,13 @@ async def admin_shell(request: Request):
     """Admin Shell with Sidebar"""
     debug_mode = os.getenv("WEBAPP_DEBUG", "").lower() in ("true", "1", "yes")
     tpl = templates.env.get_template("admin_base.html")
-    return HTMLResponse(tpl.render(request=request, debug_mode=debug_mode))
+    return HTMLResponse(
+        tpl.render(
+            request=request,
+            debug_mode=debug_mode,
+            static_asset_version=_admin_asset_version(),
+        )
+    )
 
 
 # --- Partials: Settings ---
