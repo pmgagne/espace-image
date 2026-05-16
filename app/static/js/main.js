@@ -79,6 +79,11 @@
             if (!wrapper || !list || !count) return;
 
             var safeEvents = Array.isArray(events) ? events : [];
+            safeEvents.sort(function (a, b) {
+                var aStart = a && a.start_iso ? Date.parse(a.start_iso) : Infinity;
+                var bStart = b && b.start_iso ? Date.parse(b.start_iso) : Infinity;
+                return aStart - bStart;
+            });
             count.innerText = String(safeEvents.length);
             if (safeEvents.length === 0) {
                 wrapper.classList.add('d-none');
@@ -89,8 +94,14 @@
             wrapper.classList.remove('d-none');
             list.innerHTML = safeEvents.map(function (event) {
                 var title = event && event.name ? String(event.name) : (event && event.fallback_text ? String(event.fallback_text) : 'No time available');
+                var timeText = event && event.fallback_text ? String(event.fallback_text) : '';
+                var startAttr = event && event.start_iso ? ' data-start="' + String(event.start_iso) + '"' : '';
+                var endAttr = event && event.end_iso ? ' data-end="' + String(event.end_iso) + '"' : '';
+                var alldayAttr = event && (event.all_day === true || event.all_day === 'true') ? ' data-allday="true"' : ' data-allday="false"';
+                var timeSpan = '<span class="today-event-time"' + startAttr + endAttr + alldayAttr + '>' + (timeText || '') + '</span>';
                 return '<li class="today-event-item">'
                     + '<span class="today-event-title">' + title + '</span>'
+                    + timeSpan
                     + '</li>';
             }).join('');
         }
@@ -159,6 +170,11 @@
                 .then(function (payload) {
                     dayPayload = payload || { alarms: [], events: [] };
                     renderTodayEvents(dayPayload.events || []);
+                    try {
+                        formatAlarmTimes();
+                    } catch (e) {
+                        console.error('formatAlarmTimes error', e);
+                    }
                     if (reason === 'init' || reason === 'sync-event') {
                         refreshAlarmPoller(tzOffset);
                     }
@@ -292,9 +308,9 @@
         }
     }
 
-    // Format alarm datetimes inserted by /components/alarm
+    // Format alarm datetimes inserted by /components/alarm and today's event times
     function formatAlarmTimes() {
-        var els = document.querySelectorAll('.alarm-time[data-start]');
+        var els = document.querySelectorAll('.alarm-time[data-start], .today-event-time[data-start]');
         var now = new Date();
         for (var i = 0; i < els.length; i++) {
             var el = els[i];

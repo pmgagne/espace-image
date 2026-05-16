@@ -123,12 +123,10 @@
     }
 
     /**
-     * Format alarm datetimes inserted into legacy alarm wrapper
+     * Format alarm datetimes inserted into legacy alarm wrapper and today's event times
      */
     function formatAlarmTimesLegacy() {
-        var wrapper = document.getElementById('alarm-wrapper');
-        if (!wrapper) return;
-        var els = wrapper.querySelectorAll('.alarm-time[data-start]');
+        var els = document.querySelectorAll('.alarm-time[data-start], .today-event-time[data-start]');
         var now = new Date();
         for (var i = 0; i < els.length; i++) {
             var el = els[i];
@@ -255,6 +253,11 @@
         if (!wrapper || !list || !count) return;
 
         var safeEvents = events && events.length ? events : [];
+        safeEvents.sort(function (a, b) {
+            var aStart = a && a.start_iso ? Date.parse(a.start_iso) : Infinity;
+            var bStart = b && b.start_iso ? Date.parse(b.start_iso) : Infinity;
+            return aStart - bStart;
+        });
         count.innerText = String(safeEvents.length);
         if (!safeEvents.length) {
             wrapper.className = 'today-events-wrapper d-none';
@@ -267,8 +270,14 @@
         for (var i = 0; i < safeEvents.length; i++) {
             var event = safeEvents[i] || {};
             var title = event.name ? String(event.name) : (event.fallback_text ? String(event.fallback_text) : 'No time available');
+            var timeText = event.fallback_text ? String(event.fallback_text) : '';
+            var startAttr = event.start_iso ? ' data-start="' + String(event.start_iso) + '"' : '';
+            var endAttr = event.end_iso ? ' data-end="' + String(event.end_iso) + '"' : '';
+            var alldayAttr = (event.all_day === true || event.all_day === 'true') ? ' data-allday="true"' : ' data-allday="false"';
+            var timeSpan = '<span class="today-event-time"' + startAttr + endAttr + alldayAttr + '>' + (timeText || '') + '</span>';
             html += '<li class="today-event-item">'
                 + '<span class="today-event-title">' + title + '</span>'
+                + timeSpan
                 + '</li>';
         }
         list.innerHTML = html;
@@ -325,6 +334,11 @@
             function (payload) {
                 dayPayload = payload || { alarms: [], events: [] };
                 renderTodayEventsLegacy(dayPayload.events || []);
+                try {
+                    formatAlarmTimesLegacy();
+                } catch (e) {
+                    console.error('formatAlarmTimesLegacy error', e);
+                }
                 if (reason === 'init' || reason === 'sync-event') {
                     checkAlarm();
                 }
