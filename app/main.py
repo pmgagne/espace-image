@@ -61,14 +61,21 @@ async def background_sync_calendars() -> None:
 
         session_factory = SessionFactory(engine)
         calendar_service = build_calendar_service(session_factory)
-        # If no calendar sources are configured, skip sync to avoid failures
-        try:
-            ui = await calendar_service.get_calendars_for_ui()
-            sources = ui.get("sources", []) if isinstance(ui, dict) else []
-        except Exception:
-            sources = []
+        # If the calendar service exposes `get_calendars_for_ui`, use it to
+        # detect an empty configuration and skip sync when there are no sources.
+        # Otherwise (e.g., in tests or older service implementations), run sync.
+        should_skip = False
+        if hasattr(calendar_service, "get_calendars_for_ui"):
+            try:
+                ui = await calendar_service.get_calendars_for_ui()
+                sources = ui.get("sources", []) if isinstance(ui, dict) else []
+            except Exception:
+                sources = []
 
-        if not sources:
+            if not sources:
+                should_skip = True
+
+        if should_skip:
             logger.info("Background calendar sync skipped: no calendar sources configured")
             return
 
