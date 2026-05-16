@@ -210,3 +210,32 @@ docker run -d \
 ```
 
 The app listens on `http://localhost:8000` and mounts `./data` for uploads.
+### Using espima in Docker
+
+Run the `espima` CLI against the project inside the container:
+
+- One-off run (build image first if necessary):
+```bash
+docker compose run --rm web espima --help
+# or run a specific command
+docker compose run --rm web espima db migrate
+```
+
+- Against a running container (recommended when the service is up):
+```bash
+docker compose exec web espima db migrate
+# or
+docker exec -it espace-image espima caldav list
+```
+
+- Open an interactive shell in the container and run the CLI manually:
+```bash
+docker compose exec web sh
+# then inside container:
+espima --help
+# or
+python -m espima.cli db migrate
+```
+
+Notes: the Compose service is named `web` and the container name is `espace-image`.
+If `espima` cannot locate `alembic.ini`, run the migrate command from the repository root inside the container or use the `python -m espima.cli` entry which locates the repo root.
