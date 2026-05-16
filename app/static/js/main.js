@@ -88,11 +88,9 @@
 
             wrapper.classList.remove('d-none');
             list.innerHTML = safeEvents.map(function (event) {
-                var title = event && event.name ? String(event.name) : 'Untitled event';
-                var whenText = event && event.fallback_text ? String(event.fallback_text) : '';
+                var title = event && event.name ? String(event.name) : (event && event.fallback_text ? String(event.fallback_text) : 'No time available');
                 return '<li class="today-event-item">'
                     + '<span class="today-event-title">' + title + '</span>'
-                    + '<span class="today-event-time">' + whenText + '</span>'
                     + '</li>';
             }).join('');
         }

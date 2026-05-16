@@ -266,11 +266,9 @@
         var html = '';
         for (var i = 0; i < safeEvents.length; i++) {
             var event = safeEvents[i] || {};
-            var title = event.name ? String(event.name) : 'Untitled event';
-            var whenText = event.fallback_text ? String(event.fallback_text) : '';
+            var title = event.name ? String(event.name) : (event.fallback_text ? String(event.fallback_text) : 'No time available');
             html += '<li class="today-event-item">'
                 + '<span class="today-event-title">' + title + '</span>'
-                + '<span class="today-event-time">' + whenText + '</span>'
                 + '</li>';
         }
         list.innerHTML = html;
