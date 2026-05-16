@@ -100,7 +100,7 @@ class AlarmsService:
     ) -> tuple[str, str | None, bool, datetime | None, datetime | None]:
         """Resolve display metadata for one calendar occurrence from cached raw elements."""
         cached_event = self._repository.get_cached_event_by_uid(session, source_id, base_uid)
-        name = base_uid
+        name = "Untitled event"
         tzid = None
         all_day = False
         start_value = None
@@ -111,8 +111,9 @@ class AlarmsService:
 
         name = (
             getattr(cached_event, "summary", None)
+            or getattr(cached_event, "description", None)
             or self._extract_summary_from_raw_ics(getattr(cached_event, "raw_ics", None))
-            or base_uid
+            or "Untitled event"
         )
         tzid = getattr(cached_event, "event_tz", None)
         all_day = bool(getattr(cached_event, "all_day", False))

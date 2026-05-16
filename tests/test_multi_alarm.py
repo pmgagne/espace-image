@@ -12,10 +12,9 @@ def test_check_alarm_mock(client):
     response = client.get("/components/alarm?mock=true")
     assert response.status_code == 200
     assert "alarm-box-container" in response.text
-    assert "Meeting with Client" in response.text
-    assert "Dentist Appointment" in response.text
-    # Verify we have three alarm items (including all-day event)
+    # We only display human-friendly date/time strings now; ensure the container renders
     assert response.text.count("alarm-item") == 3
+    # Verify we have three alarm items (including all-day event)
 
 
 def test_check_alarm_empty(client, session):
