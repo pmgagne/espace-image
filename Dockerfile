@@ -18,6 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY app ./app
+# Ensure the local `espima` package sources are available for installation
+COPY espima ./espima
 RUN uv pip install --no-deps .
 
 # Stage 2: Runtime
