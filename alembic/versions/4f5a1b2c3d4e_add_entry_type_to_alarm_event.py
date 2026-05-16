@@ -21,12 +21,28 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.add_column(
-        "alarmevent",
-        sa.Column("entry_type", sa.String(), nullable=False, server_default="alarm"),
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    cols = (
+        {c["name"] for c in inspector.get_columns("alarmevent")}
+        if "alarmevent" in (inspector.get_table_names())
+        else set()
     )
+    if "entry_type" not in cols:
+        op.add_column(
+            "alarmevent",
+            sa.Column("entry_type", sa.String(), nullable=False, server_default="alarm"),
+        )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_column("alarmevent", "entry_type")
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    cols = (
+        {c["name"] for c in inspector.get_columns("alarmevent")}
+        if "alarmevent" in (inspector.get_table_names())
+        else set()
+    )
+    if "entry_type" in cols:
+        op.drop_column("alarmevent", "entry_type")
