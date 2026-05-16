@@ -1,6 +1,8 @@
 services:
   web:
-    container_name: espace-image:latest
+    container_name: espace-image
+    build: .
+    image: espace-image:latest
     ports:
       - "8000:8000"
     volumes:
