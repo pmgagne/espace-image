@@ -21,12 +21,28 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.add_column(
-        "calendar_sync_status",
-        sa.Column("last_general_sync_at", sa.DateTime(), nullable=True),
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    cols = (
+        {c["name"] for c in inspector.get_columns("calendar_sync_status")}
+        if "calendar_sync_status" in (inspector.get_table_names())
+        else set()
     )
+    if "last_general_sync_at" not in cols:
+        op.add_column(
+            "calendar_sync_status",
+            sa.Column("last_general_sync_at", sa.DateTime(), nullable=True),
+        )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_column("calendar_sync_status", "last_general_sync_at")
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    cols = (
+        {c["name"] for c in inspector.get_columns("calendar_sync_status")}
+        if "calendar_sync_status" in (inspector.get_table_names())
+        else set()
+    )
+    if "last_general_sync_at" in cols:
+        op.drop_column("calendar_sync_status", "last_general_sync_at")
