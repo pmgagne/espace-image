@@ -25,4 +25,5 @@ class AlarmEventData:
     trigger_time: datetime
     calendar_source_id: int | None
     calendar_event_uid: str | None
+    entry_type: str
     dismissed_at: datetime | None = None

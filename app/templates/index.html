@@ -35,7 +35,6 @@
     .full-slide {
         width: 100%;
         height: 100%;
-        object-fit: cover;
         /* Fill screen, crop if needed */
         display: block;
     }
@@ -83,8 +82,8 @@
         text-align: center;
 
         background: rgba(0, 0, 0, 0.45);
-        backdrop-filter: blur(15px);
         -webkit-backdrop-filter: blur(15px);
+        backdrop-filter: blur(15px);
 
         padding: 1.5rem 3rem;
         border-radius: 20px;
@@ -120,8 +119,8 @@
         text-align: center;
 
         background: rgba(0, 0, 0, 0.45);
-        backdrop-filter: blur(15px);
         -webkit-backdrop-filter: blur(15px);
+        backdrop-filter: blur(15px);
 
         padding: 1.5rem;
         border-radius: 20px;
@@ -147,7 +146,10 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 5px;
+    }
+
+    .alarm-item>*+* {
+        margin-top: 5px;
     }
 
     .alarm-item:last-child {
@@ -157,11 +159,14 @@
     .alarm-header {
         display: flex;
         align-items: center;
-        gap: 10px;
         color: #fff;
         font-weight: 600;
         font-size: 1.5rem;
         letter-spacing: 1px;
+    }
+
+    .alarm-header>*+* {
+        margin-left: 10px;
     }
 
     .alarm-body {
@@ -210,7 +215,6 @@
     /* Weather Component Styling (injected via HTMX) */
     .weather-info {
         display: flex;
-        gap: 20px;
         align-items: center;
         justify-content: center;
         font-size: 1.8rem;
@@ -225,6 +229,7 @@
     }
 
     .weather-info .condition {
+        margin-left: 20px;
         opacity: 0.8;
         font-size: 1.2rem;
     }
@@ -264,13 +269,12 @@
         right: 20px;
         z-index: 50;
         color: rgba(255, 255, 255, 0.5);
-        /* Higher visibility */
         background: rgba(0, 0, 0, 0.3);
-        /* Subtle background for contrast */
-        padding: 5px 15px;
-        border-radius: 20px;
+        padding: 8px 12px;
+        border-radius: 50%;
         text-decoration: none;
-        font-size: 0.9rem;
+        font-size: 1.2rem;
+        line-height: 1;
         transition: all 0.3s;
         border: 1px solid rgba(255, 255, 255, 0.1);
     }
@@ -280,15 +284,76 @@
         background: rgba(0, 0, 0, 0.6);
     }
 
-    .legacy-link {
+    .today-events-wrapper {
         position: fixed;
+        left: 20px;
         bottom: 20px;
-        right: 100px;
-        /* Offset from Admin link */
-        z-index: 50;
-        color: rgba(255, 255, 255, 0.3);
-        text-decoration: none;
-        font-size: 0.8rem;
+        z-index: 30;
+        max-width: min(420px, 80vw);
+    }
+
+    .today-events-toggle {
+        background: rgba(0, 0, 0, 0.45);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 1.3rem;
+        line-height: 1;
+    }
+
+    .today-events-panel {
+        margin-top: 8px;
+        background: rgba(0, 0, 0, 0.45);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 12px;
+        padding: 12px;
+        color: #fff;
+    }
+
+    .today-events-title {
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .today-events-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: 34vh;
+        overflow-y: auto;
+    }
+
+    .today-event-item {
+        display: flex;
+        flex-direction: column;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .today-event-item:last-child {
+        border-bottom: none;
+    }
+
+    .today-event-title {
+        font-weight: 500;
+    }
+
+    .today-event-time,
+    .today-events-empty {
+        color: #d1d5db;
+        font-size: 0.9rem;
+    }
+
+    .today-event-time {
+        margin-top: 2px;
+    }
+
+    .d-none {
+        display: none !important;
     }
 </style>
 
@@ -303,8 +368,7 @@
 
 {% block content %}
 <!-- Admin Access -->
-<a href="/legacy" class="legacy-link">Legacy Mode</a>
-<a href="/admin" class="admin-link">Admin</a>
+<a href="/admin" class="admin-link" aria-label="Admin">⚙</a>
 
 <!-- Slideshow Background -->
 <div class="slideshow-container" hx-get="/components/slide?mode=modern"
@@ -326,6 +390,17 @@
 
 <!-- Alarm Poller (initial load only - refreshed by index refresh) -->
 <div id="alarm-poller" hx-get="/components/alarm" hx-trigger="load" hx-swap="innerHTML">
+</div>
+
+<div id="today-events-wrapper" class="today-events-wrapper d-none">
+    <button type="button" id="today-events-toggle" class="today-events-toggle"
+        aria-label="Show Today's Events">📅</button>
+    <div id="today-events-panel" class="today-events-panel d-none">
+        <div class="today-events-title">Today's Events (<span id="today-events-count">0</span>)</div>
+        <ul id="today-events-list" class="today-events-list">
+            <li class="today-events-empty">No events today.</li>
+        </ul>
+    </div>
 </div>
 
 <!-- Central index refresh (updates multiple fragments every configured interval) -->

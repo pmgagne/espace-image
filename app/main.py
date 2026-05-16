@@ -61,7 +61,17 @@ async def background_sync_calendars() -> None:
 
         session_factory = SessionFactory(engine)
         calendar_service = build_calendar_service(session_factory)
-        await calendar_service.sync_calendars()
+        result = await calendar_service.general_sync()
+        if result.alarms_skipped:
+            logger.info(
+                "Background general sync skipped alarm normalization: %s",
+                result.alarms_skip_reason,
+            )
+        else:
+            logger.info(
+                "Background general sync normalized %s alarm occurrences",
+                result.normalized_alarm_count,
+            )
     except Exception as e:
         logger.exception("Error in background calendar sync: %s", e)
 

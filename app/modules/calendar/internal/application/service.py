@@ -9,7 +9,12 @@ from sqlmodel import Session
 
 from app.db.models import CalendarSource, CalendarSyncStatusEntry
 from app.db.session_factory import SessionFactory
-from app.modules.calendar.api.contracts import CalendarSourceDTO, SyncStatusDTO
+from app.modules.calendar.api.contracts import (
+    CalendarSourceDTO,
+    CalendarSyncReportDTO,
+    GeneralSyncResultDTO,
+    SyncStatusDTO,
+)
 from app.modules.calendar.api.repositories import ICalendarRepository
 from app.modules.calendar.api.sync_gateway import ICalendarSyncGateway
 
@@ -47,7 +52,6 @@ class CalendarService:
             label=source.label,
             url=source.url,
             color=source.color or "#3182ce",
-            default_alarm_for_all_events=source.default_alarm_for_all_events,
         )
 
     @staticmethod
@@ -67,6 +71,105 @@ class CalendarService:
         """Sync all configured calendar sources."""
         with self._session_scope(session) as active_session:
             await self._sync_gateway.sync_calendar_events(active_session)
+
+    @staticmethod
+    def _is_same_utc_day(value: datetime | None, target_day: date) -> bool:
+        """Return True when a timestamp exists and belongs to the target UTC day."""
+        if value is None:
+            return False
+        return value.date() == target_day
+
+    async def general_sync(
+        self,
+        start_date: date | None = None,
+        days: int = 30,
+        session: Session | None = None,
+    ) -> GeneralSyncResultDTO:
+        """Run calendar sync then alarm normalization with scheduler skip logic."""
+        with self._session_scope(session) as active_session:
+            calendar_report = CalendarSyncReportDTO(source_reports=[])
+            calendar_sync_success = False
+
+            try:
+                calendar_report = await self._sync_gateway.sync_calendar_events_with_report(
+                    active_session
+                )
+                calendar_sync_success = all(
+                    report.sync_succeeded for report in calendar_report.source_reports
+                )
+            except Exception:
+                logger.exception("Calendar sync stage failed during general sync")
+
+            if not calendar_report.source_reports:
+                return GeneralSyncResultDTO(
+                    calendar_sync_success=calendar_sync_success,
+                    alarms_sync_success=True,
+                    alarms_skipped=True,
+                    alarms_skip_reason="no-calendar-sources",
+                )
+
+            has_non_caldav_sources = any(
+                not report.is_caldav for report in calendar_report.source_reports
+            )
+            caldav_reports = [
+                report for report in calendar_report.source_reports if report.is_caldav
+            ]
+            no_caldav_changes = bool(caldav_reports) and all(
+                report.sync_succeeded and report.changed is False for report in caldav_reports
+            )
+
+            today_utc = datetime.now(UTC).date()
+            statuses = self._repository.list_statuses(active_session)
+            statuses_by_source = {status.calendar_source_id: status for status in statuses}
+            caldav_source_ids = [report.calendar_source_id for report in caldav_reports]
+
+            already_done_today = bool(caldav_source_ids) and all(
+                self._is_same_utc_day(
+                    statuses_by_source.get(source_id).last_general_sync_at
+                    if statuses_by_source.get(source_id)
+                    else None,
+                    today_utc,
+                )
+                for source_id in caldav_source_ids
+            )
+
+            should_skip_alarms = (
+                not has_non_caldav_sources and no_caldav_changes and already_done_today
+            )
+            if should_skip_alarms:
+                return GeneralSyncResultDTO(
+                    calendar_sync_success=calendar_sync_success,
+                    alarms_sync_success=True,
+                    alarms_skipped=True,
+                    alarms_skip_reason="no-caldav-changes-and-already-synced-today",
+                )
+
+            try:
+                normalized_count = await self._sync_gateway.normalize_alarm_occurrences(
+                    active_session,
+                    start_date=start_date,
+                    days=days,
+                )
+
+                if calendar_sync_success:
+                    source_ids = sorted(
+                        {report.calendar_source_id for report in calendar_report.source_reports}
+                    )
+                    await self._sync_gateway.mark_general_sync_completed(active_session, source_ids)
+
+                return GeneralSyncResultDTO(
+                    calendar_sync_success=calendar_sync_success,
+                    alarms_sync_success=True,
+                    alarms_skipped=False,
+                    normalized_alarm_count=normalized_count,
+                )
+            except Exception:
+                logger.exception("Alarm normalization stage failed during general sync")
+                return GeneralSyncResultDTO(
+                    calendar_sync_success=calendar_sync_success,
+                    alarms_sync_success=False,
+                    alarms_skipped=False,
+                )
 
     async def normalize_alarm_occurrences(
         self,
@@ -153,22 +256,6 @@ class CalendarService:
             source = self._repository.create_source(active_session, label, url, color)
             return self._source_to_dto(source)
 
-    async def update_source_defaults(
-        self,
-        source_id: int,
-        default_alarm: bool,
-        session: Session | None = None,
-    ) -> CalendarSourceDTO:
-        """Update calendar source default alarm setting."""
-        with self._session_scope(session) as active_session:
-            source = self._repository.get_source(active_session, source_id)
-            if not source:
-                msg = f"Calendar source {source_id} not found"
-                raise ValueError(msg)
-            source.default_alarm_for_all_events = default_alarm
-            source = self._repository.save_source(active_session, source)
-            return self._source_to_dto(source)
-
     async def delete_source(self, source_id: int, session: Session | None = None) -> bool:
         """Delete a calendar source."""
         with self._session_scope(session) as active_session:
@@ -195,11 +282,13 @@ class CalendarService:
     async def get_latest_sync_utc_iso(self, session: Session | None = None) -> str:
         """Return latest successful sync timestamp as an ISO string for UI polling."""
         statuses = await self.get_sync_status(session=session)
-        latest_sync = ""
+        latest_sync: datetime | None = None
         for status in statuses:
-            if status.last_synced_at and status.last_synced_at > latest_sync:
+            if status.last_synced_at and (
+                latest_sync is None or status.last_synced_at > latest_sync
+            ):
                 latest_sync = status.last_synced_at
-        return latest_sync
+        return latest_sync.isoformat() if latest_sync else ""
 
     async def get_debug_calendar_state(self, session: Session | None = None) -> dict[str, Any]:
         """Get calendar sources and sync status for debugging."""

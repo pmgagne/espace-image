@@ -22,27 +22,6 @@ def test_api_create_calendar_source_returns_json_and_persists(client, session):
     assert len(sources) == 1
 
 
-def test_api_update_calendar_source_default_alarm(client, session):
-    source = CalendarSource(label="Family", url="https://example.com/family.ics", color="#445566")
-    session.add(source)
-    session.commit()
-    session.refresh(source)
-
-    response = client.put(
-        f"/api/v1/calendar/sources/{source.id}/default-alarm",
-        json={"default_alarm_for_all_events": True},
-    )
-
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("application/json")
-    assert response.json()["default_alarm_for_all_events"] is True
-
-    session.expire_all()
-    updated = session.get(CalendarSource, source.id)
-    assert updated is not None
-    assert updated.default_alarm_for_all_events is True
-
-
 def test_api_delete_calendar_source(client, session):
     source = CalendarSource(
         label="Delete Me", url="https://example.com/delete.ics", color="#778899"
@@ -79,7 +58,9 @@ def test_api_calendar_sync_and_latest_sync_return_json(client):
     sync_response = client.post("/api/v1/calendar/sync")
     assert sync_response.status_code == 202
     assert sync_response.headers["content-type"].startswith("application/json")
-    assert sync_response.json()["status"] == "sync-complete"
+    assert sync_response.json()["status"] in {"sync-complete", "sync-partial"}
+    assert "calendar_sync_success" in sync_response.json()
+    assert "alarms_sync_success" in sync_response.json()
 
     latest_sync_response = client.get("/api/v1/calendar/latest-sync")
     assert latest_sync_response.status_code == 200

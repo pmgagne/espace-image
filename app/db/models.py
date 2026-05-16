@@ -1,8 +1,10 @@
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import ClassVar
 from uuid import UUID, uuid4
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Column, String, UniqueConstraint
+from sqlalchemy.types import TypeDecorator
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -13,6 +15,46 @@ class CalendarSyncStatus(StrEnum):
     SYNCING = "syncing"
     SUCCESS = "success"
     FAILED = "failed"
+
+
+class AlarmEntryType(StrEnum):
+    """Type discriminator for rows stored in the alarm table."""
+
+    EVENT = "event"
+    ALARM = "alarm"
+    SIMULATED = "simulated"
+
+
+class AlarmEntryTypeType(TypeDecorator[str]):
+    """Store AlarmEntryType as lowercase strings."""
+
+    impl = String(16)
+    cache_ok = True
+
+    def process_bind_param(
+        self,
+        value: AlarmEntryType | str | None,
+        dialect: object,
+    ) -> str:
+        del dialect
+        if value is None:
+            return AlarmEntryType.ALARM.value
+        if isinstance(value, AlarmEntryType):
+            return value.value
+        return str(value).lower()
+
+    def process_result_value(
+        self,
+        value: str | None,
+        dialect: object,
+    ) -> AlarmEntryType:
+        del dialect
+        if value is None:
+            return AlarmEntryType.ALARM
+        try:
+            return AlarmEntryType(value)
+        except ValueError:
+            return AlarmEntryType.ALARM
 
 
 class Preset(SQLModel, table=True):
@@ -37,10 +79,6 @@ class CalendarSource(SQLModel, table=True):
     label: str
     url: str  # WebCal or ICS URL
     color: str | None = Field(default="#3182ce")  # Default blue
-    default_alarm_for_all_events: bool = Field(
-        default=False,
-        description="If true, add a default alarm at midnight for events without VALARM (per-calendar)",
-    )
 
 
 class AppSettings(SQLModel, table=True):
@@ -50,10 +88,6 @@ class AppSettings(SQLModel, table=True):
     weather_longitude: float | None = Field(default=None)
     weather_timezone: str = Field(default="auto")
     slideshow_duration: int = Field(default=30)  # in seconds
-    default_alarm_for_all_events: bool = Field(
-        default=False,
-        description="If true, add a default alarm at midnight for events with no VALARM",
-    )
 
 
 class AlarmEvent(SQLModel, table=True):
@@ -66,12 +100,20 @@ class AlarmEvent(SQLModel, table=True):
     # Optional: Link to calendar event (null for test/simulated alarms)
     calendar_source_id: int | None = Field(default=None, index=True)
     calendar_event_uid: str | None = Field(default=None, index=True)
+    entry_type: AlarmEntryType = Field(
+        default=AlarmEntryType.ALARM,
+        sa_column=Column(
+            AlarmEntryTypeType(),
+            nullable=False,
+            server_default=AlarmEntryType.ALARM.value,
+        ),
+    )
 
 
 class CalendarElement(SQLModel, table=True):
     """Raw calendar items fetched from calendar sources without event processing."""
 
-    __tablename__ = "calendar_elements"
+    __tablename__: ClassVar[str] = "calendar_elements"  # pyright: ignore[reportIncompatibleVariableOverride]
     __table_args__ = (UniqueConstraint("calendar_source_id", "uid"),)
 
     id: int | None = Field(default=None, primary_key=True)
@@ -99,7 +141,7 @@ CalendarEvent = CalendarElement
 class CalendarSyncStatusEntry(SQLModel, table=True):
     """Tracks synchronization status per calendar source."""
 
-    __tablename__ = "calendar_sync_status"
+    __tablename__: ClassVar[str] = "calendar_sync_status"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     id: int | None = Field(default=None, primary_key=True)
     calendar_source_id: int = Field(foreign_key="calendarsource.id", index=True, unique=True)
@@ -110,3 +152,4 @@ class CalendarSyncStatusEntry(SQLModel, table=True):
     error_count: int = Field(default=0)
     last_error_at: datetime | None = Field(default=None)
     sync_token: str | None = Field(default=None)
+    last_general_sync_at: datetime | None = Field(default=None)

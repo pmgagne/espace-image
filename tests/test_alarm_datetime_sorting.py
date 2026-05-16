@@ -47,3 +47,26 @@ def test_alarms_sort_with_mixed_naive_and_aware_datetimes(session_factory: Sessi
     assert "start_iso" in first and "start_iso" in second
     assert first["start_iso"].startswith("2026-02-15T12:00")
     assert second["start_iso"].startswith("2026-02-15T11:00")
+
+
+def test_fallback_text_uses_browser_local_offset(session_factory: SessionFactory):
+    """Fallback text should use browser local time rather than UTC."""
+    start = datetime(2026, 2, 15, 12, 0, tzinfo=UTC)
+    end = start + timedelta(hours=1)
+
+    contexts = alarms_to_context(
+        [
+            {
+                "uid": "local-offset",
+                "name": "Local Offset Event",
+                "start": start,
+                "end": end,
+                "all_day": False,
+            }
+        ],
+        mock=False,
+        tz_offset=300,
+        session_factory=session_factory,
+    )
+
+    assert contexts[0]["fallback_text"].endswith("07:00-08:00")

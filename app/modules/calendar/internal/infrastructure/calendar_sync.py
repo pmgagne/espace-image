@@ -22,6 +22,7 @@ from app.db.models import (
     CalendarSyncStatus,
     CalendarSyncStatusEntry,
 )
+from app.modules.calendar.api.contracts import CalendarSourceSyncReportDTO, CalendarSyncReportDTO
 from app.utils.timezone import normalize_datetime
 
 logger = logging.getLogger(__name__)
@@ -979,13 +980,33 @@ class CalendarService:
         session.commit()
 
     @staticmethod
+    def mark_general_sync_completed(
+        session: Session,
+        source_ids: list[int],
+    ) -> None:
+        """Persist the UTC timestamp of the latest successful general sync."""
+        if not source_ids:
+            return
+
+        synced_at = datetime.now(UTC)
+        statuses = session.exec(select(CalendarSyncStatusEntry)).all()
+        source_ids_set = set(source_ids)
+
+        for status in statuses:
+            if status.calendar_source_id in source_ids_set:
+                status.last_general_sync_at = synced_at
+                session.add(status)
+
+        session.commit()
+
+    @staticmethod
     async def _sync_single_source(
         session: Session,
         source: CalendarSource,
         utc_now: datetime,
         window_start: datetime,
         window_end: datetime,
-    ) -> None:
+    ) -> CalendarSourceSyncReportDTO:
         """
         Sync a single calendar source: fetch, parse, upsert cache,
         and update status.
@@ -995,6 +1016,8 @@ class CalendarService:
 
         sync_status = CalendarService._get_or_create_sync_status(session, source_id)
         CalendarService._mark_syncing(session, sync_status)
+        is_caldav = False
+        changed: bool | None = None
 
         try:
             ics_content: str | None = None
@@ -1019,12 +1042,14 @@ class CalendarService:
                 if has_caldav_credentials and (
                     looks_like_icloud_caldav or matches_configured_calendar
                 ):
+                    is_caldav = True
                     caldav_result = await fetch_caldav_calendar_ics_with_metadata(
                         calendar_url=source.url,
                         sync_token=sync_status.sync_token,
                         fail_on_error=True,
                     )
                     next_sync_token = caldav_result.sync_token or sync_status.sync_token
+                    changed = caldav_result.changed
                     if not caldav_result.changed:
                         CalendarService._finalize_success(
                             session,
@@ -1039,7 +1064,13 @@ class CalendarService:
                             source.id,
                             source.label,
                         )
-                        return
+                        return CalendarSourceSyncReportDTO(
+                            calendar_source_id=source_id,
+                            calendar_source_url=source.url,
+                            sync_succeeded=True,
+                            changed=False,
+                            is_caldav=True,
+                        )
                     ics_content = caldav_result.content
                     raw_elements = [
                         {
@@ -1079,7 +1110,13 @@ class CalendarService:
                 CalendarService._handle_fetch_failure(
                     session, sync_status, utc_now, source_id, source.label
                 )
-                return
+                return CalendarSourceSyncReportDTO(
+                    calendar_source_id=source_id,
+                    calendar_source_url=source.url,
+                    sync_succeeded=False,
+                    changed=changed,
+                    is_caldav=is_caldav,
+                )
 
             # Remove existing raw elements and replace with latest payloads.
             CalendarService._clear_existing_elements(session, source_id)
@@ -1095,6 +1132,13 @@ class CalendarService:
                 source,
                 sync_token=next_sync_token,
             )
+            return CalendarSourceSyncReportDTO(
+                calendar_source_id=source_id,
+                calendar_source_url=source.url,
+                sync_succeeded=True,
+                changed=changed,
+                is_caldav=is_caldav,
+            )
 
         except Exception as e:
             CalendarService._finalize_failure(
@@ -1104,9 +1148,16 @@ class CalendarService:
                 e,
                 source_id,
             )
+            return CalendarSourceSyncReportDTO(
+                calendar_source_id=source_id,
+                calendar_source_url=source.url,
+                sync_succeeded=False,
+                changed=changed,
+                is_caldav=is_caldav,
+            )
 
     @staticmethod
-    async def sync_calendar_events(session: Session) -> None:
+    async def sync_calendar_events_with_report(session: Session) -> CalendarSyncReportDTO:
         """
         Background task: Fetches all calendar sources and caches events
         within the 1-week window. Automatically purges events outside the
@@ -1151,20 +1202,23 @@ class CalendarService:
             pass
         if not sources:
             logger.info("No calendar sources configured.")
-            return
+            return CalendarSyncReportDTO(source_reports=[])
 
         logger.info(
             "Starting background sync for %d calendar sources.",
             len(sources),
         )
 
+        source_reports: list[CalendarSourceSyncReportDTO] = []
+
         for source in sources:
             if not source.id:
                 continue
 
-            await CalendarService._sync_single_source(
+            source_report = await CalendarService._sync_single_source(
                 session, source, utc_now, window_start, window_end
             )
+            source_reports.append(source_report)
 
         # After syncing all sources, assign unique-ish offsets (5-10 minutes)
         # Shuffle offsets and assign one per status; cycle if more sources exist.
@@ -1214,3 +1268,9 @@ class CalendarService:
             logger.warning(f"Error purging old dismissed events: {e}")
 
         logger.info("Background sync completed.")
+        return CalendarSyncReportDTO(source_reports=source_reports)
+
+    @staticmethod
+    async def sync_calendar_events(session: Session) -> None:
+        """Compatibility entrypoint that ignores per-source sync report metadata."""
+        await CalendarService.sync_calendar_events_with_report(session)

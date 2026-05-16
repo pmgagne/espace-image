@@ -19,7 +19,6 @@ class AppSettingsDTO:
     weather_latitude: float | None
     weather_longitude: float | None
     slideshow_duration: int
-    default_alarm_for_all_events: bool
 
 
 @dataclass(frozen=True)

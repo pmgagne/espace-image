@@ -26,7 +26,6 @@ class ISettingsService(Protocol):
         latitude: float | None,
         longitude: float | None,
         duration: int | None,
-        default_alarm_for_all_events: bool,
     ) -> AppSettingsDTO:
         """Persist settings changes and return saved settings."""
         ...

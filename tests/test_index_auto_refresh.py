@@ -3,12 +3,8 @@ from uuid import uuid4
 
 
 def test_index_refresh_includes_simulated_alarm(client, session):
-    """Simulate a DB alarm and verify `/components/index-refresh` returns the alarm fragment.
+    """`/components/index-refresh` should no longer carry alarm fragments."""
 
-    This exercises the same endpoint used by the client-side poll so it
-    confirms an appearing alarm would be surfaced to the UI poller.
-    """
-    # Ensure no simulated alarm present initially
     resp = client.get("/components/index-refresh")
     assert resp.status_code == 200
     assert "Simulated Event" not in resp.text
@@ -27,7 +23,7 @@ def test_index_refresh_includes_simulated_alarm(client, session):
     session.add(alarm)
     session.commit()
 
-    # The index-refresh should now include the simulated alarm fragment
+    # Index refresh remains alarm-free; alarm rendering is handled separately.
     resp2 = client.get("/components/index-refresh")
     assert resp2.status_code == 200
-    assert "Simulated Event" in resp2.text
+    assert "Simulated Event" not in resp2.text

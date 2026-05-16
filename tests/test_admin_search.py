@@ -41,7 +41,6 @@ def test_admin_settings_partial_uses_weather_service(client):
                 weather_latitude=48.8566,
                 weather_longitude=2.3522,
                 slideshow_duration=30,
-                default_alarm_for_all_events=False,
             )
 
         def get_settings_form(self):

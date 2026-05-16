@@ -115,9 +115,8 @@ async def components_index_refresh(
     request: Request,  # noqa: ARG001
     settings_service: ISettingsService = Depends(get_settings_service),
     weather_service: IWeatherService = Depends(get_weather_service),
-    alarms_service: IAlarmsService = Depends(get_alarms_service),
 ):
-    """Return out-of-band fragments to refresh main index components.
+    """Return out-of-band fragments to refresh weather-related index components.
 
     This endpoint returns HTML fragments with `hx-swap-oob` attributes so
     HTMX will update the corresponding wrappers on the client without
@@ -146,17 +145,6 @@ async def components_index_refresh(
             out_parts.append(f'<div hx-swap-oob="innerHTML:#weather-wrapper">{weather_html}</div>')
         except Exception:
             logger.exception("Failed to render weather fragment for index-refresh")
-
-    # Alarm fragment
-    try:
-        alarm_contexts = await alarms_service.get_alarm_contexts(mock=False, tz_offset=None)
-        alarm_html = render_alarms_fragment(alarm_contexts)
-        if alarm_html:
-            out_parts.append(f'<div hx-swap-oob="innerHTML:#alarm-poller">{alarm_html}</div>')
-        else:
-            out_parts.append('<div hx-swap-oob="innerHTML:#alarm-poller"></div>')
-    except Exception:
-        logger.exception("Failed to render alarm fragment for index-refresh")
 
     return HTMLResponse("\n".join(out_parts))
 

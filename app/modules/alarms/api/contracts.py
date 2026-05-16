@@ -13,3 +13,4 @@ class AlarmEventDTO:
     dismissed_at: str | None = None
     calendar_source_id: int | None = None
     calendar_event_uid: str | None = None
+    entry_type: str = "alarm"

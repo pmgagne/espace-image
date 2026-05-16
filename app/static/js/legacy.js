@@ -35,6 +35,27 @@
     }
 
     /**
+     * Helper: XHR JSON Request
+     */
+    function fetchJSON(url, onSuccess, onError) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    onSuccess(JSON.parse(xhr.responseText || '{}'));
+                } catch (e) {
+                    if (onError) onError(e);
+                }
+                return;
+            }
+            if (onError) onError(new Error('JSON request failed: ' + xhr.status));
+        };
+        xhr.send();
+    }
+
+    /**
      * Helper: POST Request (for Dismiss)
      */
     function postAction(url, targetId) {
@@ -53,6 +74,7 @@
                 }
                 bindDismissButtons(); // Re-bind after update
                 try { formatAlarmTimesLegacy(); } catch (e) { console.error(e); }
+                try { fetchTodayPayloadLegacy('dismiss'); } catch (e) { console.error(e); }
             }
         };
         xhr.send();
@@ -61,6 +83,15 @@
     // --- Components ---
 
     var lastAlarmHtml = "";
+    var dayPayload = { alarms: [], events: [] };
+    var dayPayloadTimerId = null;
+    var nextAlarmTimerId = null;
+    var DAY_FETCH_BASE_MS = 2 * 60 * 60 * 1000;
+    var DAY_FETCH_JITTER_MS = 15 * 60 * 1000;
+
+    function getBrowserTzOffset() {
+        return (new Date()).getTimezoneOffset();
+    }
     function bindDismissButtons() {
         var wrapper = document.getElementById('alarm-wrapper');
         if (!wrapper) return;
@@ -217,6 +248,121 @@
         });
     }
 
+    function renderTodayEventsLegacy(events) {
+        var wrapper = document.getElementById('today-events-wrapper');
+        var list = document.getElementById('today-events-list');
+        var count = document.getElementById('today-events-count');
+        if (!wrapper || !list || !count) return;
+
+        var safeEvents = events && events.length ? events : [];
+        count.innerText = String(safeEvents.length);
+        if (!safeEvents.length) {
+            wrapper.className = 'today-events-wrapper d-none';
+            list.innerHTML = '<li class="today-events-empty">No events today.</li>';
+            return;
+        }
+
+        wrapper.className = 'today-events-wrapper';
+        var html = '';
+        for (var i = 0; i < safeEvents.length; i++) {
+            var event = safeEvents[i] || {};
+            var title = event.name ? String(event.name) : 'Untitled event';
+            var whenText = event.fallback_text ? String(event.fallback_text) : '';
+            html += '<li class="today-event-item">'
+                + '<span class="today-event-title">' + title + '</span>'
+                + '<span class="today-event-time">' + whenText + '</span>'
+                + '</li>';
+        }
+        list.innerHTML = html;
+    }
+
+    function scheduleNextDayPayloadFetchLegacy() {
+        if (dayPayloadTimerId) clearTimeout(dayPayloadTimerId);
+        var jitter = Math.floor((Math.random() * (2 * DAY_FETCH_JITTER_MS + 1)) - DAY_FETCH_JITTER_MS);
+        var delay = DAY_FETCH_BASE_MS + jitter;
+        dayPayloadTimerId = setTimeout(function () {
+            fetchTodayPayloadLegacy('scheduled');
+        }, delay);
+    }
+
+    function scheduleNextAlarmCheckLegacy() {
+        if (nextAlarmTimerId) clearTimeout(nextAlarmTimerId);
+
+        var alarms = dayPayload && dayPayload.alarms ? dayPayload.alarms : [];
+        var nowMs = Date.now();
+        var hasDue = false;
+        var nextTs = null;
+
+        for (var i = 0; i < alarms.length; i++) {
+            var alarm = alarms[i] || {};
+            var triggerIso = alarm.trigger_iso || alarm.start_iso;
+            if (!triggerIso) continue;
+            var ts = Date.parse(triggerIso);
+            if (isNaN(ts)) continue;
+            if (ts <= nowMs) {
+                hasDue = true;
+                continue;
+            }
+            if (nextTs === null || ts < nextTs) {
+                nextTs = ts;
+            }
+        }
+
+        if (hasDue) {
+            checkAlarm();
+        }
+
+        if (nextTs === null) return;
+        var waitMs = Math.max(1000, nextTs - nowMs + 1000);
+        nextAlarmTimerId = setTimeout(function () {
+            checkAlarm();
+            fetchTodayPayloadLegacy('alarm-trigger');
+        }, waitMs);
+    }
+
+    function fetchTodayPayloadLegacy(reason) {
+        var tzOffset = getBrowserTzOffset();
+        fetchJSON(
+            '/api/v1/alarms/today?tz_offset=' + encodeURIComponent(String(tzOffset)),
+            function (payload) {
+                dayPayload = payload || { alarms: [], events: [] };
+                renderTodayEventsLegacy(dayPayload.events || []);
+                if (reason === 'init' || reason === 'sync-event') {
+                    checkAlarm();
+                }
+                scheduleNextAlarmCheckLegacy();
+                scheduleNextDayPayloadFetchLegacy();
+            },
+            function () {
+                scheduleNextDayPayloadFetchLegacy();
+            }
+        );
+    }
+
+    function bindEventsPanelToggleLegacy() {
+        var toggle = document.getElementById('today-events-toggle');
+        var panel = document.getElementById('today-events-panel');
+        if (!toggle || !panel) return;
+
+        toggle.onclick = function () {
+            var isHidden = panel.className.indexOf('d-none') !== -1;
+            if (isHidden) {
+                panel.className = 'today-events-panel';
+                toggle.setAttribute('aria-label', "Hide Today's Events");
+            } else {
+                panel.className = 'today-events-panel d-none';
+                toggle.setAttribute('aria-label', "Show Today's Events");
+            }
+        };
+    }
+
+    function bindCrossTabSyncRefreshLegacy() {
+        window.addEventListener('storage', function (event) {
+            if (event.key !== 'espaceImageCalendarSyncAt') return;
+            fetchTodayPayloadLegacy('sync-event');
+        });
+    }
+
     /**
      * Update clock
      */
@@ -246,11 +392,13 @@
         updateWeather();
         updateSlide(); // Immediate load
         checkAlarm();
+        bindEventsPanelToggleLegacy();
+        bindCrossTabSyncRefreshLegacy();
+        fetchTodayPayloadLegacy('init');
 
         setInterval(updateTime, 1000);
         setInterval(updateSlide, CONFIG.slideInterval);
         setInterval(updateWeather, CONFIG.weatherInterval);
-        setInterval(checkAlarm, CONFIG.alarmInterval);
     }
 
     // Start when DOM is ready
