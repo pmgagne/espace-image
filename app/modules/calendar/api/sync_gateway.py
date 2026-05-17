@@ -15,8 +15,15 @@ class ICalendarSyncGateway(Protocol):
         """Sync all configured calendar events using the given session."""
         ...
 
-    async def sync_calendar_events_with_report(self, session: Session) -> CalendarSyncReportDTO:
-        """Sync calendar events and return a per-source report for orchestration decisions."""
+    async def sync_calendar_events_with_report(
+        self, session: Session, force: bool = False
+    ) -> CalendarSyncReportDTO:
+        """Sync calendar events and return a per-source report for orchestration decisions.
+
+        Args:
+            force: When True, force a full resync for all sources even if CalDAV
+                indicates no changes.
+        """
         ...
 
     async def normalize_alarm_occurrences(

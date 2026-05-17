@@ -62,6 +62,20 @@ If you launch OpenCode from the repo root, it should pick up this configuration 
 - Fixed all-day event timezone handling to display correct dates in negative UTC offset timezones
 - See [ADR-2026-02-17](docs/ADR/ADR-2026-02-17-recurring-events-allday-timezone-fixes.md) for technical details
 
+## CalDAV Configuration
+
+There are two environment variables that affect CalDAV behavior:
+
+- `CALDAV_PROVIDER`: Optional provider hint for CalDAV sources. When set to `icloud` the
+  application enables Apple/iCloud-specific parsing fixes to work around known
+  quirks in Apple-generated ICS feeds. If unset or empty the app falls back to
+  URL-based heuristics to detect Apple/iCloud calendars.
+- `CALDAV_DISABLE_HTTP3`: When `true`, the application will attempt to disable
+  HTTP/3 negotiation for the CalDAV HTTP client by setting common environment
+  hints used by `httpx`/`aiohttp` stacks. This is a best-effort toggle to avoid
+  interoperability issues with servers that advertise HTTP/3 but are
+  incompatible with the client stack.
+
 ## Quick Start (Local)
 
 Requirements: Python 3.13+, [uv](https://docs.astral.sh/uv/) installed.

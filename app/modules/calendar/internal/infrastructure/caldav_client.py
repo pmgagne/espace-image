@@ -9,16 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, cast
 from urllib.parse import urlparse
 
-import caldav
-
 from app.config import (
     CALDAV_CALENDAR,
     CALDAV_CONNECT_TIMEOUT_SECONDS,
+    CALDAV_DISABLE_HTTP3,
     CALDAV_MAX_RETRIES,
     CALDAV_PASSWORD,
     CALDAV_READ_TIMEOUT_SECONDS,
@@ -27,6 +27,16 @@ from app.config import (
     CALDAV_USERNAME,
     CALDAV_VERIFY_SSL,
 )
+
+# If the operator has requested HTTP/3 disabling, set environment hints early
+# (before importing HTTP client libraries) so downstream libraries pick them up.
+if CALDAV_DISABLE_HTTP3:
+    # Best-effort toggle for various HTTP stacks
+    os.environ.setdefault("HTTPX_DISABLE_HTTP3", "1")
+    os.environ.setdefault("AIOHTTP_NO_HTTP3", "1")
+    os.environ.setdefault("DISABLE_HTTP3", "1")
+
+import caldav
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +209,21 @@ async def fetch_caldav_calendars_with_metadata(
 
     try:
         timeout_seconds = max(CALDAV_CONNECT_TIMEOUT_SECONDS, CALDAV_READ_TIMEOUT_SECONDS)
+
+        # If requested, try to disable HTTP/3 negotiation by setting common
+        # environment variables used by httpx/aiohttp/httpcore-based clients.
+        # This is a best-effort toggle to work around servers that advertise
+        # Alt-Svc/HTTP/3 support but are incompatible with the client stack.
+        if CALDAV_DISABLE_HTTP3:
+            import os
+
+            logger.info("CALDAV_DISABLE_HTTP3 set: disabling HTTP/3 negotiation for CalDAV client")
+            # httpx/httpcore hint
+            os.environ.setdefault("HTTPX_DISABLE_HTTP3", "1")
+            # aiohttp/alpn hint (not standardized; some builds read this)
+            os.environ.setdefault("AIOHTTP_NO_HTTP3", "1")
+            # generic hint for other potential stacks
+            os.environ.setdefault("DISABLE_HTTP3", "1")
 
         def _sync_fetch_many() -> dict[str, CalDAVFetchResult]:
             try:

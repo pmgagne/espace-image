@@ -40,6 +40,21 @@ class ICalendarRepository(Protocol):
         """Delete one calendar source row."""
         ...
 
+    def cleanup_source(self, session: Session, source_id: int) -> tuple[int, int, int]:
+        """Remove any persisted rows tied to a calendar source (status, elements, alarms).
+
+        Returns a tuple of deleted counts: (sync_status_count, calendar_elements_count, alarm_events_count).
+        """
+        ...
+
+    def cleanup_orphans(self, session: Session) -> tuple[int, int, int]:
+        """Remove any CalendarSyncStatusEntry, CalendarElement, and AlarmEvent rows
+        that are not tied to an active CalendarSource.
+
+        Returns a tuple of deleted counts: (sync_status_count, calendar_elements_count, alarm_events_count).
+        """
+        ...
+
     def list_statuses(self, session: Session) -> list[Any]:
         """Return all sync status rows."""
         ...

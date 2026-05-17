@@ -26,8 +26,42 @@ from app.db.models import (
 )
 from app.modules.calendar.api.contracts import CalendarSourceSyncReportDTO, CalendarSyncReportDTO
 from app.utils.timezone import normalize_datetime
+from app.config import BACKGROUND_SYNC_DELAY_MINUTES, BACKGROUND_SYNC_DEFAULT_MINUTES
 
 logger = logging.getLogger(__name__)
+
+
+def _is_apple_ical_url(url: str | None) -> bool:
+    """Detect Apple/iCloud calendar URLs to enable Apple-specific parsing fixes.
+
+    Returns True for domains under `icloud.com` or containing known Apple calendar hosts.
+    """
+    if not url:
+        return False
+    try:
+        parsed = urlparse(url)
+        host = (parsed.netloc or parsed.path or "").lower()
+        return (
+            host.endswith("icloud.com") or "caldav.icloud.com" in host or host.endswith("apple.com")
+        )
+    except Exception:
+        return "icloud.com" in (url or "")
+
+
+def _is_apple_source(provider: str | None, url: str | None) -> bool:
+    """Prefer `provider` when present, otherwise fall back to URL heuristics."""
+    if provider:
+        try:
+            return provider.lower() in ("icloud", "apple", "ical")
+        except Exception:
+            pass
+    return _is_apple_ical_url(url)
+
+
+def _env_provider() -> str | None:
+    """Return provider value from `CALDAV_PROVIDER` env var, or None."""
+    val = os.environ.get("CALDAV_PROVIDER")
+    return val if val else None
 
 
 class CalendarService:
@@ -519,7 +553,7 @@ class CalendarService:
         all_alarms: list[dict[str, Any]] = []
         for (source_id, url), content in zip(sources, results, strict=False):
             if content:
-                fix_icloud = "icloud.com" in url
+                fix_icloud = _is_apple_source(_env_provider(), url)
                 alarms = CalendarService.get_upcoming_alarms(
                     content,
                     check_time,
@@ -1190,6 +1224,7 @@ class CalendarService:
         window_end: datetime,
         prefetched_caldav_result: Any | None = None,
         use_caldav: bool = False,
+        force: bool = False,
     ) -> CalendarSourceSyncReportDTO:
         """
         Sync a single calendar source: fetch, parse, upsert cache,
@@ -1229,7 +1264,25 @@ class CalendarService:
                 ):
                     is_caldav = True
                     caldav_result = prefetched_caldav_result
+                    # If a prefetched batch result exists but indicated the fetch
+                    # did not succeed (for example network error), and the user
+                    # requested a forced resync, attempt a per-source fetch with
+                    # `fail_on_error=True` so retries/backoff are performed and
+                    # failures are surfaced.
                     if caldav_result is None:
+                        caldav_result = await fetch_caldav_calendar_ics_with_metadata(
+                            calendar_url=source.url,
+                            sync_token=sync_status.sync_token,
+                            fail_on_error=True,
+                        )
+                    elif not getattr(caldav_result, "fetch_succeeded", True) and force:
+                        logger.info(
+                            "Force requested: re-trying CalDAV fetch for source %s (%s)",
+                            source.id,
+                            source.label,
+                        )
+                        # This call will perform its own retries/backoff and will
+                        # raise CalDAVFetchError on persistent failures.
                         caldav_result = await fetch_caldav_calendar_ics_with_metadata(
                             calendar_url=source.url,
                             sync_token=sync_status.sync_token,
@@ -1240,7 +1293,7 @@ class CalendarService:
                     if not getattr(caldav_result, "fetch_succeeded", True):
                         ics_content = None
                         raw_elements = []
-                    elif not caldav_result.changed:
+                    elif not caldav_result.changed and not force:
                         CalendarService._finalize_success(
                             session,
                             sync_status,
@@ -1262,6 +1315,8 @@ class CalendarService:
                             is_caldav=True,
                         )
                     else:
+                        # If forcing a full resync when CalDAV reports no change,
+                        # proceed to treat content as fetched and replace cache.
                         ics_content = caldav_result.content
                         raw_elements = [
                             {
@@ -1272,6 +1327,9 @@ class CalendarService:
                             }
                             for element in caldav_result.elements
                         ]
+                        # If force requested and CalDAV reported no change, mark changed=True
+                        if force and not changed:
+                            changed = True
                 else:
                     ics_content = await CalendarService.fetch_ics(source.url)
                     if ics_content is not None:
@@ -1322,7 +1380,7 @@ class CalendarService:
                 raw_elements,
                 window_start=window_start,
                 window_end=window_end,
-                fix_icloud="icloud.com" in source.url,
+                fix_icloud=_is_apple_source(_env_provider(), source.url),
             )
 
             session.commit()
@@ -1360,7 +1418,9 @@ class CalendarService:
             )
 
     @staticmethod
-    async def sync_calendar_events_with_report(session: Session) -> CalendarSyncReportDTO:
+    async def sync_calendar_events_with_report(
+        session: Session, force: bool = False
+    ) -> CalendarSyncReportDTO:
         """
         Background task: Fetches all calendar sources and caches events
         within the 1-week window. Automatically purges events outside the
@@ -1454,8 +1514,23 @@ class CalendarService:
                 window_end,
                 prefetched_caldav_result=prefetched_caldav_results.get(source.id),
                 use_caldav=CalendarService._should_use_caldav(source.url),
+                force=force,
             )
             source_reports.append(source_report)
+            # Optional inter-source delay to avoid hammering upstream servers.
+            try:
+                delay_minutes = float(BACKGROUND_SYNC_DELAY_MINUTES or 0)
+                if delay_minutes and delay_minutes > 0:
+                    delay_seconds = delay_minutes * 60
+                    logger.debug(
+                        "Sleeping %.3f seconds (%.3f minutes) between calendar source syncs",
+                        delay_seconds,
+                        delay_minutes,
+                    )
+                    await asyncio.sleep(delay_seconds)
+            except Exception:
+                # Never let the optional delay break the sync loop
+                logger.debug("Ignoring error while applying inter-source sync delay")
 
         # After syncing all sources, assign unique-ish offsets (5-10 minutes)
         # Shuffle offsets and assign one per status; cycle if more sources exist.
@@ -1505,12 +1580,33 @@ class CalendarService:
             logger.warning(f"Error purging old dismissed events: {e}")
 
         logger.info("Background sync completed.")
+        # Log when the next background update is planned using configured delay
+        try:
+            delay_minutes = (
+                BACKGROUND_SYNC_DELAY_MINUTES
+                if BACKGROUND_SYNC_DELAY_MINUTES and BACKGROUND_SYNC_DELAY_MINUTES > 0
+                else BACKGROUND_SYNC_DEFAULT_MINUTES
+            )
+            next_run = datetime.now(UTC) + timedelta(minutes=delay_minutes)
+            logger.info(
+                "Next background sync planned at %s (in %.1f minutes)",
+                next_run.isoformat(),
+                delay_minutes,
+            )
+        except Exception:
+            logger.debug("Unable to compute next background sync time")
+
         return CalendarSyncReportDTO(source_reports=source_reports)
 
     @staticmethod
-    async def sync_calendar_events(session: Session) -> None:
-        """Compatibility entrypoint that ignores per-source sync report metadata."""
-        await CalendarService.sync_calendar_events_with_report(session)
+    async def sync_calendar_events(session: Session, force: bool = False) -> None:
+        """Compatibility entrypoint that ignores per-source sync report metadata.
+
+        Args:
+            force: When True, force a full resync for all sources even if CalDAV
+                indicates no changes.
+        """
+        await CalendarService.sync_calendar_events_with_report(session, force=force)
 
     @staticmethod
     def _should_use_caldav(source_url: str) -> bool:

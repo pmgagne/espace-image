@@ -45,6 +45,17 @@ def main(
         raise typer.Exit(code=0)
 
 
+# Configure logging for CLI runs so backoff/retry and info logs are visible
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+import logging
+
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+
 @dataclass(frozen=True)
 class RemoteCalendar:
     """Remote calendar descriptor discovered from a CalDAV account."""
@@ -127,6 +138,18 @@ def _clear_calendar_cache(db_engine: Any | None = None) -> tuple[int, int]:
             session.delete(element)
         for alarm in alarm_events:
             session.delete(alarm)
+
+        # Also clear stored CalDAV sync tokens so next sync does a full refresh.
+        try:
+            from app.db.models import CalendarSyncStatusEntry
+
+            statuses = list(session.exec(select(CalendarSyncStatusEntry)).all())
+            for st in statuses:
+                st.sync_token = None
+                session.add(st)
+        except Exception:
+            # If the model isn't present or another error occurs, ignore and continue.
+            pass
 
         session.commit()
         return (len(calendar_elements), len(alarm_events))
@@ -343,6 +366,47 @@ def db_clear_calendars() -> None:
     )
 
 
+@db_app.command("cleanup")
+def db_cleanup(
+    source_id: int | None = typer.Argument(
+        None, help="Optional calendar source ID to cleanup. If omitted, cleanup orphaned rows."
+    ),
+) -> None:
+    """Cleanup persisted rows for a calendar source (status, cached events, alarms).
+
+    If `source_id` is omitted, remove any CalendarSyncStatusEntry, CalendarElement,
+    and AlarmEvent rows that do not correspond to an active CalendarSource.
+    """
+
+    from app.db.engine import engine
+    from app.modules.calendar.internal.infrastructure.repository import CalendarRepository
+
+    target_engine = engine
+    from sqlmodel import Session
+
+    with Session(target_engine) as session:
+        try:
+            if source_id is not None:
+                repo = CalendarRepository()
+                counts = repo.cleanup_source(session, source_id)
+                console.print(
+                    f"[green]Cleanup completed for source {source_id}.[/green] "
+                    f"statuses={counts[0]}, calendar_elements={counts[1]}, alarmevent={counts[2]}"
+                )
+                return
+
+            # General orphan cleanup: delegate to repository implementation
+            repo = CalendarRepository()
+            deleted_statuses, deleted_elements, deleted_alarms = repo.cleanup_orphans(session)
+            console.print(
+                f"[green]General cleanup completed.[/green] "
+                f"statuses={deleted_statuses}, calendar_elements={deleted_elements}, alarmevent={deleted_alarms}"
+            )
+        except Exception as exc:
+            console.print(f"[red]Cleanup failed: {exc}[/red]")
+            raise typer.Exit(code=1)
+
+
 @caldav_app.command("list")
 def caldav_list(
     url: str = typer.Option(default_factory=_default_caldav_url, help="CalDAV server URL."),
@@ -501,6 +565,7 @@ def caldav_sync(
         help="CalDAV password.",
         hide_input=True,
     ),
+    force: bool = typer.Option(default=False, help="Force a full resync of all CalDAV sources."),
 ) -> None:
     """Sync configured calendar sources, optionally ensuring one selected calendar is configured."""
 
@@ -521,7 +586,7 @@ def caldav_sync(
                 console.print(f"[green]Added missing source for sync:[/green] {selected.name}")
 
         with console.status("Syncing calendar sources..."):
-            await service.sync_calendars()
+            await service.sync_calendars(force=force)
 
         statuses = await service.get_sync_status()
         table = Table(title="Calendar sync")

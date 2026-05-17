@@ -2,7 +2,7 @@ import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request, Response
@@ -10,7 +10,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 # Import configuration constants
-from app.config import CALENDAR_SYNC_INTERVAL_MINUTES
+from app.config import (
+    BACKGROUND_SYNC_DEFAULT_MINUTES,
+    BACKGROUND_SYNC_DELAY_MINUTES,
+)
 from app.db.session_factory import SessionFactory
 from app.modules.alarms.rest import router as alarms_rest_router
 from app.modules.calendar.loader import build_calendar_service
@@ -92,6 +95,31 @@ async def background_sync_calendars() -> None:
             )
     except Exception as e:
         logger.exception("Error in background calendar sync: %s", e)
+    finally:
+        # Schedule the next one-shot run at completion using configured delay
+        try:
+            delay_minutes = (
+                BACKGROUND_SYNC_DELAY_MINUTES
+                if BACKGROUND_SYNC_DELAY_MINUTES and BACKGROUND_SYNC_DELAY_MINUTES > 0
+                else BACKGROUND_SYNC_DEFAULT_MINUTES
+            )
+            next_time = datetime.now(UTC) + timedelta(minutes=delay_minutes)
+            # replace_existing ensures we don't keep duplicate jobs
+            scheduler.add_job(
+                background_sync_calendars,
+                "date",
+                run_date=next_time,
+                id="calendar_sync",
+                name=f"One-shot calendar sync scheduled at {next_time.isoformat()}",
+                replace_existing=True,
+            )
+            logger.info(
+                "Scheduled next background sync at %s (in %.1f minutes)",
+                next_time.isoformat(),
+                delay_minutes,
+            )
+        except Exception:
+            logger.exception("Failed to schedule follow-up calendar sync")
 
 
 @asynccontextmanager
@@ -109,19 +137,27 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         logger.error("Initial calendar sync failed: %s", e)
 
     # Start the APScheduler
-    scheduler.add_job(
-        background_sync_calendars,
-        "interval",
-        minutes=CALENDAR_SYNC_INTERVAL_MINUTES,
-        id="calendar_sync",
-        name=f"Sync calendar events every {CALENDAR_SYNC_INTERVAL_MINUTES} minutes",
-        next_run_time=datetime.now(UTC),
-    )
     scheduler.start()
-    logger.info(
-        "Scheduler started (calendar sync every %s minutes)",
-        CALENDAR_SYNC_INTERVAL_MINUTES,
-    )
+
+    # Schedule the next run as a one-shot at now + configured delay.
+    # If the configured delay is <= 0 or unset, use the default (120 minutes).
+    try:
+        delay_minutes = (
+            BACKGROUND_SYNC_DELAY_MINUTES
+            if BACKGROUND_SYNC_DELAY_MINUTES and BACKGROUND_SYNC_DELAY_MINUTES > 0
+            else BACKGROUND_SYNC_DEFAULT_MINUTES
+        )
+        next_time = datetime.now(UTC) + timedelta(minutes=delay_minutes)
+        scheduler.add_job(
+            background_sync_calendars,
+            "date",
+            run_date=next_time,
+            id="calendar_sync",
+            name=f"One-shot calendar sync scheduled at {next_time.isoformat()}",
+        )
+        logger.info("Scheduler started (one-shot calendar sync at %s)", next_time.isoformat())
+    except Exception:
+        logger.exception("Failed to schedule calendar sync job")
 
     yield
 

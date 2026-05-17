@@ -48,7 +48,7 @@ class DummyCalendarService:
                 return True
         return False
 
-    async def sync_calendars(self) -> None:
+    async def sync_calendars(self, force: bool = False) -> None:
         self.synced = True
 
     async def normalize_alarm_occurrences(
