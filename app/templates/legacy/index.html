@@ -313,12 +313,10 @@
 <div id="alarm-wrapper"></div>
 
 <div id="today-events-wrapper" class="today-events-wrapper d-none">
-    <button type="button" id="today-events-toggle" class="today-events-toggle"
-        aria-label="Show Today's Events">📅</button>
+    <button type="button" id="today-events-toggle" class="today-events-toggle" aria-label="Show Events">📅</button>
     <div id="today-events-panel" class="today-events-panel d-none">
-        <div class="today-events-title">Today's Events (<span id="today-events-count">0</span>)</div>
         <ul id="today-events-list" class="today-events-list">
-            <li class="today-events-empty">No events today.</li>
+            <li class="today-events-empty">No items.</li>
         </ul>
     </div>
 </div>
@@ -327,9 +325,9 @@
 <script>
     var CONFIG = {
         slideInterval: {{ settings.slideshow_duration or 30 }} * 1000,
-            // Weather and alarm updates are driven by central index refresh interval
             weatherInterval: { { legacy_weather_interval_ms } },
-    alarmInterval: { { legacy_index_update_interval_ms } }
+    alarmInterval: { { legacy_index_update_interval_ms } },
+    dayFetchIntervalMs: { { frontend_day_fetch_interval_ms } }
     };
 </script>
 

@@ -9,14 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from dataclasses import dataclass, field
-
-import caldav
+from typing import Any, cast
+from urllib.parse import urlparse
 
 from app.config import (
     CALDAV_CALENDAR,
     CALDAV_CONNECT_TIMEOUT_SECONDS,
+    CALDAV_DISABLE_HTTP3,
     CALDAV_MAX_RETRIES,
     CALDAV_PASSWORD,
     CALDAV_READ_TIMEOUT_SECONDS,
@@ -25,6 +27,16 @@ from app.config import (
     CALDAV_USERNAME,
     CALDAV_VERIFY_SSL,
 )
+
+# If the operator has requested HTTP/3 disabling, set environment hints early
+# (before importing HTTP client libraries) so downstream libraries pick them up.
+if CALDAV_DISABLE_HTTP3:
+    # Best-effort toggle for various HTTP stacks
+    os.environ.setdefault("HTTPX_DISABLE_HTTP3", "1")
+    os.environ.setdefault("AIOHTTP_NO_HTTP3", "1")
+    os.environ.setdefault("DISABLE_HTTP3", "1")
+
+import caldav
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +68,57 @@ class CalDAVFetchResult:
     content: str | None
     sync_token: str | None
     changed: bool
+    fetch_succeeded: bool = True
     elements: list[CalDAVElement] = field(default_factory=list)
 
 
 def _normalize_calendar_url(url: str) -> str:
     """Normalize calendar URLs for resilient equality checks."""
     return url.strip().rstrip("/")
+
+
+def _same_calendar_url(left: str, right: str) -> bool:
+    """Return True when two URLs refer to the same CalDAV calendar."""
+    normalized_left = _normalize_calendar_url(left)
+    normalized_right = _normalize_calendar_url(right)
+    if not normalized_left or not normalized_right:
+        return False
+    return (
+        normalized_left == normalized_right
+        or normalized_left in normalized_right
+        or normalized_right in normalized_left
+    )
+
+
+def _find_matching_calendar(calendars: list[Any], target_calendar: str) -> Any | None:
+    """Find one discovered calendar matching the requested URL/path."""
+    normalized_target = _normalize_calendar_url(target_calendar)
+    target_path = urlparse(normalized_target).path.rstrip("/")
+
+    for calendar in calendars:
+        try:
+            href = getattr(calendar, "url", None) or getattr(calendar, "href", None)
+            href_str = str(href or calendar)
+            normalized_href = _normalize_calendar_url(href_str)
+            href_path = urlparse(normalized_href).path.rstrip("/")
+            if _same_calendar_url(normalized_target, normalized_href):
+                return calendar
+            if target_path and href_path and target_path == href_path:
+                return calendar
+        except Exception:
+            continue
+
+    return None
+
+
+def _empty_fetch_result(sync_token: str | None, fetch_succeeded: bool = False) -> CalDAVFetchResult:
+    """Return an empty CalDAV fetch result for failed or skipped fetches."""
+    return CalDAVFetchResult(
+        content=None,
+        sync_token=sync_token,
+        changed=False,
+        fetch_succeeded=fetch_succeeded,
+    )
 
 
 def _build_calendar_ics(items: list[str]) -> str | None:
@@ -95,7 +152,156 @@ def _empty_calendar_ics() -> str:
     return "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//espace-image//CalDAV sync//EN\nEND:VCALENDAR\n"
 
 
-async def fetch_caldav_calendar_ics_with_metadata(  # noqa: C901
+def _fetch_calendar_with_metadata(calendar: Any, sync_token: str | None) -> CalDAVFetchResult:
+    """Fetch one discovered CalDAV calendar using an existing DAV context."""
+    sync_collection = calendar.get_objects_by_sync_token(sync_token=sync_token)
+    new_sync_token = getattr(sync_collection, "sync_token", sync_token)
+    changed = sync_token is None or len(sync_collection) > 0
+    if not changed:
+        return CalDAVFetchResult(
+            content=None,
+            sync_token=new_sync_token,
+            changed=False,
+            fetch_succeeded=True,
+        )
+
+    items: list[str] = []
+    elements: list[CalDAVElement] = []
+    for event in calendar.events():
+        try:
+            data = event.data
+            if isinstance(data, bytes):
+                data = data.decode("utf-8", errors="ignore")
+            items.append(data)
+            href = str(getattr(event, "url", None) or getattr(event, "href", None) or "")
+            etag = getattr(event, "etag", None)
+            uid = href.rstrip("/").split("/")[-1] or href or f"item-{len(elements) + 1}"
+            elements.append(
+                CalDAVElement(
+                    uid=uid,
+                    href=href,
+                    etag=str(etag) if etag is not None else None,
+                    raw_ics=data,
+                )
+            )
+        except Exception:
+            continue
+
+    return CalDAVFetchResult(
+        content=_build_calendar_ics(items) or _empty_calendar_ics(),
+        sync_token=new_sync_token,
+        changed=True,
+        fetch_succeeded=True,
+        elements=elements,
+    )
+
+
+def _sync_fetch_many_impl(
+    requests: list[tuple[str, str | None]], timeout_seconds: int
+) -> dict[str, CalDAVFetchResult]:
+    """Synchronous implementation that performs authenticated DAV batch fetches.
+
+    Extracted to a top-level function to keep the async wrapper simple and
+    reduce function complexity for linters.
+    """
+    try:
+        dav_client_cls = cast(Any, caldav.DAVClient)
+        client = dav_client_cls(
+            url=CALDAV_URL,
+            username=CALDAV_USERNAME,
+            password=CALDAV_PASSWORD,
+            timeout=timeout_seconds,
+            ssl_verify_cert=CALDAV_VERIFY_SSL,
+        )
+        principal = client.principal()
+        calendars = list(principal.calendars())
+        results: dict[str, CalDAVFetchResult] = {}
+
+        for calendar_url, sync_token in requests:
+            target = _find_matching_calendar(calendars, calendar_url)
+            if target is None:
+                logger.warning("CalDAV calendar matching '%s' not found", calendar_url)
+                results[calendar_url] = _empty_fetch_result(
+                    sync_token,
+                    fetch_succeeded=False,
+                )
+                continue
+
+            try:
+                results[calendar_url] = _fetch_calendar_with_metadata(target, sync_token)
+            except Exception as exc:
+                logger.warning("CalDAV fetch failed for '%s': %s", calendar_url, exc)
+                results[calendar_url] = _empty_fetch_result(
+                    sync_token,
+                    fetch_succeeded=False,
+                )
+
+        return results
+    except Exception as exc:
+        raise CalDAVFetchError(str(exc)) from exc
+
+
+async def fetch_caldav_calendars_with_metadata(
+    requests: list[tuple[str, str | None]],
+    fail_on_error: bool = False,
+) -> dict[str, CalDAVFetchResult]:
+    """Fetch multiple CalDAV calendars while reusing one DAV client/principal context."""
+    if not CALDAV_SYNC_ENABLED or not CALDAV_URL or not requests:
+        return {
+            calendar_url: _empty_fetch_result(sync_token, fetch_succeeded=False)
+            for calendar_url, sync_token in requests
+        }
+
+    try:
+        timeout_seconds = max(CALDAV_CONNECT_TIMEOUT_SECONDS, CALDAV_READ_TIMEOUT_SECONDS)
+
+        # If requested, try to disable HTTP/3 negotiation by setting common
+        # environment variables used by httpx/aiohttp/httpcore-based clients.
+        # This is a best-effort toggle to work around servers that advertise
+        # Alt-Svc/HTTP/3 support but are incompatible with the client stack.
+        if CALDAV_DISABLE_HTTP3:
+            import os
+
+            logger.info("CALDAV_DISABLE_HTTP3 set: disabling HTTP/3 negotiation for CalDAV client")
+            # httpx/httpcore hint
+            os.environ.setdefault("HTTPX_DISABLE_HTTP3", "1")
+            # aiohttp/alpn hint (not standardized; some builds read this)
+            os.environ.setdefault("AIOHTTP_NO_HTTP3", "1")
+            # generic hint for other potential stacks
+            os.environ.setdefault("DISABLE_HTTP3", "1")
+
+        retries = max(1, CALDAV_MAX_RETRIES)
+        for attempt in range(1, retries + 1):
+            try:
+                return await asyncio.to_thread(_sync_fetch_many_impl, requests, timeout_seconds)
+            except CalDAVFetchError as exc:
+                logger.warning(
+                    "CalDAV authenticated batch fetch attempt %d/%d failed: %s",
+                    attempt,
+                    retries,
+                    exc,
+                )
+                if attempt == retries:
+                    if fail_on_error:
+                        raise
+                    return {
+                        calendar_url: _empty_fetch_result(sync_token, fetch_succeeded=False)
+                        for calendar_url, sync_token in requests
+                    }
+                await asyncio.sleep(min(2 ** (attempt - 1), 8))
+        return {
+            calendar_url: _empty_fetch_result(sync_token, fetch_succeeded=False)
+            for calendar_url, sync_token in requests
+        }
+    except ImportError:
+        logger.warning("caldav library not installed; cannot fetch CalDAV calendars")
+        return {
+            calendar_url: _empty_fetch_result(sync_token, fetch_succeeded=False)
+            for calendar_url, sync_token in requests
+        }
+
+
+async def fetch_caldav_calendar_ics_with_metadata(
     calendar_url: str | None = None,
     sync_token: str | None = None,
     fail_on_error: bool = False,
@@ -105,112 +311,16 @@ async def fetch_caldav_calendar_ics_with_metadata(  # noqa: C901
 
     if not CALDAV_SYNC_ENABLED or not CALDAV_URL:
         logger.debug("CalDAV not configured or disabled; skipping CalDAV fetch")
-        return CalDAVFetchResult(content=None, sync_token=sync_token, changed=False)
+        return _empty_fetch_result(sync_token, fetch_succeeded=False)
     if not target_calendar:
         logger.debug("CalDAV target calendar not configured; skipping CalDAV fetch")
-        return CalDAVFetchResult(content=None, sync_token=sync_token, changed=False)
+        return _empty_fetch_result(sync_token, fetch_succeeded=False)
 
-    try:
-        timeout_seconds = max(CALDAV_CONNECT_TIMEOUT_SECONDS, CALDAV_READ_TIMEOUT_SECONDS)
-
-        def _sync_fetch() -> CalDAVFetchResult:  # noqa: C901
-            try:
-                client = caldav.DAVClient(
-                    url=CALDAV_URL,
-                    username=CALDAV_USERNAME,
-                    password=CALDAV_PASSWORD,
-                    timeout=timeout_seconds,
-                    ssl_verify_cert=CALDAV_VERIFY_SSL,
-                )
-                principal = client.principal()
-                calendars = principal.calendars()
-                normalized_target = _normalize_calendar_url(target_calendar)
-                target = None
-                for cal in calendars:
-                    try:
-                        href = getattr(cal, "url", None) or getattr(cal, "href", None)
-                        if not href:
-                            href = str(cal)
-                        href_str = str(href)
-                        normalized_href = _normalize_calendar_url(href_str)
-
-                        if (
-                            normalized_target == normalized_href
-                            or normalized_target in normalized_href
-                            or normalized_href in normalized_target
-                        ):
-                            target = cal
-                            break
-                    except Exception:
-                        continue
-                if target is None:
-                    logger.warning("CalDAV calendar matching '%s' not found", target_calendar)
-                    return CalDAVFetchResult(content=None, sync_token=sync_token, changed=False)
-
-                # Ask server for changes since last token. If no changes, skip
-                # full event download and reuse cached events in DB.
-                sync_collection = target.get_objects_by_sync_token(sync_token=sync_token)
-                new_sync_token = getattr(sync_collection, "sync_token", sync_token)
-                changed = sync_token is None or len(sync_collection) > 0
-                if not changed:
-                    return CalDAVFetchResult(
-                        content=None,
-                        sync_token=new_sync_token,
-                        changed=False,
-                    )
-
-                items = []
-                elements: list[CalDAVElement] = []
-                for ev in target.events():
-                    try:
-                        data = ev.data
-                        if isinstance(data, bytes):
-                            data = data.decode("utf-8", errors="ignore")
-                        items.append(data)
-                        href = str(getattr(ev, "url", None) or getattr(ev, "href", None) or "")
-                        etag = getattr(ev, "etag", None)
-                        uid = href.rstrip("/").split("/")[-1] or href or f"item-{len(elements) + 1}"
-                        elements.append(
-                            CalDAVElement(
-                                uid=uid,
-                                href=href,
-                                etag=str(etag) if etag is not None else None,
-                                raw_ics=data,
-                            )
-                        )
-                    except Exception:
-                        continue
-
-                content = _build_calendar_ics(items) or _empty_calendar_ics()
-                return CalDAVFetchResult(
-                    content=content,
-                    sync_token=new_sync_token,
-                    changed=True,
-                    elements=elements,
-                )
-            except Exception as e:
-                raise CalDAVFetchError(str(e)) from e
-
-        retries = max(1, CALDAV_MAX_RETRIES)
-        for attempt in range(1, retries + 1):
-            try:
-                return await asyncio.to_thread(_sync_fetch)
-            except CalDAVFetchError as exc:
-                logger.warning(
-                    "CalDAV authenticated fetch attempt %d/%d failed: %s",
-                    attempt,
-                    retries,
-                    exc,
-                )
-                if attempt == retries:
-                    if fail_on_error:
-                        raise
-                    return CalDAVFetchResult(content=None, sync_token=sync_token, changed=False)
-                await asyncio.sleep(min(2 ** (attempt - 1), 8))
-        return CalDAVFetchResult(content=None, sync_token=sync_token, changed=False)
-    except ImportError:
-        logger.warning("caldav library not installed; cannot fetch CalDAV calendars")
-        return CalDAVFetchResult(content=None, sync_token=sync_token, changed=False)
+    results = await fetch_caldav_calendars_with_metadata(
+        [(target_calendar, sync_token)],
+        fail_on_error=fail_on_error,
+    )
+    return results.get(target_calendar, _empty_fetch_result(sync_token, fetch_succeeded=False))
 
 
 async def fetch_caldav_calendar_ics(

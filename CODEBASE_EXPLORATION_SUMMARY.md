@@ -217,6 +217,12 @@ Start here when exploring the codebase:
 - `app/modules/weather/internal/infrastructure/weather_api.py`
 - `app/modules/media/internal/infrastructure/image_ops.py`
 
+## Environment Variables and Docker Compose
+
+- All environment variables (see `.env.example`) are now automatically passed to the container via `docker-compose.yml`.
+- Key variables: `LOG_LEVEL`, `WEBAPP_DEBUG`, `TZ`, `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD`, `CALDAV_PROVIDER`, `CALDAV_CALENDAR`, `CALDAV_SYNC_ENABLED`, `CALDAV_DISABLE_HTTP3`, `CALDAV_CONNECT_TIMEOUT_SECONDS`, `CALDAV_READ_TIMEOUT_SECONDS`, `CALDAV_MAX_RETRIES`, `CALDAV_VERIFY_SSL`, `BACKGROUND_SYNC_DELAY_MINUTES`, `BACKGROUND_SYNC_DEFAULT_MINUTES`.
+- See `README.md` for full details and usage examples.
+
 ## Summary
 
 The important architectural fact is:

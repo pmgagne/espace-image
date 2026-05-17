@@ -1,5 +1,6 @@
 """Calendar repository adapter for SQLModel persistence."""
 
+import contextlib
 from datetime import datetime
 
 from sqlmodel import Session, select
@@ -49,6 +50,110 @@ class CalendarRepository(ICalendarRepository):
         """Delete one calendar source row."""
         session.delete(source)
         session.commit()
+
+    def cleanup_source(self, session: Session, source_id: int) -> tuple[int, int, int]:
+        """Remove sync status, calendar elements, and alarm events for a source.
+
+        Returns a tuple of deleted counts: (sync_status_count, calendar_elements_count, alarm_events_count).
+        This function centralizes cleanup so future removals (like old events) can be added here.
+        """
+        from app.db.models import AlarmEvent, CalendarElement, CalendarSyncStatusEntry
+
+        # Collect rows to delete so we can count them
+        statuses = list(
+            session.exec(
+                select(CalendarSyncStatusEntry).where(
+                    CalendarSyncStatusEntry.calendar_source_id == source_id
+                )
+            ).all()
+        )
+        elements = list(
+            session.exec(
+                select(CalendarElement).where(CalendarElement.calendar_source_id == source_id)
+            ).all()
+        )
+        alarms = list(
+            session.exec(select(AlarmEvent).where(AlarmEvent.calendar_source_id == source_id)).all()
+        )
+
+        for st in statuses:
+            session.delete(st)
+        for el in elements:
+            session.delete(el)
+        for al in alarms:
+            session.delete(al)
+
+        session.commit()
+
+        # After cleaning the specific source, also run an orphan cleanup to
+        # ensure no stray rows remain for deleted or missing sources.
+        with contextlib.suppress(Exception):
+            self.cleanup_orphans(session)
+
+        return (len(statuses), len(elements), len(alarms))
+
+    def cleanup_orphans(self, session: Session) -> tuple[int, int, int]:
+        """Remove rows not tied to any active CalendarSource.
+
+        Returns tuple of deleted counts: (sync_status_count, calendar_elements_count, alarm_events_count).
+        """
+        from sqlmodel import select
+
+        from app.db.models import (
+            AlarmEvent,
+            CalendarElement,
+            CalendarSource,
+            CalendarSyncStatusEntry,
+        )
+
+        active_sources = list(session.exec(select(CalendarSource.id)).all())
+        # SQLModel may return a list of scalars or tuples depending on the query;
+        # normalize to a set of ints.
+        active_ids: set[int] = set()
+        for row in active_sources:
+            if isinstance(row, (tuple, list)) and len(row) > 0:
+                active_ids.add(row[0])
+            else:
+                active_ids.add(row)
+
+        statuses = list(
+            session.exec(
+                select(CalendarSyncStatusEntry).where(
+                    (CalendarSyncStatusEntry.calendar_source_id.is_(None))
+                    if not active_ids
+                    else (~CalendarSyncStatusEntry.calendar_source_id.in_(list(active_ids)))
+                )
+            ).all()
+        )
+        elements = list(
+            session.exec(
+                select(CalendarElement).where(
+                    (CalendarElement.calendar_source_id.is_(None))
+                    if not active_ids
+                    else (~CalendarElement.calendar_source_id.in_(list(active_ids)))
+                )
+            ).all()
+        )
+        alarms = list(
+            session.exec(
+                select(AlarmEvent).where(
+                    (AlarmEvent.calendar_source_id.is_(None))
+                    if not active_ids
+                    else (~AlarmEvent.calendar_source_id.in_(list(active_ids)))
+                )
+            ).all()
+        )
+
+        for st in statuses:
+            session.delete(st)
+        for el in elements:
+            session.delete(el)
+        for al in alarms:
+            session.delete(al)
+
+        session.commit()
+
+        return (len(statuses), len(elements), len(alarms))
 
     def list_statuses(self, session: Session) -> list[CalendarSyncStatusEntry]:
         """Return all sync status rows."""

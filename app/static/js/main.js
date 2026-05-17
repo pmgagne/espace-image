@@ -4,6 +4,38 @@
 (function () {
     'use strict';
 
+    function installHtmxNoTargetGuard() {
+        var handler = function (evt) {
+            if (console && console.debug) {
+                console.debug('htmx:oobErrorNoTarget ignored', evt && evt.detail);
+            }
+            if (evt && evt.preventDefault) {
+                evt.preventDefault();
+            }
+            if (evt && evt.stopPropagation) {
+                evt.stopPropagation();
+            }
+            return false;
+        };
+        // Register early and in capture phase to catch events regardless of
+        // dispatch target/bubbling behavior.
+        document.addEventListener('htmx:oobErrorNoTarget', handler, true);
+        if (document.body) {
+            document.body.addEventListener('htmx:oobErrorNoTarget', handler, true);
+        }
+    }
+
+    function ensureOobTargets() {
+        if (!document.getElementById('weather-wrapper')) {
+            var weatherTarget = document.createElement('div');
+            weatherTarget.id = 'weather-wrapper';
+            weatherTarget.style.display = 'none';
+            document.body.appendChild(weatherTarget);
+        }
+    }
+
+    installHtmxNoTargetGuard();
+
     // Service worker registration with error logging
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
@@ -15,6 +47,7 @@
 
     // Wait for DOM to be ready before adding htmx listeners
     document.addEventListener('DOMContentLoaded', function () {
+        ensureOobTargets();
         // Preload image before swapping for smooth fade-in
         document.body.addEventListener('htmx:beforeSwap', function (evt) {
             if (evt.detail.target.classList && evt.detail.target.classList.contains('slideshow-container')) {
@@ -37,8 +70,11 @@
         var dayPayload = { alarms: [], events: [] };
         var dayPayloadTimerId = null;
         var nextAlarmTimerId = null;
-        var DAY_FETCH_BASE_MS = 2 * 60 * 60 * 1000;
-        var DAY_FETCH_JITTER_MS = 15 * 60 * 1000;
+        var weatherTimerId = null;
+        var DAY_FETCH_BASE_MS = (window.ESPACE_CONFIG && window.ESPACE_CONFIG.dayFetchIntervalMs > 0)
+            ? window.ESPACE_CONFIG.dayFetchIntervalMs
+            : 60 * 60 * 1000;
+        var WEATHER_REFRESH_MS = 15 * 60 * 1000;
 
         function getBrowserTzOffset() {
             return (new Date()).getTimezoneOffset();
@@ -76,7 +112,7 @@
             var wrapper = document.getElementById('today-events-wrapper');
             var list = document.getElementById('today-events-list');
             var count = document.getElementById('today-events-count');
-            if (!wrapper || !list || !count) return;
+            if (!wrapper || !list) return;
 
             var safeEvents = Array.isArray(events) ? events : [];
             safeEvents.sort(function (a, b) {
@@ -84,10 +120,12 @@
                 var bStart = b && b.start_iso ? Date.parse(b.start_iso) : Infinity;
                 return aStart - bStart;
             });
-            count.innerText = String(safeEvents.length);
+            if (count) {
+                count.innerText = String(safeEvents.length);
+            }
             if (safeEvents.length === 0) {
                 wrapper.classList.add('d-none');
-                list.innerHTML = '<li class="today-events-empty">No events today.</li>';
+                list.innerHTML = '<li class="today-events-empty">No items.</li>';
                 return;
             }
 
@@ -110,11 +148,45 @@
             if (dayPayloadTimerId) {
                 clearTimeout(dayPayloadTimerId);
             }
-            var jitter = Math.floor((Math.random() * (2 * DAY_FETCH_JITTER_MS + 1)) - DAY_FETCH_JITTER_MS);
-            var delay = DAY_FETCH_BASE_MS + jitter;
             dayPayloadTimerId = setTimeout(function () {
+                console.log('[espace-image] Auto-refresh: fetching events & alarms (interval ' + (DAY_FETCH_BASE_MS / 1000) + 's)');
                 fetchDayPayload('scheduled');
-            }, delay);
+            }, DAY_FETCH_BASE_MS);
+        }
+
+        function refreshWeather() {
+            console.log('[espace-image] Auto-refresh: refreshing weather widget (interval ' + (WEATHER_REFRESH_MS / 1000) + 's)');
+            ensureOobTargets();
+            var target = '#weather-wrapper';
+            if (window.htmx && document.getElementById('weather-wrapper')) {
+                window.htmx.ajax('GET', '/components/weather', target);
+            }
+        }
+
+        function startWeatherRefresh() {
+            if (weatherTimerId) clearInterval(weatherTimerId);
+            weatherTimerId = setInterval(refreshWeather, WEATHER_REFRESH_MS);
+        }
+
+        function applyRefreshHints(hints) {
+            if (hints && hints.events_refresh_ms > 0) {
+                DAY_FETCH_BASE_MS = hints.events_refresh_ms;
+            }
+            if (hints && hints.weather_refresh_ms > 0) {
+                WEATHER_REFRESH_MS = hints.weather_refresh_ms;
+            }
+            console.log('[espace-image] Refresh hints applied: events=' + (DAY_FETCH_BASE_MS / 1000) + 's, weather=' + (WEATHER_REFRESH_MS / 1000) + 's');
+            startWeatherRefresh();
+        }
+
+        function loadRefreshHints() {
+            fetch('/api/v1/config/refresh-hints')
+                .then(function (r) { return r.json(); })
+                .then(function (hints) { applyRefreshHints(hints); })
+                .catch(function () {
+                    console.warn('[espace-image] Could not load refresh hints; using defaults');
+                    startWeatherRefresh();
+                });
         }
 
         function scheduleNextAlarmCheck() {
@@ -195,10 +267,10 @@
                 var isHidden = panel.classList.contains('d-none');
                 if (isHidden) {
                     panel.classList.remove('d-none');
-                    toggle.setAttribute('aria-label', 'Hide Today\'s Events');
+                    toggle.setAttribute('aria-label', 'Hide Events');
                 } else {
                     panel.classList.add('d-none');
-                    toggle.setAttribute('aria-label', 'Show Today\'s Events');
+                    toggle.setAttribute('aria-label', 'Show Events');
                 }
             });
         }
@@ -274,6 +346,7 @@
         setInterval(updateTime, 1000);
         bindEventsPanelToggle();
         bindCrossTabSyncRefresh();
+        loadRefreshHints();
         fetchDayPayload('init');
     });
 

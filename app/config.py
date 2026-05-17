@@ -30,7 +30,32 @@ CALDAV_PASSWORD = os.getenv("CALDAV_PASSWORD", "")
 CALDAV_CALENDAR = os.getenv("CALDAV_CALENDAR", "")
 # Operational knobs
 CALDAV_SYNC_ENABLED = os.getenv("CALDAV_SYNC_ENABLED", "true").lower() in ("true", "1", "yes")
-CALDAV_CONNECT_TIMEOUT_SECONDS = int(os.getenv("CALDAV_CONNECT_TIMEOUT_SECONDS", 10))
-CALDAV_READ_TIMEOUT_SECONDS = int(os.getenv("CALDAV_READ_TIMEOUT_SECONDS", 30))
-CALDAV_MAX_RETRIES = int(os.getenv("CALDAV_MAX_RETRIES", 3))
+CALDAV_CONNECT_TIMEOUT_SECONDS = int(os.getenv("CALDAV_CONNECT_TIMEOUT_SECONDS", 20))
+# Read timeout (seconds) used when fetching calendar data - increased to be more forgiving
+CALDAV_READ_TIMEOUT_SECONDS = int(os.getenv("CALDAV_READ_TIMEOUT_SECONDS", 60))
+# Number of retry attempts for CalDAV authenticated batch fetches
+CALDAV_MAX_RETRIES = int(os.getenv("CALDAV_MAX_RETRIES", 5))
+# Optional toggle to disable HTTP/3 negotiation for CalDAV HTTP clients.
+# Defaults to false to preserve current behavior.
+CALDAV_DISABLE_HTTP3 = os.getenv("CALDAV_DISABLE_HTTP3", "false").lower() in (
+    "true",
+    "1",
+    "yes",
+)
 CALDAV_VERIFY_SSL = os.getenv("CALDAV_VERIFY_SSL", "true").lower() in ("true", "1", "yes")
+
+# Delay between syncing individual calendar sources during a background run.
+# This allows throttling requests when multiple calendars are configured.
+# Value is in minutes and may be fractional (e.g. 0.5 = 30 seconds). Default: 0 (no delay).
+BACKGROUND_SYNC_DELAY_MINUTES = float(os.getenv("BACKGROUND_SYNC_DELAY_MINUTES", "0"))
+# Default delay (minutes) used when BACKGROUND_SYNC_DELAY_MINUTES is unset or <= 0
+BACKGROUND_SYNC_DEFAULT_MINUTES = int(os.getenv("BACKGROUND_SYNC_DEFAULT_MINUTES", "120"))
+
+# Effective backend sync period in minutes (the real cycle length)
+_effective_sync_minutes: float = (
+    BACKGROUND_SYNC_DELAY_MINUTES
+    if BACKGROUND_SYNC_DELAY_MINUTES and BACKGROUND_SYNC_DELAY_MINUTES > 0
+    else BACKGROUND_SYNC_DEFAULT_MINUTES
+)
+# Frontend event/alarm refresh interval: half the backend sync period, minimum 1 minute.
+FRONTEND_DAY_FETCH_INTERVAL_MS = int(max(60_000, _effective_sync_minutes / 2 * 60 * 1000))

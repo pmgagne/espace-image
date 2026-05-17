@@ -10,7 +10,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 # Import configuration constants
-from app.config import CALENDAR_SYNC_INTERVAL_MINUTES
+from app.config import (
+    BACKGROUND_SYNC_DEFAULT_MINUTES,
+    BACKGROUND_SYNC_DELAY_MINUTES,
+)
 from app.db.session_factory import SessionFactory
 from app.modules.alarms.rest import router as alarms_rest_router
 from app.modules.calendar.loader import build_calendar_service
@@ -33,6 +36,41 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+# Filter to sanitize APScheduler Job objects in log records so their
+# stringification doesn't include trigger/next-run details.
+class _SanitizeApschedulerJobFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = getattr(record, "args", None)
+        if not args:
+            return True
+        try:
+            new_args = list(args)
+        except Exception:
+            return True
+        changed = False
+        for i, a in enumerate(new_args):
+            try:
+                # Detect APScheduler Job-like objects and replace with their
+                # `name` so the logger message does not include trigger info.
+                if (
+                    hasattr(a, "__class__")
+                    and a.__class__.__module__.startswith("apscheduler")
+                    and hasattr(a, "name")
+                ):
+                    new_args[i] = a.name
+                    changed = True
+            except Exception:
+                continue
+        if changed:
+            record.args = tuple(new_args)
+        return True
+
+
+# Attach the filter to the APScheduler executor logger so job objects are
+# sanitized before message formatting.
+logging.getLogger("apscheduler.executors.default").addFilter(_SanitizeApschedulerJobFilter())
 
 scheduler = AsyncIOScheduler()
 
@@ -94,33 +132,42 @@ async def background_sync_calendars() -> None:
         logger.exception("Error in background calendar sync: %s", e)
 
 
+def _sync_period_minutes() -> float:
+    return (
+        BACKGROUND_SYNC_DELAY_MINUTES
+        if BACKGROUND_SYNC_DELAY_MINUTES and BACKGROUND_SYNC_DELAY_MINUTES > 0
+        else BACKGROUND_SYNC_DEFAULT_MINUTES
+    )
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Startup
     await app_init(_app)
     logger.info("Application startup (LOG_LEVEL=%s)", LOG_LEVEL)
 
-    # Sync calendars on startup
-    logger.info("Performing initial calendar sync on startup")
-    try:
-        await background_sync_calendars()
-        logger.info("Initial calendar sync completed successfully")
-    except Exception as e:
-        logger.error("Initial calendar sync failed: %s", e)
+    # Start APScheduler and register a periodic sync job.
+    # max_instances=1 prevents overlapping runs.
+    # coalesce=True collapses backlog/misfires to a single execution.
+    scheduler.start()
+    logger.info("Scheduler started")
 
-    # Start the APScheduler
+    sync_period_minutes = _sync_period_minutes()
     scheduler.add_job(
         background_sync_calendars,
         "interval",
-        minutes=CALENDAR_SYNC_INTERVAL_MINUTES,
+        minutes=sync_period_minutes,
         id="calendar_sync",
-        name=f"Sync calendar events every {CALENDAR_SYNC_INTERVAL_MINUTES} minutes",
+        name="Periodic calendar sync",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=max(int(sync_period_minutes * 60), 60),
         next_run_time=datetime.now(UTC),
     )
-    scheduler.start()
     logger.info(
-        "Scheduler started (calendar sync every %s minutes)",
-        CALENDAR_SYNC_INTERVAL_MINUTES,
+        "Scheduled periodic calendar sync every %.1f minutes (max_instances=1)",
+        sync_period_minutes,
     )
 
     yield

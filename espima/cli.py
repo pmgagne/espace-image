@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, tzinfo
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
@@ -23,12 +24,14 @@ load_dotenv()
 console = Console()
 app = typer.Typer(help="Project management CLI for espace-image.", no_args_is_help=True)
 db_app = typer.Typer(help="Database commands.", no_args_is_help=True)
+db_clear_app = typer.Typer(help="Database clear commands.", no_args_is_help=True)
 caldav_app = typer.Typer(help="CalDAV commands.", no_args_is_help=True)
 alarms_app = typer.Typer(
     help="Alarm and event processing commands.",
     no_args_is_help=True,
 )
 app.add_typer(db_app, name="db")
+db_app.add_typer(db_clear_app, name="clear")
 app.add_typer(caldav_app, name="caldav")
 app.add_typer(alarms_app, name="alarms")
 
@@ -41,6 +44,16 @@ def main(
     if version:
         console.print(f"espima available at {Path(__file__).resolve().parent}")
         raise typer.Exit(code=0)
+
+
+# Configure logging for CLI runs so backoff/retry and info logs are visible
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 @dataclass(frozen=True)
@@ -108,6 +121,40 @@ def _initialize_database() -> None:
             session.commit()
 
 
+def _clear_calendar_cache(db_engine: Any | None = None) -> tuple[int, int]:
+    """Delete cached calendar elements and alarm rows, returning deleted counts."""
+    from sqlmodel import Session, select
+
+    from app.db.engine import engine
+    from app.db.models import AlarmEvent, CalendarElement
+
+    target_engine = db_engine or engine
+
+    with Session(target_engine) as session:
+        calendar_elements = list(session.exec(select(CalendarElement)).all())
+        alarm_events = list(session.exec(select(AlarmEvent)).all())
+
+        for element in calendar_elements:
+            session.delete(element)
+        for alarm in alarm_events:
+            session.delete(alarm)
+
+        # Also clear stored CalDAV sync tokens so next sync does a full refresh.
+        try:
+            from app.db.models import CalendarSyncStatusEntry
+
+            statuses = list(session.exec(select(CalendarSyncStatusEntry)).all())
+            for st in statuses:
+                st.sync_token = None
+                session.add(st)
+        except Exception:
+            # If the model isn't present or another error occurs, ignore and continue.
+            pass
+
+        session.commit()
+        return (len(calendar_elements), len(alarm_events))
+
+
 def _extract_calendar_url(calendar: Any) -> str:
     """Extract a stable calendar URL from a caldav calendar object."""
     href = getattr(calendar, "url", None) or getattr(calendar, "href", None)
@@ -166,7 +213,8 @@ def _discover_remote_calendars(base_url: str, username: str, password: str) -> l
 
     for attempt in range(1, max_retries + 1):
         try:
-            client = caldav.DAVClient(
+            dav_client_cls = cast(Any, caldav.DAVClient)
+            client = dav_client_cls(
                 url=base_url,
                 username=username,
                 password=password,
@@ -304,6 +352,59 @@ def db_migrate() -> None:
     with console.status("Applying Alembic migrations..."):
         command.upgrade(cfg, "head")
     console.print("[green]Migrations applied.[/green]")
+
+
+@db_clear_app.command("calendars")
+def db_clear_calendars() -> None:
+    """Clear cached calendar elements and alarm rows while preserving sources/settings."""
+    with console.status("Clearing cached calendar data..."):
+        cleared_elements, cleared_alarms = _clear_calendar_cache()
+
+    console.print(
+        "[green]Cleared cached calendar data.[/green] "
+        f"calendar_elements={cleared_elements}, alarmevent={cleared_alarms}"
+    )
+
+
+@db_app.command("cleanup")
+def db_cleanup(
+    source_id: int | None = typer.Argument(
+        None, help="Optional calendar source ID to cleanup. If omitted, cleanup orphaned rows."
+    ),
+) -> None:
+    """Cleanup persisted rows for a calendar source (status, cached events, alarms).
+
+    If `source_id` is omitted, remove any CalendarSyncStatusEntry, CalendarElement,
+    and AlarmEvent rows that do not correspond to an active CalendarSource.
+    """
+
+    from app.db.engine import engine
+    from app.modules.calendar.internal.infrastructure.repository import CalendarRepository
+
+    target_engine = engine
+    from sqlmodel import Session
+
+    with Session(target_engine) as session:
+        try:
+            if source_id is not None:
+                repo = CalendarRepository()
+                counts = repo.cleanup_source(session, source_id)
+                console.print(
+                    f"[green]Cleanup completed for source {source_id}.[/green] "
+                    f"statuses={counts[0]}, calendar_elements={counts[1]}, alarmevent={counts[2]}"
+                )
+                return
+
+            # General orphan cleanup: delegate to repository implementation
+            repo = CalendarRepository()
+            deleted_statuses, deleted_elements, deleted_alarms = repo.cleanup_orphans(session)
+            console.print(
+                f"[green]General cleanup completed.[/green] "
+                f"statuses={deleted_statuses}, calendar_elements={deleted_elements}, alarmevent={deleted_alarms}"
+            )
+        except Exception as exc:
+            console.print(f"[red]Cleanup failed: {exc}[/red]")
+            raise typer.Exit(code=1) from exc
 
 
 @caldav_app.command("list")
@@ -464,6 +565,7 @@ def caldav_sync(
         help="CalDAV password.",
         hide_input=True,
     ),
+    force: bool = typer.Option(default=False, help="Force a full resync of all CalDAV sources."),
 ) -> None:
     """Sync configured calendar sources, optionally ensuring one selected calendar is configured."""
 
@@ -484,7 +586,7 @@ def caldav_sync(
                 console.print(f"[green]Added missing source for sync:[/green] {selected.name}")
 
         with console.status("Syncing calendar sources..."):
-            await service.sync_calendars()
+            await service.sync_calendars(force=force)
 
         statuses = await service.get_sync_status()
         table = Table(title="Calendar sync")

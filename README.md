@@ -62,6 +62,29 @@ If you launch OpenCode from the repo root, it should pick up this configuration 
 - Fixed all-day event timezone handling to display correct dates in negative UTC offset timezones
 - See [ADR-2026-02-17](docs/ADR/ADR-2026-02-17-recurring-events-allday-timezone-fixes.md) for technical details
 
+## Environment Variables
+
+The application is configured via environment variables (see `.env.example` for all options). Key variables:
+
+- `LOG_LEVEL`: Log verbosity (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- `WEBAPP_DEBUG`: Enable debug mode (never enable in production)
+- `TZ`: Timezone (IANA name, e.g., America/Toronto)
+- `CALDAV_URL`: CalDAV server URL
+- `CALDAV_USERNAME`: CalDAV username
+- `CALDAV_PASSWORD`: CalDAV password
+- `CALDAV_PROVIDER`: Optional provider hint (e.g., `icloud` for Apple-specific fixes)
+- `CALDAV_CALENDAR`: Exact calendar URL/path to select
+- `CALDAV_SYNC_ENABLED`: Enable/disable CalDAV sync (default: true)
+- `CALDAV_DISABLE_HTTP3`: Attempt to disable HTTP/3 for CalDAV client (default: false)
+- `CALDAV_CONNECT_TIMEOUT_SECONDS`: CalDAV connect timeout (default: 20)
+- `CALDAV_READ_TIMEOUT_SECONDS`: CalDAV read timeout (default: 60)
+- `CALDAV_MAX_RETRIES`: CalDAV fetch retry attempts (default: 5)
+- `CALDAV_VERIFY_SSL`: Verify SSL for CalDAV (default: true)
+- `BACKGROUND_SYNC_DELAY_MINUTES`: Delay between syncing calendar sources (default: 0)
+- `BACKGROUND_SYNC_DEFAULT_MINUTES`: Default background sync delay (default: 120)
+
+All variables can be set in a `.env` file or passed via Docker Compose.
+
 ## Quick Start (Local)
 
 Requirements: Python 3.13+, [uv](https://docs.astral.sh/uv/) installed.
@@ -182,9 +205,12 @@ uv run pytest tests/ -v --cov=app
 
 All checks must pass before merging to `main`.
 
+
 ## Docker
 
 ### Using Docker Compose
+
+The recommended way to run Espace-Image in production is with Docker Compose. All environment variables from `.env` are automatically passed to the container. You can override any variable in the `docker-compose.yml` or your own `.env` file.
 
 ```bash
 docker-compose up --build
@@ -198,18 +224,20 @@ Build the image:
 docker build -t espace-image:latest .
 ```
 
-Run the container:
+Run the container (set env vars as needed):
 
 ```bash
 docker run -d \
   --name espace-image \
   -p 8000:8000 \
   -v ./data:/app/data \
+  --env-file .env \
   --restart unless-stopped \
   espace-image:latest
 ```
 
 The app listens on `http://localhost:8000` and mounts `./data` for uploads.
+
 ### Using espima in Docker
 
 Run the `espima` CLI against the project inside the container:

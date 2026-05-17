@@ -67,10 +67,15 @@ class CalendarService:
             event_count=event_count,
         )
 
-    async def sync_calendars(self, session: Session | None = None) -> None:
-        """Sync all configured calendar sources."""
+    async def sync_calendars(self, force: bool = False, session: Session | None = None) -> None:
+        """Sync all configured calendar sources.
+
+        Args:
+            force: When True, force a full resync for all sources even if CalDAV
+                indicates no changes.
+        """
         with self._session_scope(session) as active_session:
-            await self._sync_gateway.sync_calendar_events(active_session)
+            await self._sync_gateway.sync_calendar_events(active_session, force=force)
 
     @staticmethod
     def _is_same_utc_day(value: datetime | None, target_day: date) -> bool:
@@ -262,6 +267,14 @@ class CalendarService:
             source = self._repository.get_source(active_session, source_id)
             if not source:
                 return False
+            # Cleanup related rows (sync status, cached elements, alarm events)
+            try:
+                if hasattr(self._repository, "cleanup_source"):
+                    self._repository.cleanup_source(active_session, source_id)
+            except Exception:
+                # Log and continue with delete to avoid leaving unusable sources.
+                logger.exception("Failed to cleanup related rows for source %s", source_id)
+
             self._repository.delete_source(active_session, source)
             return True
 

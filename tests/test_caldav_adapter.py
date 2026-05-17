@@ -141,6 +141,80 @@ def test_fetch_caldav_with_sync_token_no_changes(monkeypatch):
     assert result.content is None
     assert result.changed is False
     assert result.sync_token == "token-next"
+    assert result.fetch_succeeded is True
+
+
+def test_fetch_caldav_calendars_with_metadata_reuses_one_authenticated_context(monkeypatch):
+    """Batch fetch should reuse one DAV client/principal lookup for multiple calendars."""
+    client = importlib.import_module("app.modules.calendar.internal.infrastructure.caldav_client")
+
+    monkeypatch.setattr(client, "CALDAV_SYNC_ENABLED", True)
+    monkeypatch.setattr(client, "CALDAV_URL", "https://caldav.icloud.com")
+    monkeypatch.setattr(client, "CALDAV_USERNAME", "user@example.com")
+    monkeypatch.setattr(client, "CALDAV_PASSWORD", "secret")
+
+    calls = {"dav_client": 0, "principal": 0}
+
+    class _SyncCollection:
+        def __init__(self, token):
+            self.sync_token = token
+
+        def __len__(self):
+            return 1
+
+    class _Event:
+        def __init__(self, href, summary):
+            self.url = href
+            self.etag = summary
+            self.data = f"BEGIN:VEVENT\nUID:{summary}\nSUMMARY:{summary}\nEND:VEVENT"
+
+    class _Calendar:
+        def __init__(self, href, summary):
+            self.url = href
+            self._summary = summary
+
+        def get_objects_by_sync_token(self, sync_token=None):
+            del sync_token
+            return _SyncCollection(f"token-{self._summary}")
+
+        def events(self):
+            return [_Event(f"{self.url}event.ics", self._summary)]
+
+    class _Principal:
+        def calendars(self):
+            calls["principal"] += 1
+            return [
+                _Calendar("https://caldav.icloud.com/calendars/work/", "work"),
+                _Calendar("https://caldav.icloud.com/calendars/home/", "home"),
+            ]
+
+    class _Client:
+        def principal(self):
+            return _Principal()
+
+    def _build_client(**_kwargs):
+        calls["dav_client"] += 1
+        return _Client()
+
+    monkeypatch.setattr(client.caldav, "DAVClient", _build_client)
+
+    import asyncio
+
+    results = asyncio.run(
+        client.fetch_caldav_calendars_with_metadata(
+            [
+                ("https://caldav.icloud.com/calendars/work/", None),
+                ("https://caldav.icloud.com/calendars/home/", None),
+            ]
+        )
+    )
+
+    assert calls["dav_client"] == 1
+    assert calls["principal"] == 1
+    assert results["https://caldav.icloud.com/calendars/work/"].fetch_succeeded is True
+    assert results["https://caldav.icloud.com/calendars/home/"].fetch_succeeded is True
+    assert "SUMMARY:work" in (results["https://caldav.icloud.com/calendars/work/"].content or "")
+    assert "SUMMARY:home" in (results["https://caldav.icloud.com/calendars/home/"].content or "")
 
 
 def test_fetch_caldav_fail_on_error_raises(monkeypatch):

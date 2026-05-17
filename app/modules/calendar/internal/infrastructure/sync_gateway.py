@@ -21,13 +21,25 @@ from app.modules.calendar.internal.infrastructure.calendar_sync import (
 class CalendarSyncGateway(ICalendarSyncGateway):
     """Adapter for ICS fetching and sync orchestration."""
 
-    async def sync_calendar_events(self, session: Session) -> None:
-        """Sync all configured calendar events using the given session."""
-        await CalendarService.sync_calendar_events(session)
+    async def sync_calendar_events(self, session: Session, force: bool = False) -> None:
+        """Sync all configured calendar events using the given session.
 
-    async def sync_calendar_events_with_report(self, session: Session) -> CalendarSyncReportDTO:
-        """Sync calendar events and return per-source metadata for orchestration."""
-        return await CalendarService.sync_calendar_events_with_report(session)
+        Args:
+            force: When True, force a full resync for all sources even if CalDAV
+                indicates no changes.
+        """
+        await CalendarService.sync_calendar_events(session, force=force)
+
+    async def sync_calendar_events_with_report(
+        self, session: Session, force: bool = False
+    ) -> CalendarSyncReportDTO:
+        """Sync calendar events and return per-source metadata for orchestration.
+
+        Args:
+            force: When True, force a full resync for all sources even if CalDAV
+                indicates no changes.
+        """
+        return await CalendarService.sync_calendar_events_with_report(session, force=force)
 
     async def normalize_alarm_occurrences(
         self,
