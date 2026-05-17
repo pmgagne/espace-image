@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, tzinfo
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
@@ -23,12 +23,14 @@ load_dotenv()
 console = Console()
 app = typer.Typer(help="Project management CLI for espace-image.", no_args_is_help=True)
 db_app = typer.Typer(help="Database commands.", no_args_is_help=True)
+db_clear_app = typer.Typer(help="Database clear commands.", no_args_is_help=True)
 caldav_app = typer.Typer(help="CalDAV commands.", no_args_is_help=True)
 alarms_app = typer.Typer(
     help="Alarm and event processing commands.",
     no_args_is_help=True,
 )
 app.add_typer(db_app, name="db")
+db_app.add_typer(db_clear_app, name="clear")
 app.add_typer(caldav_app, name="caldav")
 app.add_typer(alarms_app, name="alarms")
 
@@ -108,6 +110,28 @@ def _initialize_database() -> None:
             session.commit()
 
 
+def _clear_calendar_cache(db_engine: Any | None = None) -> tuple[int, int]:
+    """Delete cached calendar elements and alarm rows, returning deleted counts."""
+    from sqlmodel import Session, select
+
+    from app.db.engine import engine
+    from app.db.models import AlarmEvent, CalendarElement
+
+    target_engine = db_engine or engine
+
+    with Session(target_engine) as session:
+        calendar_elements = list(session.exec(select(CalendarElement)).all())
+        alarm_events = list(session.exec(select(AlarmEvent)).all())
+
+        for element in calendar_elements:
+            session.delete(element)
+        for alarm in alarm_events:
+            session.delete(alarm)
+
+        session.commit()
+        return (len(calendar_elements), len(alarm_events))
+
+
 def _extract_calendar_url(calendar: Any) -> str:
     """Extract a stable calendar URL from a caldav calendar object."""
     href = getattr(calendar, "url", None) or getattr(calendar, "href", None)
@@ -166,7 +190,8 @@ def _discover_remote_calendars(base_url: str, username: str, password: str) -> l
 
     for attempt in range(1, max_retries + 1):
         try:
-            client = caldav.DAVClient(
+            dav_client_cls = cast(Any, caldav.DAVClient)
+            client = dav_client_cls(
                 url=base_url,
                 username=username,
                 password=password,
@@ -304,6 +329,18 @@ def db_migrate() -> None:
     with console.status("Applying Alembic migrations..."):
         command.upgrade(cfg, "head")
     console.print("[green]Migrations applied.[/green]")
+
+
+@db_clear_app.command("calendars")
+def db_clear_calendars() -> None:
+    """Clear cached calendar elements and alarm rows while preserving sources/settings."""
+    with console.status("Clearing cached calendar data..."):
+        cleared_elements, cleared_alarms = _clear_calendar_cache()
+
+    console.print(
+        "[green]Cleared cached calendar data.[/green] "
+        f"calendar_elements={cleared_elements}, alarmevent={cleared_alarms}"
+    )
 
 
 @caldav_app.command("list")

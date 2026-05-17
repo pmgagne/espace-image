@@ -143,6 +143,41 @@ def test_sync_calendar_events_failure(session):
     assert status.error_count >= 1
 
 
+def test_sync_calendar_events_invalid_html_content_marks_failure(session):
+    """HTML/error pages returned from a calendar URL should fail sync and not be cached."""
+    source = CalendarSource(label="Invalid", url="https://example.com/calendar.ics")
+    session.add(source)
+    session.commit()
+    session.refresh(source)
+
+    async def _fake_fetch(_url: str) -> str | None:
+        return (
+            "<!doctype html><html><head><title>Example Domain</title></head>"
+            "<body>Not an ICS feed</body></html>"
+        )
+
+    original_fetch = CalendarService.fetch_ics
+    CalendarService.fetch_ics = _fake_fetch
+    try:
+        asyncio.run(CalendarService.sync_calendar_events(session))
+    finally:
+        CalendarService.fetch_ics = original_fetch
+
+    cached = session.exec(
+        select(CalendarEvent).where(CalendarEvent.calendar_source_id == source.id)
+    ).all()
+    status = session.exec(
+        select(CalendarSyncStatusEntry).where(
+            CalendarSyncStatusEntry.calendar_source_id == source.id
+        )
+    ).first()
+
+    assert cached == []
+    assert status is not None
+    assert status.sync_status == CalendarSyncStatus.FAILED
+    assert "valid ICS payload" in status.error_message
+
+
 # --- Additional Coverage for CalendarService ---
 
 

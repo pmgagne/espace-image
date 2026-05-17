@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from sqlmodel import select
 
-from app.db.models import AlarmEvent
+from app.db.models import AlarmEntryType, AlarmEvent, CalendarElement, CalendarSource
 
 
 def test_api_get_active_alarms_returns_json_list(client):
@@ -24,6 +24,60 @@ def test_api_get_today_payload_returns_expected_shape(client):
     assert "day_end_utc" in payload
     assert isinstance(payload.get("alarms"), list)
     assert isinstance(payload.get("events"), list)
+
+
+def test_api_get_today_payload_uses_occurrence_start_for_alarm_display(client, session):
+    """Alarm payloads should expose the event occurrence time, not the trigger time."""
+    source = CalendarSource(label="Test", url="https://example.com/calendar.ics")
+    session.add(source)
+    session.commit()
+    session.refresh(source)
+
+    now = datetime.now(UTC).replace(microsecond=0)
+    cached_start = now - timedelta(days=1)
+    occurrence_start = now + timedelta(hours=2)
+    occurrence_end = occurrence_start + timedelta(hours=1)
+    trigger_time = occurrence_start - timedelta(minutes=15)
+
+    session.add(
+        CalendarElement(
+            calendar_source_id=source.id,
+            uid="occurrence-test",
+            event_start=cached_start,
+            event_end=cached_start + timedelta(hours=1),
+            event_tz="UTC",
+            summary="Occurrence Summary",
+            description="",
+            location="",
+            all_day=False,
+            trigger_time=trigger_time,
+            optional_trigger=False,
+            href="https://example.com/calendar/occurrence-test.ics",
+            etag="etag-1",
+            raw_ics="BEGIN:VCALENDAR\nVERSION:2.0\nEND:VCALENDAR\n",
+        )
+    )
+    session.add(
+        AlarmEvent(
+            id=uuid4(),
+            trigger_time=trigger_time,
+            calendar_source_id=source.id,
+            calendar_event_uid=(
+                f"alarm|occurrence-test|{occurrence_start.isoformat()}|{trigger_time.isoformat()}"
+            ),
+            entry_type=AlarmEntryType.ALARM,
+        )
+    )
+    session.commit()
+
+    response = client.get("/api/v1/alarms/today?tz_offset=0")
+
+    assert response.status_code == 200
+    payload = response.json()
+    matching = [alarm for alarm in payload["alarms"] if alarm["name"] == "Occurrence Summary"]
+    assert len(matching) == 1
+    assert matching[0]["start_iso"] == occurrence_start.isoformat()
+    assert matching[0]["end_iso"] == occurrence_end.isoformat()
 
 
 def test_api_create_simulated_alarm_returns_json_and_persists(client, session):

@@ -10,6 +10,68 @@ from app.db.models import AlarmEntryType, AlarmEvent, CalendarElement, CalendarS
 from app.modules.calendar.internal.infrastructure.alarm_normalizer import (
     CalendarAlarmNormalizer,
 )
+from app.modules.calendar.internal.infrastructure.calendar_sync import CalendarService
+
+
+def test_add_raw_elements_populates_calendar_metadata(session) -> None:
+    """Sync cache rows should persist parsed VEVENT metadata instead of only raw ICS."""
+    source = CalendarSource(label="Test", url="https://example.com/calendar.ics")
+    session.add(source)
+    session.commit()
+    session.refresh(source)
+    assert source.id is not None
+    source_id = source.id
+
+    raw_ics = """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//tests//EN
+BEGIN:VEVENT
+UID:metadata-1
+DTSTART;TZID=America/Toronto:20260115T090000
+DTEND;TZID=America/Toronto:20260115T100000
+SUMMARY:Planning Session
+DESCRIPTION:Sprint planning
+LOCATION:Studio
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT15M
+DESCRIPTION:Reminder
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+"""
+
+    CalendarService._add_raw_elements(
+        session,
+        source_id,
+        [
+            {
+                "uid": "metadata-1.ics",
+                "href": "https://example.com/calendar/metadata-1.ics",
+                "etag": "etag-1",
+                "raw_ics": raw_ics,
+            }
+        ],
+        window_start=datetime(2026, 1, 1, tzinfo=UTC),
+        window_end=datetime(2026, 2, 1, tzinfo=UTC),
+    )
+    session.commit()
+
+    cached = list(
+        session.exec(select(CalendarElement).where(CalendarElement.calendar_source_id == source.id))
+    )
+
+    assert len(cached) == 1
+    row = cached[0]
+    assert row.uid == "metadata-1"
+    assert row.summary == "Planning Session"
+    assert row.description == "Sprint planning"
+    assert row.location == "Studio"
+    assert row.event_tz == "America/Toronto"
+    assert row.event_start is not None
+    assert row.event_end is not None
+    assert row.trigger_time is not None
+    assert "BEGIN:VCALENDAR" in row.raw_ics
 
 
 def test_normalize_alarm_occurrences_from_calendar_elements(session) -> None:

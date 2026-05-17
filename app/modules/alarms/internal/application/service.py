@@ -59,15 +59,30 @@ class AlarmsService:
         )
 
     @staticmethod
-    def _parse_calendar_entry_uid(entry_uid: str | None) -> tuple[str | None, str | None]:
-        """Return entry kind and base event UID from stored calendar entry identifier."""
+    def _parse_calendar_entry_uid(
+        entry_uid: str | None,
+    ) -> tuple[str | None, str | None, datetime | None, datetime | None]:
+        """Return entry kind, base UID, occurrence start, and trigger from stored identifiers."""
         if not entry_uid:
-            return (None, None)
+            return (None, None, None, None)
 
         parts = entry_uid.split("|")
         if len(parts) < 2:
-            return (None, None)
-        return (parts[0], parts[1])
+            return (None, None, None, None)
+
+        occurrence_start = None
+        trigger_time = None
+        if len(parts) >= 3:
+            try:
+                occurrence_start = ensure_utc_aware(datetime.fromisoformat(parts[2]))
+            except Exception:
+                occurrence_start = None
+        if len(parts) >= 4:
+            try:
+                trigger_time = ensure_utc_aware(datetime.fromisoformat(parts[3]))
+            except Exception:
+                trigger_time = None
+        return (parts[0], parts[1], occurrence_start, trigger_time)
 
     @staticmethod
     def _extract_summary_from_raw_ics(raw_ics: str | None) -> str | None:
@@ -97,6 +112,7 @@ class AlarmsService:
         session: Session,
         source_id: int,
         base_uid: str,
+        occurrence_start: datetime | None = None,
     ) -> tuple[str, str | None, bool, datetime | None, datetime | None]:
         """Resolve display metadata for one calendar occurrence from cached raw elements."""
         cached_event = self._repository.get_cached_event_by_uid(session, source_id, base_uid)
@@ -119,6 +135,14 @@ class AlarmsService:
         all_day = bool(getattr(cached_event, "all_day", False))
         start_value = getattr(cached_event, "event_start", None)
         end_value = getattr(cached_event, "event_end", None)
+
+        if occurrence_start is not None:
+            start_value = occurrence_start
+            if cached_event is not None:
+                cached_start = getattr(cached_event, "event_start", None)
+                cached_end = getattr(cached_event, "event_end", None)
+                if cached_start is not None and cached_end is not None:
+                    end_value = occurrence_start + (cached_end - cached_start)
         return (name, tzid, all_day, start_value, end_value)
 
     async def get_active_alarms(self, session: Session | None = None) -> list[dict[str, Any]]:
@@ -181,7 +205,9 @@ class AlarmsService:
             if trigger_aware < window_start or trigger_aware > utc_now:
                 continue
 
-            _, base_uid = self._parse_calendar_entry_uid(alarm_row.calendar_event_uid)
+            _, base_uid, occurrence_start, _ = self._parse_calendar_entry_uid(
+                alarm_row.calendar_event_uid
+            )
             if not base_uid:
                 continue
 
@@ -191,6 +217,7 @@ class AlarmsService:
                 session,
                 alarm_row.calendar_source_id,
                 base_uid,
+                occurrence_start=occurrence_start,
             )
             if cached_start is not None:
                 start_value = cached_start
@@ -299,7 +326,9 @@ class AlarmsService:
                     continue
 
                 entry_type = str(alarm_row.entry_type)
-                _, base_uid = self._parse_calendar_entry_uid(alarm_row.calendar_event_uid)
+                _, base_uid, occurrence_start, _ = self._parse_calendar_entry_uid(
+                    alarm_row.calendar_event_uid
+                )
                 if not base_uid:
                     continue
 
@@ -310,6 +339,7 @@ class AlarmsService:
                         active_session,
                         alarm_row.calendar_source_id,
                         base_uid,
+                        occurrence_start=occurrence_start,
                     )
                 )
                 if cached_start is not None:

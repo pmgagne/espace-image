@@ -3,8 +3,10 @@
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
+from sqlmodel import Session, select
 from typer.testing import CliRunner
 
+from app.db.models import AlarmEvent, CalendarElement, CalendarSource
 from espima import cli
 
 runner = CliRunner()
@@ -158,6 +160,49 @@ def test_db_migrate_calls_alembic_upgrade(monkeypatch) -> None:
 
     assert result.exit_code == 0
     assert calls == ["head"]
+
+
+def test_db_clear_calendars_calls_clear_helper(monkeypatch) -> None:
+    """db clear calendars should clear cached calendar rows and report counts."""
+    monkeypatch.setattr("espima.cli._clear_calendar_cache", lambda: (3, 5))
+
+    result = runner.invoke(cli.app, ["db", "clear", "calendars"])
+
+    assert result.exit_code == 0
+    assert "calendar_elements=3" in result.stdout
+    assert "alarmevent=5" in result.stdout
+
+
+def test_clear_calendar_cache_preserves_sources(session) -> None:
+    """Low-level cache clearing should remove cached rows without deleting sources."""
+    engine = session.get_bind()
+
+    with Session(engine) as session:
+        source = CalendarSource(label="Keep", url="https://example.com/calendar.ics")
+        session.add(source)
+        session.commit()
+        session.refresh(source)
+
+        session.add(
+            CalendarElement(
+                calendar_source_id=source.id,
+                uid="uid-1",
+                summary="Keep source",
+                href="",
+                raw_ics="BEGIN:VCALENDAR\nVERSION:2.0\nEND:VCALENDAR\n",
+            )
+        )
+        session.add(AlarmEvent(trigger_time=datetime.now(UTC), calendar_source_id=source.id))
+        session.commit()
+
+    cleared_elements, cleared_alarms = cli._clear_calendar_cache(engine)
+
+    with Session(engine) as session:
+        assert cleared_elements == 1
+        assert cleared_alarms == 1
+        assert session.exec(select(CalendarSource)).all()
+        assert session.exec(select(CalendarElement)).all() == []
+        assert session.exec(select(AlarmEvent)).all() == []
 
 
 def test_caldav_add_uses_index_selector(monkeypatch) -> None:
