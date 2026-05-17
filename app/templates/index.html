@@ -362,6 +362,11 @@
 <link rel="icon" type="image/png" sizes="512x512" href="/static/espaceimage-512.png">
 <link rel="icon" href="/static/espaceimage-512.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/espaceimage-192.png">
+<script>
+    window.ESPACE_CONFIG = {
+        dayFetchIntervalMs: {{ frontend_day_fetch_interval_ms }}
+    };
+</script>
 <script src="/static/js/main.js"></script>
 
 {% endblock %}
@@ -382,8 +387,8 @@
     <div id="clock">00:00</div>
     <div id="date-display">Monday, January 1</div>
 
-    <!-- Weather Widget (initial load only - refreshed by index refresh) -->
-    <div hx-get="/components/weather" hx-trigger="load" hx-swap="innerHTML">
+    <!-- Weather Widget (initial load only - refreshed by index refresh OOB) -->
+    <div id="weather-wrapper" hx-get="/components/weather" hx-trigger="load" hx-swap="innerHTML">
         <div class="weather-info">Loading...</div>
     </div>
 </div>
@@ -403,8 +408,7 @@
     </div>
 </div>
 
-<!-- Central index refresh (updates multiple fragments every configured interval) -->
-<div id="index-refresh" hx-get="/components/index-refresh" hx-trigger="load, every {{ index_update_interval_seconds }}s"
-    hx-swap="none"></div>
+<!-- Central index refresh: initial load via HTMX; subsequent refreshes driven by JS using /api/v1/config/refresh-hints -->
+<div id="index-refresh" hx-get="/components/index-refresh" hx-trigger="load" hx-swap="none"></div>
 
 {% endblock %}

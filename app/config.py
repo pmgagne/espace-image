@@ -50,3 +50,12 @@ CALDAV_VERIFY_SSL = os.getenv("CALDAV_VERIFY_SSL", "true").lower() in ("true", "
 BACKGROUND_SYNC_DELAY_MINUTES = float(os.getenv("BACKGROUND_SYNC_DELAY_MINUTES", "0"))
 # Default delay (minutes) used when BACKGROUND_SYNC_DELAY_MINUTES is unset or <= 0
 BACKGROUND_SYNC_DEFAULT_MINUTES = int(os.getenv("BACKGROUND_SYNC_DEFAULT_MINUTES", "120"))
+
+# Effective backend sync period in minutes (the real cycle length)
+_effective_sync_minutes: float = (
+    BACKGROUND_SYNC_DELAY_MINUTES
+    if BACKGROUND_SYNC_DELAY_MINUTES and BACKGROUND_SYNC_DELAY_MINUTES > 0
+    else BACKGROUND_SYNC_DEFAULT_MINUTES
+)
+# Frontend event/alarm refresh interval: half the backend sync period, minimum 1 minute.
+FRONTEND_DAY_FETCH_INTERVAL_MS = int(max(60_000, _effective_sync_minutes / 2 * 60 * 1000))

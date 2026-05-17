@@ -4,6 +4,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from app.config import FRONTEND_DAY_FETCH_INTERVAL_MS, METEO_SYNC_INTERVAL_MINUTES
 from app.modules.alarms.api import render_alarms_fragment
 from app.modules.alarms.api.interfaces import IAlarmsService, get_alarms_service
 from app.modules.calendar.api.interfaces import ICalendarService, get_calendar_service
@@ -20,6 +21,23 @@ from app.template_config import templates
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+@router.get("/api/v1/config/refresh-hints")
+async def get_refresh_hints() -> JSONResponse:
+    """Return suggested frontend refresh intervals derived from backend configuration.
+
+    - ``events_refresh_ms``: half the backend calendar sync period (min 1 minute).
+      The frontend should re-fetch events and alarms at this cadence.
+    - ``weather_refresh_ms``: the configured weather sync interval.
+      The frontend should refresh the weather widget at this cadence.
+    """
+    return JSONResponse(
+        {
+            "events_refresh_ms": FRONTEND_DAY_FETCH_INTERVAL_MS,
+            "weather_refresh_ms": int(METEO_SYNC_INTERVAL_MINUTES * 60 * 1000),
+        }
+    )
 
 
 def require_debug_mode():

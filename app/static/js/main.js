@@ -15,6 +15,16 @@
 
     // Wait for DOM to be ready before adding htmx listeners
     document.addEventListener('DOMContentLoaded', function () {
+        // Suppress noisy HTMX out-of-band target errors when fragments
+        // reference elements not present on the current page.
+        document.body.addEventListener('htmx:oobErrorNoTarget', function (evt) {
+            // Swallow the event to avoid console noise; keep at debug level if needed
+            if (console && console.debug) {
+                console.debug('htmx:oobErrorNoTarget ignored', evt.detail);
+            }
+            evt.preventDefault();
+            return false;
+        });
         // Preload image before swapping for smooth fade-in
         document.body.addEventListener('htmx:beforeSwap', function (evt) {
             if (evt.detail.target.classList && evt.detail.target.classList.contains('slideshow-container')) {
@@ -37,8 +47,12 @@
         var dayPayload = { alarms: [], events: [] };
         var dayPayloadTimerId = null;
         var nextAlarmTimerId = null;
-        var DAY_FETCH_BASE_MS = 2 * 60 * 60 * 1000;
-        var DAY_FETCH_JITTER_MS = 15 * 60 * 1000;
+        var weatherTimerId = null;
+        var DAY_FETCH_BASE_MS = (window.ESPACE_CONFIG && window.ESPACE_CONFIG.dayFetchIntervalMs > 0)
+            ? window.ESPACE_CONFIG.dayFetchIntervalMs
+            : 60 * 60 * 1000;
+        var WEATHER_REFRESH_MS = 15 * 60 * 1000;
+        var DAY_FETCH_JITTER_MS = 0;
 
         function getBrowserTzOffset() {
             return (new Date()).getTimezoneOffset();
@@ -110,11 +124,44 @@
             if (dayPayloadTimerId) {
                 clearTimeout(dayPayloadTimerId);
             }
-            var jitter = Math.floor((Math.random() * (2 * DAY_FETCH_JITTER_MS + 1)) - DAY_FETCH_JITTER_MS);
-            var delay = DAY_FETCH_BASE_MS + jitter;
             dayPayloadTimerId = setTimeout(function () {
+                console.log('[espace-image] Auto-refresh: fetching events & alarms (interval ' + (DAY_FETCH_BASE_MS / 1000) + 's)');
                 fetchDayPayload('scheduled');
-            }, delay);
+            }, DAY_FETCH_BASE_MS);
+        }
+
+        function refreshWeather() {
+            console.log('[espace-image] Auto-refresh: refreshing weather widget (interval ' + (WEATHER_REFRESH_MS / 1000) + 's)');
+            var el = document.getElementById('index-refresh');
+            if (window.htmx && el) {
+                window.htmx.ajax('GET', '/components/index-refresh', { source: el, swap: 'none' });
+            }
+        }
+
+        function startWeatherRefresh() {
+            if (weatherTimerId) clearInterval(weatherTimerId);
+            weatherTimerId = setInterval(refreshWeather, WEATHER_REFRESH_MS);
+        }
+
+        function applyRefreshHints(hints) {
+            if (hints && hints.events_refresh_ms > 0) {
+                DAY_FETCH_BASE_MS = hints.events_refresh_ms;
+            }
+            if (hints && hints.weather_refresh_ms > 0) {
+                WEATHER_REFRESH_MS = hints.weather_refresh_ms;
+            }
+            console.log('[espace-image] Refresh hints applied: events=' + (DAY_FETCH_BASE_MS / 1000) + 's, weather=' + (WEATHER_REFRESH_MS / 1000) + 's');
+            startWeatherRefresh();
+        }
+
+        function loadRefreshHints() {
+            fetch('/api/v1/config/refresh-hints')
+                .then(function (r) { return r.json(); })
+                .then(function (hints) { applyRefreshHints(hints); })
+                .catch(function () {
+                    console.warn('[espace-image] Could not load refresh hints; using defaults');
+                    startWeatherRefresh();
+                });
         }
 
         function scheduleNextAlarmCheck() {
@@ -274,6 +321,7 @@
         setInterval(updateTime, 1000);
         bindEventsPanelToggle();
         bindCrossTabSyncRefresh();
+        loadRefreshHints();
         fetchDayPayload('init');
     });
 

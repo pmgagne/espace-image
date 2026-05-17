@@ -86,8 +86,13 @@
     var dayPayload = { alarms: [], events: [] };
     var dayPayloadTimerId = null;
     var nextAlarmTimerId = null;
-    var DAY_FETCH_BASE_MS = 2 * 60 * 60 * 1000;
-    var DAY_FETCH_JITTER_MS = 15 * 60 * 1000;
+    var DAY_FETCH_BASE_MS = (typeof CONFIG !== 'undefined' && CONFIG.dayFetchIntervalMs > 0)
+        ? CONFIG.dayFetchIntervalMs
+        : 60 * 60 * 1000;
+    var WEATHER_REFRESH_MS = (typeof CONFIG !== 'undefined' && CONFIG.weatherInterval > 0)
+        ? CONFIG.weatherInterval
+        : 15 * 60 * 1000;
+    var DAY_FETCH_JITTER_MS = 0;
 
     function getBrowserTzOffset() {
         return (new Date()).getTimezoneOffset();
@@ -285,11 +290,20 @@
 
     function scheduleNextDayPayloadFetchLegacy() {
         if (dayPayloadTimerId) clearTimeout(dayPayloadTimerId);
-        var jitter = Math.floor((Math.random() * (2 * DAY_FETCH_JITTER_MS + 1)) - DAY_FETCH_JITTER_MS);
-        var delay = DAY_FETCH_BASE_MS + jitter;
         dayPayloadTimerId = setTimeout(function () {
+            console.log('[espace-image] Auto-refresh: fetching events & alarms (interval ' + (DAY_FETCH_BASE_MS / 1000) + 's)');
             fetchTodayPayloadLegacy('scheduled');
-        }, delay);
+        }, DAY_FETCH_BASE_MS);
+    }
+
+    function applyRefreshHintsLegacy(hints) {
+        if (hints && hints.events_refresh_ms > 0) {
+            DAY_FETCH_BASE_MS = hints.events_refresh_ms;
+        }
+        if (hints && hints.weather_refresh_ms > 0) {
+            WEATHER_REFRESH_MS = hints.weather_refresh_ms;
+        }
+        console.log('[espace-image] Refresh hints applied: events=' + (DAY_FETCH_BASE_MS / 1000) + 's, weather=' + (WEATHER_REFRESH_MS / 1000) + 's');
     }
 
     function scheduleNextAlarmCheckLegacy() {
@@ -403,6 +417,17 @@
         updateTime();
         updateWeather();
         updateSlide(); // Immediate load
+        // Suppress noisy HTMX out-of-band target errors when fragments
+        // reference elements not present on the current page (legacy clients).
+        if (window && window.addEventListener) {
+            document.body.addEventListener('htmx:oobErrorNoTarget', function (evt) {
+                try {
+                    // no-op to avoid console errors on legacy clients
+                } catch (e) { }
+                if (evt && evt.preventDefault) evt.preventDefault();
+                return false;
+            });
+        }
         checkAlarm();
         bindEventsPanelToggleLegacy();
         bindCrossTabSyncRefreshLegacy();
@@ -410,7 +435,20 @@
 
         setInterval(updateTime, 1000);
         setInterval(updateSlide, CONFIG.slideInterval);
-        setInterval(updateWeather, CONFIG.weatherInterval);
+        // Weather refresh rate is driven by /api/v1/config/refresh-hints after init.
+        fetchJSON('/api/v1/config/refresh-hints',
+            function (hints) {
+                applyRefreshHintsLegacy(hints);
+                setInterval(function () {
+                    console.log('[espace-image] Auto-refresh: refreshing weather (interval ' + (WEATHER_REFRESH_MS / 1000) + 's)');
+                    updateWeather();
+                }, WEATHER_REFRESH_MS);
+            },
+            function () {
+                console.warn('[espace-image] Could not load refresh hints; using default weather interval');
+                setInterval(updateWeather, WEATHER_REFRESH_MS);
+            }
+        );
     }
 
     // Start when DOM is ready

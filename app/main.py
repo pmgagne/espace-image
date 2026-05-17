@@ -128,36 +128,19 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await app_init(_app)
     logger.info("Application startup (LOG_LEVEL=%s)", LOG_LEVEL)
 
-    # Sync calendars on startup
+    # Start the APScheduler before performing the initial sync so follow-up
+    # scheduling can be computed at the end of the sync run.
+    scheduler.start()
+    logger.info("Scheduler started")
+
+    # Perform initial calendar sync on startup. The sync function will
+    # schedule the next run at completion using the configured delay.
     logger.info("Performing initial calendar sync on startup")
     try:
         await background_sync_calendars()
         logger.info("Initial calendar sync completed successfully")
     except Exception as e:
         logger.error("Initial calendar sync failed: %s", e)
-
-    # Start the APScheduler
-    scheduler.start()
-
-    # Schedule the next run as a one-shot at now + configured delay.
-    # If the configured delay is <= 0 or unset, use the default (120 minutes).
-    try:
-        delay_minutes = (
-            BACKGROUND_SYNC_DELAY_MINUTES
-            if BACKGROUND_SYNC_DELAY_MINUTES and BACKGROUND_SYNC_DELAY_MINUTES > 0
-            else BACKGROUND_SYNC_DEFAULT_MINUTES
-        )
-        next_time = datetime.now(UTC) + timedelta(minutes=delay_minutes)
-        scheduler.add_job(
-            background_sync_calendars,
-            "date",
-            run_date=next_time,
-            id="calendar_sync",
-            name=f"One-shot calendar sync scheduled at {next_time.isoformat()}",
-        )
-        logger.info("Scheduler started (one-shot calendar sync at %s)", next_time.isoformat())
-    except Exception:
-        logger.exception("Failed to schedule calendar sync job")
 
     yield
 
