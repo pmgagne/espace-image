@@ -1,5 +1,6 @@
 """Calendar repository adapter for SQLModel persistence."""
 
+import contextlib
 from datetime import datetime
 
 from sqlmodel import Session, select
@@ -86,11 +87,8 @@ class CalendarRepository(ICalendarRepository):
 
         # After cleaning the specific source, also run an orphan cleanup to
         # ensure no stray rows remain for deleted or missing sources.
-        try:
+        with contextlib.suppress(Exception):
             self.cleanup_orphans(session)
-        except Exception:
-            # Best-effort: do not fail the per-source cleanup if orphan cleanup fails.
-            pass
 
         return (len(statuses), len(elements), len(alarms))
 

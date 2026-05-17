@@ -35,5 +35,5 @@ templates.env.globals["calendar_sync_interval_minutes"] = CALENDAR_SYNC_INTERVAL
 templates.env.globals["index_update_interval_seconds"] = INDEX_UPDATE_INTERVAL_SECONDS
 # Millisecond interval retained for legacy index refresh code paths.
 templates.env.globals["legacy_index_update_interval_ms"] = INDEX_UPDATE_INTERVAL_SECONDS * 1000
-# Frontend day-payload (events + alarms) refresh interval: 2× backend sync period, min 1 min.
+# Frontend day-payload (events + alarms) refresh interval: 2x backend sync period, min 1 min.
 templates.env.globals["frontend_day_fetch_interval_ms"] = FRONTEND_DAY_FETCH_INTERVAL_MS

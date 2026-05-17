@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, tzinfo
@@ -47,7 +48,6 @@ def main(
 
 # Configure logging for CLI runs so backoff/retry and info logs are visible
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-import logging
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -404,7 +404,7 @@ def db_cleanup(
             )
         except Exception as exc:
             console.print(f"[red]Cleanup failed: {exc}[/red]")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from exc
 
 
 @caldav_app.command("list")

@@ -196,6 +196,51 @@ def _fetch_calendar_with_metadata(calendar: Any, sync_token: str | None) -> CalD
     )
 
 
+def _sync_fetch_many_impl(
+    requests: list[tuple[str, str | None]], timeout_seconds: int
+) -> dict[str, CalDAVFetchResult]:
+    """Synchronous implementation that performs authenticated DAV batch fetches.
+
+    Extracted to a top-level function to keep the async wrapper simple and
+    reduce function complexity for linters.
+    """
+    try:
+        dav_client_cls = cast(Any, caldav.DAVClient)
+        client = dav_client_cls(
+            url=CALDAV_URL,
+            username=CALDAV_USERNAME,
+            password=CALDAV_PASSWORD,
+            timeout=timeout_seconds,
+            ssl_verify_cert=CALDAV_VERIFY_SSL,
+        )
+        principal = client.principal()
+        calendars = list(principal.calendars())
+        results: dict[str, CalDAVFetchResult] = {}
+
+        for calendar_url, sync_token in requests:
+            target = _find_matching_calendar(calendars, calendar_url)
+            if target is None:
+                logger.warning("CalDAV calendar matching '%s' not found", calendar_url)
+                results[calendar_url] = _empty_fetch_result(
+                    sync_token,
+                    fetch_succeeded=False,
+                )
+                continue
+
+            try:
+                results[calendar_url] = _fetch_calendar_with_metadata(target, sync_token)
+            except Exception as exc:
+                logger.warning("CalDAV fetch failed for '%s': %s", calendar_url, exc)
+                results[calendar_url] = _empty_fetch_result(
+                    sync_token,
+                    fetch_succeeded=False,
+                )
+
+        return results
+    except Exception as exc:
+        raise CalDAVFetchError(str(exc)) from exc
+
+
 async def fetch_caldav_calendars_with_metadata(
     requests: list[tuple[str, str | None]],
     fail_on_error: bool = False,
@@ -225,47 +270,10 @@ async def fetch_caldav_calendars_with_metadata(
             # generic hint for other potential stacks
             os.environ.setdefault("DISABLE_HTTP3", "1")
 
-        def _sync_fetch_many() -> dict[str, CalDAVFetchResult]:
-            try:
-                dav_client_cls = cast(Any, caldav.DAVClient)
-                client = dav_client_cls(
-                    url=CALDAV_URL,
-                    username=CALDAV_USERNAME,
-                    password=CALDAV_PASSWORD,
-                    timeout=timeout_seconds,
-                    ssl_verify_cert=CALDAV_VERIFY_SSL,
-                )
-                principal = client.principal()
-                calendars = list(principal.calendars())
-                results: dict[str, CalDAVFetchResult] = {}
-
-                for calendar_url, sync_token in requests:
-                    target = _find_matching_calendar(calendars, calendar_url)
-                    if target is None:
-                        logger.warning("CalDAV calendar matching '%s' not found", calendar_url)
-                        results[calendar_url] = _empty_fetch_result(
-                            sync_token,
-                            fetch_succeeded=False,
-                        )
-                        continue
-
-                    try:
-                        results[calendar_url] = _fetch_calendar_with_metadata(target, sync_token)
-                    except Exception as exc:
-                        logger.warning("CalDAV fetch failed for '%s': %s", calendar_url, exc)
-                        results[calendar_url] = _empty_fetch_result(
-                            sync_token,
-                            fetch_succeeded=False,
-                        )
-
-                return results
-            except Exception as exc:
-                raise CalDAVFetchError(str(exc)) from exc
-
         retries = max(1, CALDAV_MAX_RETRIES)
         for attempt in range(1, retries + 1):
             try:
-                return await asyncio.to_thread(_sync_fetch_many)
+                return await asyncio.to_thread(_sync_fetch_many_impl, requests, timeout_seconds)
             except CalDAVFetchError as exc:
                 logger.warning(
                     "CalDAV authenticated batch fetch attempt %d/%d failed: %s",
