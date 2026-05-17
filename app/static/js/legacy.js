@@ -92,7 +92,6 @@
     var WEATHER_REFRESH_MS = (typeof CONFIG !== 'undefined' && CONFIG.weatherInterval > 0)
         ? CONFIG.weatherInterval
         : 15 * 60 * 1000;
-    var DAY_FETCH_JITTER_MS = 0;
 
     function getBrowserTzOffset() {
         return (new Date()).getTimezoneOffset();
@@ -255,7 +254,7 @@
         var wrapper = document.getElementById('today-events-wrapper');
         var list = document.getElementById('today-events-list');
         var count = document.getElementById('today-events-count');
-        if (!wrapper || !list || !count) return;
+        if (!wrapper || !list) return;
 
         var safeEvents = events && events.length ? events : [];
         safeEvents.sort(function (a, b) {
@@ -263,10 +262,12 @@
             var bStart = b && b.start_iso ? Date.parse(b.start_iso) : Infinity;
             return aStart - bStart;
         });
-        count.innerText = String(safeEvents.length);
+        if (count) {
+            count.innerText = String(safeEvents.length);
+        }
         if (!safeEvents.length) {
             wrapper.className = 'today-events-wrapper d-none';
-            list.innerHTML = '<li class="today-events-empty">No events today.</li>';
+            list.innerHTML = '<li class="today-events-empty">No items.</li>';
             return;
         }
 
@@ -374,10 +375,10 @@
             var isHidden = panel.className.indexOf('d-none') !== -1;
             if (isHidden) {
                 panel.className = 'today-events-panel';
-                toggle.setAttribute('aria-label', "Hide Today's Events");
+                toggle.setAttribute('aria-label', 'Hide Events');
             } else {
                 panel.className = 'today-events-panel d-none';
-                toggle.setAttribute('aria-label', "Show Today's Events");
+                toggle.setAttribute('aria-label', 'Show Events');
             }
         };
     }
@@ -421,9 +422,6 @@
         // reference elements not present on the current page (legacy clients).
         if (window && window.addEventListener) {
             document.body.addEventListener('htmx:oobErrorNoTarget', function (evt) {
-                try {
-                    // no-op to avoid console errors on legacy clients
-                } catch (e) { }
                 if (evt && evt.preventDefault) evt.preventDefault();
                 return false;
             });

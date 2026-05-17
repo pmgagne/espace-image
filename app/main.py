@@ -2,7 +2,7 @@ import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request, Response
@@ -36,6 +36,41 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+# Filter to sanitize APScheduler Job objects in log records so their
+# stringification doesn't include trigger/next-run details.
+class _SanitizeApschedulerJobFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = getattr(record, "args", None)
+        if not args:
+            return True
+        try:
+            new_args = list(args)
+        except Exception:
+            return True
+        changed = False
+        for i, a in enumerate(new_args):
+            try:
+                # Detect APScheduler Job-like objects and replace with their
+                # `name` so the logger message does not include trigger info.
+                if (
+                    hasattr(a, "__class__")
+                    and a.__class__.__module__.startswith("apscheduler")
+                    and hasattr(a, "name")
+                ):
+                    new_args[i] = a.name
+                    changed = True
+            except Exception:
+                continue
+        if changed:
+            record.args = tuple(new_args)
+        return True
+
+
+# Attach the filter to the APScheduler executor logger so job objects are
+# sanitized before message formatting.
+logging.getLogger("apscheduler.executors.default").addFilter(_SanitizeApschedulerJobFilter())
 
 scheduler = AsyncIOScheduler()
 
@@ -95,31 +130,14 @@ async def background_sync_calendars() -> None:
             )
     except Exception as e:
         logger.exception("Error in background calendar sync: %s", e)
-    finally:
-        # Schedule the next one-shot run at completion using configured delay
-        try:
-            delay_minutes = (
-                BACKGROUND_SYNC_DELAY_MINUTES
-                if BACKGROUND_SYNC_DELAY_MINUTES and BACKGROUND_SYNC_DELAY_MINUTES > 0
-                else BACKGROUND_SYNC_DEFAULT_MINUTES
-            )
-            next_time = datetime.now(UTC) + timedelta(minutes=delay_minutes)
-            # replace_existing ensures we don't keep duplicate jobs
-            scheduler.add_job(
-                background_sync_calendars,
-                "date",
-                run_date=next_time,
-                id="calendar_sync",
-                name=f"One-shot calendar sync scheduled at {next_time.isoformat()}",
-                replace_existing=True,
-            )
-            logger.info(
-                "Scheduled next background sync at %s (in %.1f minutes)",
-                next_time.isoformat(),
-                delay_minutes,
-            )
-        except Exception:
-            logger.exception("Failed to schedule follow-up calendar sync")
+
+
+def _sync_period_minutes() -> float:
+    return (
+        BACKGROUND_SYNC_DELAY_MINUTES
+        if BACKGROUND_SYNC_DELAY_MINUTES and BACKGROUND_SYNC_DELAY_MINUTES > 0
+        else BACKGROUND_SYNC_DEFAULT_MINUTES
+    )
 
 
 @asynccontextmanager
@@ -128,19 +146,29 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await app_init(_app)
     logger.info("Application startup (LOG_LEVEL=%s)", LOG_LEVEL)
 
-    # Start the APScheduler before performing the initial sync so follow-up
-    # scheduling can be computed at the end of the sync run.
+    # Start APScheduler and register a periodic sync job.
+    # max_instances=1 prevents overlapping runs.
+    # coalesce=True collapses backlog/misfires to a single execution.
     scheduler.start()
     logger.info("Scheduler started")
 
-    # Perform initial calendar sync on startup. The sync function will
-    # schedule the next run at completion using the configured delay.
-    logger.info("Performing initial calendar sync on startup")
-    try:
-        await background_sync_calendars()
-        logger.info("Initial calendar sync completed successfully")
-    except Exception as e:
-        logger.error("Initial calendar sync failed: %s", e)
+    sync_period_minutes = _sync_period_minutes()
+    scheduler.add_job(
+        background_sync_calendars,
+        "interval",
+        minutes=sync_period_minutes,
+        id="calendar_sync",
+        name="Periodic calendar sync",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=max(int(sync_period_minutes * 60), 60),
+        next_run_time=datetime.now(UTC),
+    )
+    logger.info(
+        "Scheduled periodic calendar sync every %.1f minutes (max_instances=1)",
+        sync_period_minutes,
+    )
 
     yield
 

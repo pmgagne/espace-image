@@ -4,6 +4,38 @@
 (function () {
     'use strict';
 
+    function installHtmxNoTargetGuard() {
+        var handler = function (evt) {
+            if (console && console.debug) {
+                console.debug('htmx:oobErrorNoTarget ignored', evt && evt.detail);
+            }
+            if (evt && evt.preventDefault) {
+                evt.preventDefault();
+            }
+            if (evt && evt.stopPropagation) {
+                evt.stopPropagation();
+            }
+            return false;
+        };
+        // Register early and in capture phase to catch events regardless of
+        // dispatch target/bubbling behavior.
+        document.addEventListener('htmx:oobErrorNoTarget', handler, true);
+        if (document.body) {
+            document.body.addEventListener('htmx:oobErrorNoTarget', handler, true);
+        }
+    }
+
+    function ensureOobTargets() {
+        if (!document.getElementById('weather-wrapper')) {
+            var weatherTarget = document.createElement('div');
+            weatherTarget.id = 'weather-wrapper';
+            weatherTarget.style.display = 'none';
+            document.body.appendChild(weatherTarget);
+        }
+    }
+
+    installHtmxNoTargetGuard();
+
     // Service worker registration with error logging
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
@@ -15,16 +47,7 @@
 
     // Wait for DOM to be ready before adding htmx listeners
     document.addEventListener('DOMContentLoaded', function () {
-        // Suppress noisy HTMX out-of-band target errors when fragments
-        // reference elements not present on the current page.
-        document.body.addEventListener('htmx:oobErrorNoTarget', function (evt) {
-            // Swallow the event to avoid console noise; keep at debug level if needed
-            if (console && console.debug) {
-                console.debug('htmx:oobErrorNoTarget ignored', evt.detail);
-            }
-            evt.preventDefault();
-            return false;
-        });
+        ensureOobTargets();
         // Preload image before swapping for smooth fade-in
         document.body.addEventListener('htmx:beforeSwap', function (evt) {
             if (evt.detail.target.classList && evt.detail.target.classList.contains('slideshow-container')) {
@@ -52,7 +75,6 @@
             ? window.ESPACE_CONFIG.dayFetchIntervalMs
             : 60 * 60 * 1000;
         var WEATHER_REFRESH_MS = 15 * 60 * 1000;
-        var DAY_FETCH_JITTER_MS = 0;
 
         function getBrowserTzOffset() {
             return (new Date()).getTimezoneOffset();
@@ -90,7 +112,7 @@
             var wrapper = document.getElementById('today-events-wrapper');
             var list = document.getElementById('today-events-list');
             var count = document.getElementById('today-events-count');
-            if (!wrapper || !list || !count) return;
+            if (!wrapper || !list) return;
 
             var safeEvents = Array.isArray(events) ? events : [];
             safeEvents.sort(function (a, b) {
@@ -98,10 +120,12 @@
                 var bStart = b && b.start_iso ? Date.parse(b.start_iso) : Infinity;
                 return aStart - bStart;
             });
-            count.innerText = String(safeEvents.length);
+            if (count) {
+                count.innerText = String(safeEvents.length);
+            }
             if (safeEvents.length === 0) {
                 wrapper.classList.add('d-none');
-                list.innerHTML = '<li class="today-events-empty">No events today.</li>';
+                list.innerHTML = '<li class="today-events-empty">No items.</li>';
                 return;
             }
 
@@ -132,9 +156,10 @@
 
         function refreshWeather() {
             console.log('[espace-image] Auto-refresh: refreshing weather widget (interval ' + (WEATHER_REFRESH_MS / 1000) + 's)');
-            var el = document.getElementById('index-refresh');
-            if (window.htmx && el) {
-                window.htmx.ajax('GET', '/components/index-refresh', { source: el, swap: 'none' });
+            ensureOobTargets();
+            var target = '#weather-wrapper';
+            if (window.htmx && document.getElementById('weather-wrapper')) {
+                window.htmx.ajax('GET', '/components/weather', target);
             }
         }
 
@@ -242,10 +267,10 @@
                 var isHidden = panel.classList.contains('d-none');
                 if (isHidden) {
                     panel.classList.remove('d-none');
-                    toggle.setAttribute('aria-label', 'Hide Today\'s Events');
+                    toggle.setAttribute('aria-label', 'Hide Events');
                 } else {
                     panel.classList.add('d-none');
-                    toggle.setAttribute('aria-label', 'Show Today\'s Events');
+                    toggle.setAttribute('aria-label', 'Show Events');
                 }
             });
         }
