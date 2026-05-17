@@ -1457,3 +1457,7 @@ sequenceDiagram
 ### Phase 4 Completion Definition
 
 Phase 4 is complete when all acceptance criteria are met and no module application service requires direct knowledge of SQLModel entities, template engines, or infrastructure libraries.
+
+## Environment Variables and Docker Compose
+
+All environment variables required for CalDAV, background sync, and debug/deployment are now exposed in `docker-compose.yml` and documented in `.env.example` and `README.md`. This ensures containerized and local runs behave identically. See the new section in `README.md` for the full list and usage guidance.
