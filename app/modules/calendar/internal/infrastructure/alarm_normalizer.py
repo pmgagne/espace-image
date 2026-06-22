@@ -17,7 +17,7 @@ from sqlmodel import Session, select
 from app.db.models import AlarmEntryType, AlarmEvent, CalendarElement, CalendarSource
 from app.modules.calendar.internal.infrastructure.calendar_sync import (
     CalendarService,
-    _is_apple_source,
+    is_apple_source,
 )
 from app.utils.timezone import normalize_datetime
 
@@ -132,7 +132,7 @@ class CalendarAlarmNormalizer:
                 source_id = element.calendar_source_id
                 source = source_by_id.get(source_id)
                 fix_icloud = bool(
-                    source and _is_apple_source(os.environ.get("CALDAV_PROVIDER"), source.url)
+                    source and is_apple_source(os.environ.get("CALDAV_PROVIDER"), source.url)
                 )
                 events = CalendarService.parse_ics_events(
                     element.raw_ics,

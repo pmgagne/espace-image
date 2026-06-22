@@ -10,10 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 # Import configuration constants
-from app.config import (
-    BACKGROUND_SYNC_DEFAULT_MINUTES,
-    BACKGROUND_SYNC_DELAY_MINUTES,
-)
+from app.config import BACKGROUND_SYNC_DEFAULT_MINUTES
 from app.db.session_factory import SessionFactory
 from app.modules.alarms.rest import router as alarms_rest_router
 from app.modules.calendar.loader import build_calendar_service
@@ -133,11 +130,7 @@ async def background_sync_calendars() -> None:
 
 
 def _sync_period_minutes() -> float:
-    return (
-        BACKGROUND_SYNC_DELAY_MINUTES
-        if BACKGROUND_SYNC_DELAY_MINUTES and BACKGROUND_SYNC_DELAY_MINUTES > 0
-        else BACKGROUND_SYNC_DEFAULT_MINUTES
-    )
+    return float(BACKGROUND_SYNC_DEFAULT_MINUTES)
 
 
 @asynccontextmanager

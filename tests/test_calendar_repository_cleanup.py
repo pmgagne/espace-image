@@ -82,8 +82,8 @@ def test_cleanup_orphans_deletes_orphan_rows(session):
     assert len(remaining_alarms) == 1
 
 
-def test_cleanup_source_runs_orphan_cleanup(session):
-    """cleanup_source should remove per-source rows and then run orphan cleanup as a best-effort."""
+def test_cleanup_source_does_not_run_orphan_cleanup(session):
+    """cleanup_source only removes per-source rows; orphan cleanup is a separate operation."""
     repo = CalendarRepository()
 
     # Create two sources, one to delete and one active
@@ -107,23 +107,14 @@ def test_cleanup_source_runs_orphan_cleanup(session):
     session.add_all([status_td, elem_td, alarm_td, orphan_status])
     session.commit()
 
-    # Ensure orphan exists
-    orphans_before = list(
-        session.exec(
-            select(CalendarSyncStatusEntry).where(
-                CalendarSyncStatusEntry.calendar_source_id == 9999
-            )
-        ).all()
-    )
-    assert len(orphans_before) == 1
-
-    # Run per-source cleanup
+    # Run per-source cleanup — should remove only the target source's rows
     counts = repo.cleanup_source(session, to_delete.id)
     assert counts[0] == 1
     assert counts[1] == 1
     assert counts[2] == 1
 
-    # Orphan should be removed as part of cleanup_orphans invocation
+    # Orphan must NOT be removed by cleanup_source (it has no knowledge of the source row
+    # being deleted yet; orphan cleanup is done explicitly by callers after deletion).
     orphans_after = list(
         session.exec(
             select(CalendarSyncStatusEntry).where(
@@ -131,4 +122,15 @@ def test_cleanup_source_runs_orphan_cleanup(session):
             )
         ).all()
     )
-    assert len(orphans_after) == 0
+    assert len(orphans_after) == 1
+
+    # Explicit cleanup_orphans call (as a caller would do post-deletion) removes it.
+    repo.cleanup_orphans(session)
+    orphans_final = list(
+        session.exec(
+            select(CalendarSyncStatusEntry).where(
+                CalendarSyncStatusEntry.calendar_source_id == 9999
+            )
+        ).all()
+    )
+    assert len(orphans_final) == 0

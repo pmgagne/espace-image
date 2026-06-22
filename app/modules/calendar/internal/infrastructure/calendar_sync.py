@@ -48,7 +48,7 @@ def _is_apple_ical_url(url: str | None) -> bool:
         return "icloud.com" in (url or "")
 
 
-def _is_apple_source(provider: str | None, url: str | None) -> bool:
+def is_apple_source(provider: str | None, url: str | None) -> bool:
     """Prefer `provider` when present, otherwise fall back to URL heuristics."""
     if provider:
         try:
@@ -553,7 +553,7 @@ class CalendarService:
         all_alarms: list[dict[str, Any]] = []
         for (source_id, url), content in zip(sources, results, strict=False):
             if content:
-                fix_icloud = _is_apple_source(_env_provider(), url)
+                fix_icloud = is_apple_source(_env_provider(), url)
                 alarms = CalendarService.get_upcoming_alarms(
                     content,
                     check_time,
@@ -944,9 +944,6 @@ class CalendarService:
         session: Session,
         source_id: int,
         elements: list[dict[str, str | None]],
-        window_start: datetime,
-        window_end: datetime,
-        fix_icloud: bool = False,
     ) -> None:
         for element in elements:
             uid = element.get("uid") or ""
@@ -960,9 +957,6 @@ class CalendarService:
                 fallback_uid=uid,
                 href=element.get("href") or "",
                 etag=element.get("etag"),
-                window_start=window_start,
-                window_end=window_end,
-                fix_icloud=fix_icloud,
             )
             if not row_payloads:
                 session.add(
@@ -1084,12 +1078,8 @@ class CalendarService:
         fallback_uid: str,
         href: str,
         etag: str | None,
-        window_start: datetime,
-        window_end: datetime,
-        fix_icloud: bool = False,
     ) -> list[dict[str, Any]]:
         """Build persisted calendar element payloads from raw VEVENT data."""
-        del window_start, window_end, fix_icloud
 
         payload = CalendarService._wrap_raw_ics_as_calendar(raw_ics)
         try:
@@ -1315,8 +1305,7 @@ class CalendarService:
                             is_caldav=True,
                         )
                     else:
-                        # If forcing a full resync when CalDAV reports no change,
-                        # proceed to treat content as fetched and replace cache.
+                        # fetch_succeeded=True AND (changed=True OR force=True).
                         ics_content = caldav_result.content
                         raw_elements = [
                             {
@@ -1327,9 +1316,33 @@ class CalendarService:
                             }
                             for element in caldav_result.elements
                         ]
-                        # If force requested and CalDAV reported no change, mark changed=True
                         if force and not changed:
                             changed = True
+                        # When force=True and CalDAV correctly reports no changes,
+                        # content is None (the server did not send a full payload).
+                        # Re-fetch without a sync token to obtain the full content.
+                        if force and ics_content is None:
+                            logger.info(
+                                "Force requested but CalDAV reported no changes for source %s (%s);"
+                                " re-fetching without sync token.",
+                                source.id,
+                                source.label,
+                            )
+                            fresh_result = await fetch_caldav_calendar_ics_with_metadata(
+                                calendar_url=source.url,
+                                sync_token=None,
+                                fail_on_error=False,
+                            )
+                            ics_content = fresh_result.content
+                            raw_elements = [
+                                {
+                                    "uid": el.uid,
+                                    "href": el.href,
+                                    "etag": el.etag,
+                                    "raw_ics": el.raw_ics,
+                                }
+                                for el in fresh_result.elements
+                            ]
                 else:
                     ics_content = await CalendarService.fetch_ics(source.url)
                     if ics_content is not None:
@@ -1378,9 +1391,6 @@ class CalendarService:
                 session,
                 source_id,
                 raw_elements,
-                window_start=window_start,
-                window_end=window_end,
-                fix_icloud=_is_apple_source(_env_provider(), source.url),
             )
 
             session.commit()
