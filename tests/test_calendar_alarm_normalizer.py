@@ -52,8 +52,6 @@ END:VCALENDAR
                 "raw_ics": raw_ics,
             }
         ],
-        window_start=datetime(2026, 1, 1, tzinfo=UTC),
-        window_end=datetime(2026, 2, 1, tzinfo=UTC),
     )
     session.commit()
 

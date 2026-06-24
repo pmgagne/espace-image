@@ -247,9 +247,7 @@
                     } catch (e) {
                         console.error('formatAlarmTimes error', e);
                     }
-                    if (reason === 'init' || reason === 'sync-event') {
-                        refreshAlarmPoller(tzOffset);
-                    }
+                    refreshAlarmPoller(tzOffset);
                     scheduleNextAlarmCheck();
                     scheduleNextDayPayloadFetch();
                 })

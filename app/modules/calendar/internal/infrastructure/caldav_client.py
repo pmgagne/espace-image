@@ -78,16 +78,21 @@ def _normalize_calendar_url(url: str) -> str:
 
 
 def _same_calendar_url(left: str, right: str) -> bool:
-    """Return True when two URLs refer to the same CalDAV calendar."""
+    """Return True when two URLs refer to the same CalDAV calendar.
+
+    Compares full normalized URLs first, then falls back to path-segment
+    equality. Substring containment is intentionally avoided — it would
+    incorrectly match /calendars/home against /calendars/home-work.
+    """
     normalized_left = _normalize_calendar_url(left)
     normalized_right = _normalize_calendar_url(right)
     if not normalized_left or not normalized_right:
         return False
-    return (
-        normalized_left == normalized_right
-        or normalized_left in normalized_right
-        or normalized_right in normalized_left
-    )
+    if normalized_left == normalized_right:
+        return True
+    left_path = urlparse(normalized_left).path.rstrip("/")
+    right_path = urlparse(normalized_right).path.rstrip("/")
+    return bool(left_path and right_path and left_path == right_path)
 
 
 def _find_matching_calendar(calendars: list[Any], target_calendar: str) -> Any | None:

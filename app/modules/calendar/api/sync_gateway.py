@@ -11,8 +11,13 @@ from app.modules.calendar.api.contracts import CalendarSyncReportDTO
 class ICalendarSyncGateway(Protocol):
     """Infrastructure gateway for calendar synchronization and ICS fetches."""
 
-    async def sync_calendar_events(self, session: Session) -> None:
-        """Sync all configured calendar events using the given session."""
+    async def sync_calendar_events(self, session: Session, force: bool = False) -> None:
+        """Sync all configured calendar events using the given session.
+
+        Args:
+            force: When True, force a full resync for all sources even if CalDAV
+                indicates no changes.
+        """
         ...
 
     async def sync_calendar_events_with_report(
