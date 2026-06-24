@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
+from app.config import ALARM_RETENTION_DAYS
 from app.modules.alarms.api.interfaces import IAlarmsService, get_alarms_service
 
 from .schemas import SimulateAlarmRequest
@@ -60,10 +61,23 @@ async def create_simulated_alarm(
 async def purge_old_dismissed_alarms(
     alarms_service: IAlarmsService = Depends(get_alarms_service),
 ) -> JSONResponse:
-    """Purge dismissed alarms older than 30 days."""
+    """Purge dismissed alarms older than the retention window."""
     await alarms_service.purge_old_dismissed_alarms()
-    purge_before = (datetime.now(UTC) - timedelta(days=30)).isoformat()
+    purge_before = (datetime.now(UTC) - timedelta(days=ALARM_RETENTION_DAYS)).isoformat()
     return JSONResponse(content={"status": "purged", "purge_before_utc": purge_before})
+
+
+@router.post("/purge-old")
+async def purge_old_alarms(
+    retention_days: int = Query(ALARM_RETENTION_DAYS, ge=1),
+    alarms_service: IAlarmsService = Depends(get_alarms_service),
+) -> JSONResponse:
+    """Purge past alarm/event rows whose trigger_time is older than retention."""
+    deleted = await alarms_service.purge_old_alarms(retention_days=retention_days)
+    cutoff = (datetime.now(UTC) - timedelta(days=retention_days)).isoformat()
+    return JSONResponse(
+        content={"status": "purged", "deleted": deleted, "cutoff_utc": cutoff}
+    )
 
 
 @router.get("/debug/state")

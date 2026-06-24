@@ -103,6 +103,21 @@ class AlarmsRepository(IAlarmsRepository):
             ).all()
         )
 
+    def list_triggered_before(
+        self,
+        session: Session,
+        cutoff: datetime,
+    ) -> list[AlarmEvent]:
+        """Return alarms whose trigger_time is older than a threshold.
+
+        Includes both dismissed and active rows so stale past occurrences are
+        purged regardless of dismissal state.
+        """
+        trigger_col = cast(Any, AlarmEvent.trigger_time)
+        return list(
+            session.exec(select(AlarmEvent).where(trigger_col < cutoff)).all()
+        )
+
     def delete_alarm(self, session: Session, alarm: AlarmEvent) -> None:
         """Delete one alarm row in current transaction."""
         session.delete(alarm)

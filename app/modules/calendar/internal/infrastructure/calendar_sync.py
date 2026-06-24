@@ -14,11 +14,9 @@ from icalendar import Calendar
 from icalevents.icaldownload import ICalDownload
 from icalevents.icalevents import events as icalevents_events
 from icalevents.icalparser import Event as ICalEvent
-from sqlalchemy import and_
 from sqlmodel import Session, select
 
 from app.db.models import (
-    AlarmEvent,
     CalendarElement,
     CalendarSource,
     CalendarSyncStatus,
@@ -1564,30 +1562,8 @@ class CalendarService:
         except Exception:
             logger.exception("Failed to assign next_sync_at after calendar sync")
 
-        # Auto-cleanup: Purge dismissed events outside the window
-        try:
-            dismissed_col = cast(Any, AlarmEvent.dismissed_at)
-            trigger_col = cast(Any, AlarmEvent.trigger_time)
-            old_dismissed = session.exec(
-                select(AlarmEvent).where(
-                    and_(
-                        dismissed_col.isnot(None),
-                        trigger_col < window_start,
-                    )
-                )
-            ).all()
-
-            for alarm in old_dismissed:
-                session.delete(alarm)
-
-            if old_dismissed:
-                session.commit()
-                logger.info(
-                    "Purged %d dismissed events outside window",
-                    len(old_dismissed),
-                )
-        except Exception as e:
-            logger.warning(f"Error purging old dismissed events: {e}")
+        # Stale AlarmEvent rows are purged separately by the alarms service
+        # (see AlarmsService.purge_old_alarms, invoked after general_sync).
 
         logger.info("Background sync completed.")
         # Log when the next background update is planned using configured delay

@@ -9,7 +9,7 @@ Historically, database schema changes were applied using a custom `migrate_datab
 ## Decision
 - Alembic is the canonical tool for all new schema migrations.
 - Alembic revision headers note if a change was previously applied by `migrate_database()` for traceability.
-- The `migrate_database()` helper is deprecated and should not be used for future migrations.
+- The `migrate_database()` helper has been removed from the codebase; do not reintroduce it.
 - If a deployment is missing a migration, apply the Alembic revision (idempotent if already applied).
 
 ## Consequences

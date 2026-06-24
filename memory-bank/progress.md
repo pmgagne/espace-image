@@ -1,6 +1,6 @@
 # Progress — Espace-Image
 
-**Last Updated**: 2026-05-01
+**Last Updated**: 2026-06-24
 
 ## What Works
 
@@ -16,6 +16,7 @@
 - legacy iPad 2 slideshow mode
 - APScheduler-driven calendar synchronization
 - persistent dismissal handling for alarms
+- automatic retention purge of stale `AlarmEvent` rows on each background sync (`ALARM_RETENTION_DAYS`, default 30; `espima alarms purge`)
 
 ### Architecture
 

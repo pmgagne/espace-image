@@ -17,15 +17,19 @@ Cleanup and lifecycle rules now rely on robust event/recurrence expansion and al
 
 We implement the following cleanup and lifecycle rules:
 
-### CalendarEventCache
+### CalendarElement (table: `calendar_elements`)
 - Events are cached for a rolling 1-week window.
 - On each calendar sync, events that no longer overlap the current window or are removed from the source calendar are purged from the cache.
 
 ### AlarmEvent
-- Dismissed alarms older than 30 days are purged.
-- After each calendar sync, dismissed alarms outside the current window are also purged.
-- Active (not dismissed) alarms for events still present in the calendar remain in the DB.
-- Past alarms are only removed if dismissed or if the event is removed from the source calendar.
+- Past alarm/event rows whose `trigger_time` is older than the retention window
+  (`ALARM_RETENTION_DAYS`, default 30 days) are purged on each background sync,
+  regardless of dismissal state. Implemented by `AlarmsService.purge_old_alarms`,
+  invoked from `background_sync_calendars` after `general_sync`.
+- Dismissed alarms older than the same retention window are also purged by
+  `AlarmsService.purge_old_dismissed_alarms` (invoked at alarm-widget render time).
+- Active (not dismissed) alarms for current and future events remain in the DB;
+  only past rows beyond the retention window are removed.
 
 ## Rationale
 

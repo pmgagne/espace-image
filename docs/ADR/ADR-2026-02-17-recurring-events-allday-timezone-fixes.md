@@ -58,10 +58,7 @@ Two critical bugs were discovered in the calendar event caching system after mig
    - The existing unique constraint `(calendar_source_id, uid)` now works correctly
    - Each occurrence has a unique composite UID within its source
 
-**Code Location:** `app/services/calendar_service.py`
-
-- Lines 810-860: `_select_latest_by_uid()` rewritten with composite key logic
-- Lines 862-1040: `_add_cache_entries()` uses composite UID from dict key
+**Code Location:** `app/modules/calendar/internal/application/service.py` (moved from deleted `app/services/calendar_service.py`)
 
 ### Fix 2: Store All-Day Events at Noon UTC
 
@@ -78,15 +75,11 @@ Two critical bugs were discovered in the calendar event caching system after mig
    - If yes, replace hour with 12 (noon)
    - Apply same logic to both `event_start` and `event_end`
 
-**Code Location:** `app/services/calendar_service.py`
-
-- Lines 695-706: Track `all_day` flag in event extraction
-- Lines 918-926: Shift all-day event start to noon UTC
-- Lines 930-940: Shift all-day event end to noon UTC
+**Code Location:** `app/modules/calendar/internal/application/service.py` (moved from deleted `app/services/calendar_service.py`)
 
 **Result:**
 
-```
+```text
 Before: 2026-02-13 00:00:00 UTC → 2026-02-12 19:00 Toronto (wrong date)
 After:  2026-02-13 12:00:00 UTC → 2026-02-13 07:00 Toronto (correct date)
 ```
@@ -157,7 +150,7 @@ All 68 existing tests pass with these changes:
 ```python
 # Recurring event - both occurrences cached:
 SELECT uid, datetime(event_start), summary
-FROM calendar_event_cache
+FROM calendar_elements
 WHERE summary LIKE '%Congé%';
 
 Results:
@@ -189,7 +182,7 @@ toronto = utc_noon.astimezone(ZoneInfo('America/Toronto'))
 
 1. **RFC 5545 RECURRENCE-ID:** If exact RFC compliance becomes critical, consider adding a `recurrence_id` column while keeping composite UIDs for internal uniqueness
 
-2. **Timezone Display Metadata:** Consider adding an `is_all_day` boolean column to the database for explicit flagging (currently inferred from noon UTC storage)
+2. **Timezone Display Metadata:** ~~Consider adding an `is_all_day` boolean column~~ — **Done:** `all_day` boolean field added to `CalendarElement`.
 
 3. **EXDATE Handling:** Monitor `icalevents` library for proper EXDATE (exception dates) support to ensure cancelled occurrences are handled correctly
 

@@ -20,7 +20,7 @@ We adopt a backend-driven dataflow for alarm display, with the following steps:
     - These events are cached in the database for fast access.
 
 2. **Alarm Extraction (On Request)**
-    - When the frontend requests the alarm list (e.g., via `/admin/partials/alarms` or `/components/alarms`), the backend queries the cached events.
+    - When the frontend requests the alarm list (e.g., via `GET /components/alarm`), the backend queries the cached events.
     - The `AlarmService` applies alarm logic (e.g., filtering, deduplication, formatting) to produce the list of alarms for display.
 
 3. **Template Rendering**

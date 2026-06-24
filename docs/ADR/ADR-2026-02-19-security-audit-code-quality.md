@@ -32,7 +32,7 @@ Implement a comprehensive set of security fixes and code quality improvements to
    - Protects against malicious HTML/JavaScript in calendar event names
    - Prevents script execution when alarms display
 
-3. **Magic Byte Validation** (`app/services/image_service.py:215-230`)
+3. **Magic Byte Validation** (`app/modules/media/internal/application/service.py`; moved from deleted `app/services/image_service.py`)
    - Added PIL-based content verification in file uploads
    - Validates actual file format matches extension
    - Prevents disguised malicious files (e.g., `shell.exe.jpg`)
@@ -40,10 +40,10 @@ Implement a comprehensive set of security fixes and code quality improvements to
 
 ### High Priority Fixes (🟠)
 
-4. **UID Validation** (`app/routers/dashboard.py:618-634`)
-   - Added regex validation for alarm UIDs: `^[\w\-:.@]+$`
-   - Length limit: 500 characters (DoS prevention)
-   - Supports standard iCalendar UID format with `@` character
+4. **UID Validation** (`app/modules/alarms/rest/router.py`)
+   - Alarm dismissal now routes through `POST /api/v1/alarms/{alarm_id}/dismiss`
+   - Validation: attempts UUID parsing first (`UUID(alarm_uid)`), then falls back to composite `source_id:event_uid` format
+   - Invalid formats are rejected before reaching the service layer
 
 5. **Calendar URL Validation** (`app/routers/admin.py:246-265`)
    - Validates URL scheme (only `http`, `https`, `webcal` allowed)
@@ -54,12 +54,12 @@ Implement a comprehensive set of security fixes and code quality improvements to
    - Debug routes only accessible when `WEBAPP_DEBUG` environment variable is set
    - Protects sensitive calendar data and sync status from public exposure
 
-7. **Error Message Sanitization** (`app/services/calendar_service.py:1070-1086`)
+7. **Error Message Sanitization** (`app/modules/calendar/internal/application/service.py`; moved from deleted `app/services/calendar_service.py`)
    - Masks credentials in error messages (regex replacement for `user:pass@`)
    - Truncates error messages to 200 characters
    - Prevents credential disclosure in admin UI
 
-8. **Race Condition Handling** (`app/services/calendar_service.py:772-785`)
+8. **Race Condition Handling** (`app/modules/calendar/internal/application/service.py`; moved from deleted `app/services/calendar_service.py`)
    - Added try/except/rollback pattern in sync status creation
    - Prevents database constraint violations in concurrent sync operations
 

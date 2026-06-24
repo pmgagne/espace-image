@@ -66,6 +66,14 @@ class IAlarmsRepository(Protocol):
         """Return dismissed alarms older than a threshold."""
         ...
 
+    def list_triggered_before(
+        self,
+        session: Session,
+        cutoff: datetime,
+    ) -> list[Any]:
+        """Return alarms whose trigger_time is older than a threshold."""
+        ...
+
     def delete_alarm(self, session: Session, alarm: Any) -> None:
         """Delete one alarm row in current transaction."""
         ...
