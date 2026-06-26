@@ -75,9 +75,7 @@ async def purge_old_alarms(
     """Purge past alarm/event rows whose trigger_time is older than retention."""
     deleted = await alarms_service.purge_old_alarms(retention_days=retention_days)
     cutoff = (datetime.now(UTC) - timedelta(days=retention_days)).isoformat()
-    return JSONResponse(
-        content={"status": "purged", "deleted": deleted, "cutoff_utc": cutoff}
-    )
+    return JSONResponse(content={"status": "purged", "deleted": deleted, "cutoff_utc": cutoff})
 
 
 @router.get("/debug/state")

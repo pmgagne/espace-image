@@ -114,9 +114,7 @@ class AlarmsRepository(IAlarmsRepository):
         purged regardless of dismissal state.
         """
         trigger_col = cast(Any, AlarmEvent.trigger_time)
-        return list(
-            session.exec(select(AlarmEvent).where(trigger_col < cutoff)).all()
-        )
+        return list(session.exec(select(AlarmEvent).where(trigger_col < cutoff)).all())
 
     def delete_alarm(self, session: Session, alarm: AlarmEvent) -> None:
         """Delete one alarm row in current transaction."""
