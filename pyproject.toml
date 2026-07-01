@@ -74,6 +74,13 @@ filterwarnings = [
     "ignore:The `name` is not the first parameter anymore.*:DeprecationWarning",
 ]
 
+[tool.coverage.run]
+source = ["app"]
+
+[tool.coverage.report]
+fail_under = 75
+show_missing = true
+
 [tool.pyright]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
