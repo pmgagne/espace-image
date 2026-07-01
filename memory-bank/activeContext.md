@@ -1,6 +1,6 @@
 # Active Context
 
-**Last Updated**: 2026-05-01
+**Last Updated**: 2026-06-24
 
 ## Current Architecture State
 
@@ -17,6 +17,14 @@ The important current-state facts are:
 7. **Target architecture** (ADR-2026-05-04): Adopt Presenter Pattern with API/GUI split—all services return DTOs only; GUI rendering delegated to `internal/infrastructure/presenter.py` adapters.
 
 ## Recently Completed
+
+### AlarmEvent Retention Purge (2026-06-24)
+
+- Added time-based purge of stale `AlarmEvent` rows (both `EVENT` and `ALARM`, dismissed or not) whose `trigger_time` is older than `ALARM_RETENTION_DAYS` (default 30, env-overridable in `app/config.py`).
+- `AlarmsService.purge_old_alarms()` + repository `list_triggered_before()`; invoked from `background_sync_calendars` in `app/main.py` after `general_sync`, so the table stays bounded even when alarm normalization is skipped.
+- Removed the dead year-2000 cleanup block in `calendar_sync.py` (it never matched any rows); aligned `purge_old_dismissed_alarms` to the same constant.
+- Surfaces: `espima alarms purge --retention-days N` CLI command; `POST /api/v1/alarms/purge-old` endpoint.
+- Docs updated: `docs/db/DB.md`, `docs/ADR/ADR-2026-02-14-db-cleanup-lifecycle.md`, `.env.example`, `CLAUDE.md`.
 
 ### DB Layer — Alembic Migration System (2026-05-01)
 

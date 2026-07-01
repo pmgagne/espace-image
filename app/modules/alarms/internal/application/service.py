@@ -11,6 +11,7 @@ from typing import Any
 
 from sqlmodel import Session
 
+from app.config import ALARM_RETENTION_DAYS
 from app.db.models import AlarmEntryType, AlarmEvent
 from app.db.session_factory import SessionFactory
 from app.modules.alarms.api.contracts import AlarmEventDTO
@@ -485,11 +486,11 @@ class AlarmsService:
                 logger.error("Error dismissing alarm %s: %s", alarm_uid, e)
 
     async def purge_old_dismissed_alarms(self, session: Session | None = None) -> None:
-        """Purge dismissed alarms older than 30 days."""
+        """Purge dismissed alarms older than the retention window."""
         with self._session_scope(session) as active_session:
             try:
                 now = datetime.now(UTC)
-                purge_before = now - timedelta(days=30)
+                purge_before = now - timedelta(days=ALARM_RETENTION_DAYS)
                 dismissed_alarms = self._repository.list_dismissed_before(
                     active_session,
                     purge_before,
@@ -507,6 +508,39 @@ class AlarmsService:
                     active_session.commit()
             except Exception as e:
                 logger.error("Error purging old dismissed alarms: %s", e)
+
+    async def purge_old_alarms(
+        self,
+        retention_days: int = ALARM_RETENTION_DAYS,
+        session: Session | None = None,
+    ) -> int:
+        """Purge past alarm/event rows whose trigger_time is older than retention.
+
+        Removes both dismissed and active rows so stale occurrences do not
+        accumulate in the AlarmEvent table. Active/future alarms are untouched.
+
+        Returns:
+            Number of alarm rows deleted.
+        """
+        with self._session_scope(session) as active_session:
+            try:
+                cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+                old_alarms = self._repository.list_triggered_before(active_session, cutoff)
+
+                count = len(old_alarms)
+                if count > 0:
+                    logger.info(
+                        "Purging %d alarm rows triggered before %s",
+                        count,
+                        cutoff.isoformat(),
+                    )
+                    for alarm in old_alarms:
+                        self._repository.delete_alarm(active_session, alarm)
+                    active_session.commit()
+                return count
+            except Exception as e:
+                logger.error("Error purging old alarms: %s", e)
+                return 0
 
     async def get_debug_alarm_state(self, session: Session | None = None) -> dict[str, Any]:
         """Get cached calendar events and alarm events for debugging."""

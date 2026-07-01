@@ -22,14 +22,14 @@ The Espace-Image app uses SQLModel (SQLAlchemy ORM) for its database layer. The 
 - **Preset**: Photo preset collections
 - **Photo**: Uploaded images, linked to presets
 - **CalendarSource**: External calendar sources (ICS/WebCal URLs)
-- **CalendarEventCache**: Cached calendar events (1-week window)
+- **CalendarElement** (table: `calendar_elements`): Raw calendar items fetched from sources (replaces old `CalendarEventCache`/`calendar_event_cache`)
 - **AlarmEvent**: Dismissal and trigger records for alarms
-- **CalendarSyncStatusEntry**: Sync status per calendar source
+- **CalendarSyncStatusEntry** (table: `calendar_sync_status`): Sync status per calendar source
 
 ### Relationships
 
 - Preset 1--* Photo
-- CalendarSource 1--* CalendarEventCache
+- CalendarSource 1--* CalendarElement
 - CalendarSource 1--1 CalendarSyncStatusEntry
 
 ---
@@ -64,17 +64,23 @@ The Espace-Image app uses SQLModel (SQLAlchemy ORM) for its database layer. The 
 - `url`: ICS/WebCal URL
 - `color`: string
 
-### CalendarEventCache
+### CalendarElement (table: `calendar_elements`)
 
-- `id`: PK
-- `calendar_source_id`: FK to CalendarSource
+Previously named `CalendarEventCache`/`calendar_event_cache`. Stores raw calendar items fetched from sources.
+
+- `id`: PK (int)
+- `calendar_source_id`: FK to CalendarSource (indexed)
 - `uid`: event UID (see **Recurring Event UIDs** below)
-- `event_start`, `event_end`: datetime (stored in UTC with `timezone.utc`)
+- `event_start`, `event_end`: datetime (nullable, stored in UTC with `timezone.utc`)
 - `event_tz`: string (nullable) — Original IANA timezone name from ICS (e.g., "America/Toronto")
-- `summary`, `description`, `location`: string
+- `summary`, `description`, `location`: string (default `""`)
+- `all_day`: boolean (default `False`) — True for all-day events (see **All-Day Event Timezone Handling**)
 - `created_at`: datetime (UTC)
 - `trigger_time`: datetime (nullable, UTC) — The moment when an alarm should fire (in UTC)
 - `optional_trigger`: boolean — True when `trigger_time` was added by the backend as a default (not extracted from a VALARM)
+- `href`: string — CalDAV resource href for incremental sync
+- `etag`: string (nullable) — CalDAV ETag for change detection
+- `raw_ics`: string — Raw ICS block for the event (used for VALARM parsing)
 - Unique constraint: (`calendar_source_id`, `uid`)
 
 **Recurring Event UIDs:**
@@ -86,18 +92,32 @@ The Espace-Image app uses SQLModel (SQLAlchemy ORM) for its database layer. The 
 
 ### AlarmEvent
 
-- `id`: PK
-- `uid`: event UID (composite: source_id:uid)
+- `id`: PK (UUID)
 - `trigger_time`: datetime
 - `dismissed_at`: datetime (nullable)
+- `calendar_source_id`: int (nullable, indexed) — FK to CalendarSource; null for simulated/test alarms
+- `calendar_event_uid`: string (nullable, indexed) — composite key in the form `source_id|event_uid|occurrence_start|trigger`
+- `entry_type`: `AlarmEntryType` enum — discriminator: `alarm` (default), `event`, `simulated`
 
-### CalendarSyncStatusEntry
+**AlarmEntryType values:**
+
+| Value | Meaning |
+| --- | --- |
+| `alarm` | Standard alarm row |
+| `event` | Row represents a calendar event occurrence |
+| `simulated` | Test/simulated alarm (no real calendar source) |
+
+### CalendarSyncStatusEntry (table: `calendar_sync_status`)
 
 - `id`: PK
-- `calendar_source_id`: FK to CalendarSource
-- `last_synced_at`, `next_sync_at`: datetime
-- `sync_status`: enum (pending, syncing, success, failed)
-- `error_message`, `error_count`, `last_error_at`
+- `calendar_source_id`: FK to CalendarSource (unique)
+- `last_synced_at`, `next_sync_at`: datetime (nullable)
+- `sync_status`: `CalendarSyncStatus` enum — `pending` (default), `syncing`, `success`, `failed`
+- `error_message`: string (default `""`)
+- `error_count`: int (default `0`)
+- `last_error_at`: datetime (nullable)
+- `sync_token`: string (nullable) — CalDAV sync token for incremental sync
+- `last_general_sync_at`: datetime (nullable) — timestamp of last full sync; used to skip redundant alarm normalization
 
 ---
 
@@ -105,7 +125,7 @@ The Espace-Image app uses SQLModel (SQLAlchemy ORM) for its database layer. The 
 
 ### Calendar Event Caching & Recurrence (icalevents)
 
-- Events are fetched from ICS sources and cached in `CalendarEventCache` for a rolling 1-week window.
+- Events are fetched from ICS sources and cached in `CalendarElement` (`calendar_elements`) for a rolling 1-week window.
 - **Recurring events are expanded using RRULE/RDATE/EXDATE logic via the [`icalevents`](https://icalevents.readthedocs.io/en/latest/) library (see [TASK011](../../memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md)).**
 - Only events overlapping the window are cached.
 - VALARM/PROXIMITY alarms are detected by scanning raw ICS blocks for matching VEVENTs.
@@ -189,7 +209,7 @@ Date displayed: Feb 13 (Friday) ✅
 
 - **Backend-driven:** All alarm logic is performed server-side (see [ADR-2026-02-14-alarm-dataflow.md](../ADR/ADR-2026-02-14-alarm-dataflow.md)). The frontend only displays rendered HTML fragments.
 - **Display logic:** Alarms are shown when their event start time (or start-of-day for all-day) is reached, and persist until dismissed (recorded in `AlarmEvent`).
-- **Dismissal:** Dismissal is tracked by UID (composite: source_id:uid).
+- **Dismissal:** Dismissal is tracked via `calendar_source_id` + `calendar_event_uid` on `AlarmEvent`.
 - **Alarm extraction:** On each frontend request, the backend queries the cached events, applies alarm logic, and renders the alarm list as a Jinja2 HTML fragment (see ADR for diagram).
 - **VALARM/PROXIMITY:** Alarms are flagged for events whose UID matches a VEVENT containing a VALARM with PROXIMITY.
 - **Cleanup:** Old dismissed alarms (>30 days) are purged.
@@ -227,15 +247,15 @@ Date displayed: Feb 13 (Friday) ✅
 
 - Use SQLModel for queries and relationships.
 - Always use UTC-aware datetimes for event and alarm logic.
-- Composite UIDs (source_id:uid) namespace events from different sources.
-- Dismissal logic checks both composite and raw UIDs for legacy compatibility.
+- `CalendarElement.uid` uses composite format `{original_uid}#{occurrence_start_iso}` for recurring events.
+- `AlarmEvent` links to events via `calendar_source_id` + `calendar_event_uid`; `entry_type` discriminates row purpose.
 
 ---
 
 ## For LLM Agents & Developers
 
-- When creating or dismissing alarms, always use the composite UID format.
-- When querying events, filter by the 1-week window and check for dismissal status.
+- When creating or dismissing alarms, set `calendar_source_id`, `calendar_event_uid`, and `entry_type` on `AlarmEvent`.
+- When querying events, filter `CalendarElement` by the 1-week window and check for dismissal status.
 - For recurring events, **expand using RRULE/RDATE/EXDATE via icalevents before caching** (see [TASK011](../../memory-bank/tasks/TASK011-migrate-icalendar-to-icalevents.md)).
 - Use relationships to efficiently fetch photos by preset or events by source.
 - Purge old dismissed alarms to keep the DB lean.
@@ -255,9 +275,12 @@ Date displayed: Feb 13 (Friday) ✅
 
 - Alarms are shown when their event start time (or start-of-day for all-day) is reached.
 - Alarms persist until dismissed (recorded in `AlarmEvent`).
-- Dismissed alarms older than 30 days are purged.
-- After calendar sync, dismissed alarms outside the current window are also purged.
-- Active (not dismissed) alarms for events still present in the calendar remain in the DB.
-- Past alarms are only removed if dismissed or if the event is removed from the source calendar.
+- Past `AlarmEvent` rows whose `trigger_time` is older than `ALARM_RETENTION_DAYS`
+  (default 30) are purged on every background sync, dismissed or not
+  (`AlarmsService.purge_old_alarms`). This keeps the table bounded even when the
+  calendar is unchanged and alarm normalization is skipped.
+- Dismissed alarms older than the same retention window are also purged
+  (`AlarmsService.purge_old_dismissed_alarms`).
+- Active (not dismissed) alarms for current and future events remain in the DB.
 
 ---

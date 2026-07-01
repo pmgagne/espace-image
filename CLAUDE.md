@@ -35,6 +35,7 @@ uv run espima db migrate       # apply Alembic migrations
 uv run espima caldav list --url <url> --username <u> --password <p>
 uv run espima caldav add --index 1 --url <url> --username <u> --password <p>
 uv run espima caldav sync
+uv run espima alarms purge --retention-days 30   # purge stale AlarmEvent rows (default 30 days)
 ```
 
 ## Architecture

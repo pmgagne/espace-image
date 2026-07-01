@@ -683,6 +683,26 @@ def alarms_sync(
     asyncio.run(_normalize())
 
 
+@alarms_app.command("purge")
+def alarms_purge(
+    retention_days: int = typer.Option(
+        default=30,
+        min=1,
+        help="Delete alarm rows whose trigger_time is older than this many days.",
+    ),
+) -> None:
+    """Purge stale past alarm/event rows from alarmevent."""
+
+    async def _purge() -> None:
+        service = _build_alarms_service()
+        with console.status("Purging old alarms..."):
+            count = await service.purge_old_alarms(retention_days=retention_days)
+
+        console.print(f"[green]Purged old alarm rows:[/green] {count}")
+
+    asyncio.run(_purge())
+
+
 @alarms_app.command("list")
 def alarms_list() -> None:
     """List alarm occurrences stored in alarmevent."""

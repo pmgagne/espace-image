@@ -229,7 +229,7 @@
             }, waitMs);
         }
 
-        function fetchDayPayload(reason) {
+        function fetchDayPayload(_reason) {
             var tzOffset = getBrowserTzOffset();
             var url = '/api/v1/alarms/today?tz_offset=' + encodeURIComponent(String(tzOffset));
             fetch(url)

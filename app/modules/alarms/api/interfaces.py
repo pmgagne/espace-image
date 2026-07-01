@@ -2,6 +2,7 @@
 
 from typing import Any, Protocol
 
+from app.config import ALARM_RETENTION_DAYS
 from app.modules.alarms.api.contracts import AlarmEventDTO
 
 
@@ -32,7 +33,14 @@ class IAlarmsService(Protocol):
         ...
 
     async def purge_old_dismissed_alarms(self) -> None:
-        """Purge dismissed alarms older than 30 days."""
+        """Purge dismissed alarms older than the retention window."""
+        ...
+
+    async def purge_old_alarms(self, retention_days: int = ALARM_RETENTION_DAYS) -> int:
+        """Purge past alarm/event rows older than the retention window.
+
+        Returns the number of rows deleted.
+        """
         ...
 
     async def get_debug_alarm_state(self) -> dict[str, Any]:

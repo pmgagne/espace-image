@@ -20,6 +20,11 @@ METEO_SYNC_INTERVAL_MINUTES = int(os.getenv("METEO_SYNC_INTERVAL_MINUTES", 15))
 # Index auto-update interval: default 5 minutes (in seconds)
 INDEX_UPDATE_INTERVAL_SECONDS = int(os.getenv("INDEX_UPDATE_INTERVAL_SECONDS", 300))
 
+# Retention window (in days) for AlarmEvent rows. Past alarm/event rows whose
+# trigger_time is older than this are purged on each background sync. Also used
+# for the dismissed-alarm purge so both retention rules stay aligned.
+ALARM_RETENTION_DAYS = int(os.getenv("ALARM_RETENTION_DAYS", 30))
+
 # CalDAV / WebDAV configuration (optional)
 # Use these env vars to configure a single CalDAV account and calendar to ingest
 # If CALDAV_URL is empty, CalDAV ingestion is skipped.

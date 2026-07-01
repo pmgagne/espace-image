@@ -7,7 +7,7 @@ Accepted
 Calendar events are ingested from ICS feeds, which may include timezone identifiers (TZID) and recurrence rules. Past refactors have changed how timezones and all-day events are stored and expanded.
 
 ## Decision
-- The original event timezone identifier (TZID) is preserved in the `event_tz` field of `CalendarEventCache`.
+- The original event timezone identifier (TZID) is preserved in the `event_tz` field of `CalendarElement` (table: `calendar_elements`).
 - All event and alarm times are stored in UTC, but recurrence expansion and display logic must reference the original TZID when present.
 - All-day events are stored as date-safe (not timezone-shifted) to avoid off-by-one errors.
 - Recurrence expansion must use the event's original timezone for correct wall-clock behavior across DST transitions.

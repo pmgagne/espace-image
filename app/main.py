@@ -125,6 +125,17 @@ async def background_sync_calendars() -> None:
                 "Background general sync normalized %s alarm occurrences",
                 result.normalized_alarm_count,
             )
+
+        # Purge stale past alarm/event rows so the AlarmEvent table stays bounded.
+        try:
+            from app.modules.alarms.internal.application.service import create_alarms_service
+            from app.modules.alarms.internal.infrastructure.repository import AlarmsRepository
+
+            alarms_service = create_alarms_service(session_factory, AlarmsRepository())
+            purged = await alarms_service.purge_old_alarms()
+            logger.info("Background sync purged %s old alarm rows", purged)
+        except Exception:
+            logger.exception("Error purging old alarms during background sync")
     except Exception as e:
         logger.exception("Error in background calendar sync: %s", e)
 
