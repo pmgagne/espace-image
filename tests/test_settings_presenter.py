@@ -22,8 +22,9 @@ def test_render_settings_with_location_and_presets():
         "active_preset_id": None,
         "slideshow_duration": 20,
     }
-    presets = [{"id": 1, "name": "MyPreset", "photos": []}]
+    presets = [{"id": 1, "name": "MyPreset", "photo_count": 3}]
     html = render_settings_fragment(settings, presets, location_name="Montreal, QC")
     assert "Detected:" in html
     assert "Montreal, QC" in html
     assert "MyPreset" in html
+    assert "3 photos" in html

@@ -16,12 +16,14 @@ async def get_image(
 ):
     """
     Serves the image file.
-    If `mode=='legacy'`, return a compatibility streaming response used by
-    older clients (legacy mode) which expect an on-the-fly resized JPEG.
+    If `mode=='legacy'`, the image is downscaled to a memory-safe pixel cap
+    before being returned as a streaming response, since older clients
+    (e.g. the iPad 2 slideshow display) crash decoding full-resolution photos.
     """
+    is_legacy = mode == "legacy"
 
     try:
-        photo_data = await media_service.get_image_payload(photo_id)
+        photo_data = await media_service.get_image_payload(photo_id, legacy=is_legacy)
     except ValueError:
         raise HTTPException(status_code=404, detail="Photo not found") from None
     except PermissionError:
@@ -30,7 +32,7 @@ async def get_image(
         raise HTTPException(status_code=404, detail="File not found on disk") from None
 
     optimized_bytes = photo_data["bytes"]
-    if mode == "legacy":
+    if is_legacy:
         return StreamingResponse(BytesIO(optimized_bytes), media_type="image/jpeg")
 
     return Response(content=optimized_bytes, media_type="image/jpeg")

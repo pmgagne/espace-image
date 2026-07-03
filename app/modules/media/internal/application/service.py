@@ -15,6 +15,7 @@ from app.modules.media.api.repositories import IMediaRepository
 from app.modules.media.api.storage import IMediaStorage
 from app.modules.media.internal.infrastructure.image_ops import (
     ImageOptimizer,
+    get_legacy_max_dimension,
 )
 
 
@@ -56,9 +57,9 @@ class MediaModuleService(IMediaService):
         """Convert Photo ORM to PhotoDTO."""
         return PhotoDTO(id=photo.id, preset_id=photo.preset_id, filename=photo.filename)
 
-    def optimize_path(self, image_path: str | Path) -> bytes:
+    def optimize_path(self, image_path: str | Path, max_dimension: int | None = None) -> bytes:
         """Return optimized image bytes for a given image path."""
-        return ImageOptimizer.optimize_path(image_path)
+        return ImageOptimizer.optimize_path(image_path, max_dimension=max_dimension)
 
     def save_upload(
         self,
@@ -206,8 +207,14 @@ class MediaModuleService(IMediaService):
             photo = self._repository.get_photo(active_session, photo_id)
             return self._photo_to_dto(photo) if photo else None
 
-    async def get_image_payload(self, photo_id: int) -> dict[str, bytes]:
-        """Resolve and validate file path, then return optimized image bytes."""
+    async def get_image_payload(self, photo_id: int, legacy: bool = False) -> dict[str, bytes]:
+        """Resolve and validate file path, then return optimized image bytes.
+
+        When `legacy` is True, the image is additionally downscaled to a
+        memory-safe pixel cap for low-memory clients (e.g. the iPad 2
+        slideshow display), which otherwise crash decoding full-resolution
+        photos.
+        """
         photo_data = await self.get_photo_for_download(photo_id)
         photo = photo_data["photo"]
         preset_name = photo_data["preset_name"]
@@ -219,7 +226,8 @@ class MediaModuleService(IMediaService):
         if not file_path.exists():
             raise FileNotFoundError("File not found on disk")
 
-        return {"bytes": self.optimize_path(file_path)}
+        max_dimension = get_legacy_max_dimension() if legacy else None
+        return {"bytes": self.optimize_path(file_path, max_dimension=max_dimension)}
 
     async def delete_preset(self, preset_id: int, session: Session | None = None) -> bool:
         """Delete a preset and its associated photos from storage and DB."""
