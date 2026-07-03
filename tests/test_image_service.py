@@ -39,6 +39,33 @@ def test_optimize_bytes_preserves_dimensions(monkeypatch, jpeg_bytes):
         assert (width, height) == (640, 480)
 
 
+def test_optimize_bytes_downscales_when_max_dimension_set(monkeypatch):
+    """Test that a max_dimension cap downscales oversized images (aspect preserved)."""
+    monkeypatch.setenv("IMAGE_OPTIMIZE_MIN_BYTES", "10000000")
+
+    img = Image.new("RGB", (2000, 1500), color="green")
+    buffer = BytesIO()
+    img.save(buffer, format="JPEG", quality=90)
+    large_bytes = buffer.getvalue()
+
+    optimized = ImageOptimizer.optimize_bytes(large_bytes, max_dimension=1024)
+
+    with Image.open(BytesIO(optimized)) as result_img:
+        width, height = result_img.size
+        assert max(width, height) == 1024
+        assert round(width / height, 2) == round(2000 / 1500, 2)
+
+
+def test_optimize_bytes_preserves_dimensions_when_under_max_dimension(monkeypatch, jpeg_bytes):
+    """Test that a max_dimension cap is a no-op when the image is already smaller."""
+    monkeypatch.setenv("IMAGE_OPTIMIZE_MIN_BYTES", "10000000")
+
+    optimized = ImageOptimizer.optimize_bytes(jpeg_bytes, max_dimension=1024)
+
+    with Image.open(BytesIO(optimized)) as img:
+        assert img.size == (640, 480)
+
+
 def test_optimize_bytes_noop_under_threshold(monkeypatch, jpeg_bytes):
     """Test that images under the threshold are not re-encoded."""
     monkeypatch.setenv("IMAGE_OPTIMIZE_MIN_BYTES", "10000000")

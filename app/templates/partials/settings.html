@@ -47,7 +47,7 @@
                     <option value="">-- No Preset Selected --</option>
                     {% for preset in presets %}
                     <option value="{{ preset.id }}" {% if settings.active_preset_id==preset.id %}selected{% endif %}>
-                        {{ preset.name }} ({{ preset.photos|length }} photos)
+                        {{ preset.name }} ({{ preset.photo_count }} photos)
                     </option>
                     {% endfor %}
                 </select>

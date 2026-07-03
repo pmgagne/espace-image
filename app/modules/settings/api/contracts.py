@@ -9,6 +9,7 @@ class PresetDTO:
 
     id: int
     name: str
+    photo_count: int = 0
 
 
 @dataclass(frozen=True)

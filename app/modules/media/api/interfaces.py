@@ -14,7 +14,7 @@ from app.modules.media.api.contracts import (
 class IMediaService(Protocol):
     """Public interface for media processing and file operations."""
 
-    def optimize_path(self, image_path: str | Path) -> bytes:
+    def optimize_path(self, image_path: str | Path, max_dimension: int | None = None) -> bytes:
         """Return optimized image bytes for a given image path."""
 
     def save_upload(
@@ -135,8 +135,12 @@ class IMediaService(Protocol):
         """
         ...
 
-    async def get_image_payload(self, photo_id: int) -> dict[str, bytes]:
-        """Return optimized image bytes for serving."""
+    async def get_image_payload(self, photo_id: int, legacy: bool = False) -> dict[str, bytes]:
+        """Return optimized image bytes for serving.
+
+        When `legacy` is True, the image is downscaled to a memory-safe pixel
+        cap for low-memory clients (e.g. the iPad 2 slideshow display).
+        """
         ...
 
 

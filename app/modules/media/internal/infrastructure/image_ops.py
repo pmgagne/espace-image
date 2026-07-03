@@ -27,6 +27,7 @@ if pillow_heif is not None:
 DEFAULT_OPTIMIZE_MIN_BYTES = 800 * 1024
 DEFAULT_JPEG_QUALITY = 82
 DEFAULT_JPEG_MIN_QUALITY = 60
+DEFAULT_LEGACY_MAX_DIMENSION = 1024
 
 
 # Allowed upload file extensions (lowercase, include leading dot)
@@ -57,6 +58,12 @@ def _get_env_int(name: str, default: int) -> int:
 logger = logging.getLogger(__name__)
 
 
+def get_legacy_max_dimension() -> int:
+    """Return the configured max pixel dimension (longest side) for legacy,
+    memory-constrained clients (e.g. the iPad 2 slideshow display)."""
+    return _get_env_int("IMAGE_LEGACY_MAX_DIMENSION", DEFAULT_LEGACY_MAX_DIMENSION)
+
+
 class ImageOptimizer:
     """
     Static utility class for optimizing image bytes and uploads for
@@ -64,13 +71,19 @@ class ImageOptimizer:
     """
 
     @staticmethod
-    def optimize_bytes(file_content: bytes) -> bytes:
+    def optimize_bytes(file_content: bytes, max_dimension: int | None = None) -> bytes:
         """
         Re-encode to JPEG if the content exceeds the configured size threshold.
-        Pixel dimensions are preserved.
+        Pixel dimensions are preserved unless `max_dimension` is provided, in which
+        case the image is downscaled (preserving aspect ratio) so its longest side
+        does not exceed `max_dimension`.
 
         Args:
             file_content (bytes): The image file content.
+            max_dimension (int | None): Optional cap, in pixels, on the longest side
+                of the image. Used for low-memory clients (e.g. legacy iPad displays)
+                that crash when decoding full-resolution photos. `None` preserves the
+                original dimensions.
 
         Returns:
             bytes: Optimized image bytes (possibly re-encoded as JPEG).
@@ -92,12 +105,19 @@ class ImageOptimizer:
             with Image.open(BytesIO(file_content)) as img:
                 format_name = (img.format or "").upper()
                 is_jpeg = format_name == "JPEG"
-                should_reencode = (not is_jpeg) or (len(file_content) > optimize_min_bytes)
+                needs_downscale = max_dimension is not None and max(img.size) > max_dimension
+                should_reencode = (
+                    (not is_jpeg) or (len(file_content) > optimize_min_bytes) or needs_downscale
+                )
 
                 if not should_reencode:
                     return file_content
 
                 image = img.convert("RGB") if img.mode != "RGB" else img
+
+                if needs_downscale:
+                    image = image.copy()
+                    image.thumbnail((max_dimension, max_dimension), Image.LANCZOS)
 
                 min_quality = min(jpeg_quality, jpeg_min_quality)
                 quality = jpeg_quality
@@ -157,18 +177,21 @@ class ImageOptimizer:
         return optimized_content, new_filename
 
     @staticmethod
-    def optimize_path(image_path: str | Path) -> bytes:
+    def optimize_path(image_path: str | Path, max_dimension: int | None = None) -> bytes:
         """
         Optimize an image file at the given path and return the
         optimized bytes.
 
         Args:
             image_path (str | Path): Path to the image file.
+            max_dimension (int | None): Optional cap, in pixels, on the longest side.
 
         Returns:
             bytes: Optimized image bytes.
         """
-        return ImageOptimizer.optimize_bytes(Path(image_path).read_bytes())
+        return ImageOptimizer.optimize_bytes(
+            Path(image_path).read_bytes(), max_dimension=max_dimension
+        )
 
 
 class GalleryManager:

@@ -35,9 +35,9 @@ class SettingsModuleService(ISettingsService):
             yield local_session
 
     @staticmethod
-    def _preset_to_dto(preset: Preset) -> PresetDTO:
+    def _preset_to_dto(preset: Preset, photo_count: int = 0) -> PresetDTO:
         """Convert Preset ORM to PresetDTO."""
-        return PresetDTO(id=preset.id, name=preset.name)
+        return PresetDTO(id=preset.id, name=preset.name, photo_count=photo_count)
 
     @staticmethod
     def _settings_to_dto(settings: AppSettings) -> AppSettingsDTO:
@@ -59,13 +59,13 @@ class SettingsModuleService(ISettingsService):
         """Return all available presets."""
         with self._session_scope(session) as active_session:
             presets = self._repository.list_presets(active_session)
-            return [self._preset_to_dto(p) for p in presets]
+            return [self._preset_to_dto(p, count) for p, count in presets]
 
     def get_preset(self, preset_id: int, session: Session | None = None) -> PresetDTO | None:
         """Return a preset by id if found."""
         with self._session_scope(session) as active_session:
-            preset = self._repository.get_preset(active_session, preset_id)
-            return self._preset_to_dto(preset) if preset else None
+            result = self._repository.get_preset(active_session, preset_id)
+            return self._preset_to_dto(*result) if result else None
 
     def save_settings(
         self,

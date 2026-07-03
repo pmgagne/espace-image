@@ -12,12 +12,12 @@ class ISettingsRepository(Protocol):
         """Return first settings row if present."""
         ...
 
-    def list_presets(self, session: Session) -> list[Any]:
-        """Return all presets."""
+    def list_presets(self, session: Session) -> list[tuple[Any, int]]:
+        """Return all presets paired with their photo count."""
         ...
 
-    def get_preset(self, session: Session, preset_id: int) -> Any | None:
-        """Return one preset by identifier."""
+    def get_preset(self, session: Session, preset_id: int) -> tuple[Any, int] | None:
+        """Return one preset by identifier paired with its photo count."""
         ...
 
     def save(self, session: Session, settings: Any) -> Any:
