@@ -18,6 +18,7 @@ from rich.console import Console
 from rich.table import Table
 
 from alembic import command
+from app.config import ALARM_RETENTION_DAYS
 
 load_dotenv()
 
@@ -83,13 +84,9 @@ def _build_alarms_service() -> Any:
     """Build alarms service using the app's module composition wiring."""
     from app.db.engine import engine
     from app.db.session_factory import SessionFactory
-    from app.modules.alarms.internal.application.service import create_alarms_service
-    from app.modules.alarms.internal.infrastructure.repository import AlarmsRepository
+    from app.modules.alarms.loader import build_alarms_service
 
-    return create_alarms_service(
-        SessionFactory(engine),
-        AlarmsRepository(),
-    )
+    return build_alarms_service(SessionFactory(engine))
 
 
 def _initialize_database() -> None:
@@ -686,9 +683,10 @@ def alarms_sync(
 @alarms_app.command("purge")
 def alarms_purge(
     retention_days: int = typer.Option(
-        default=30,
+        default=ALARM_RETENTION_DAYS,
         min=1,
-        help="Delete alarm rows whose trigger_time is older than this many days.",
+        help="Delete alarm rows whose trigger_time is older than this many days. "
+        "Defaults to ALARM_RETENTION_DAYS.",
     ),
 ) -> None:
     """Purge stale past alarm/event rows from alarmevent."""

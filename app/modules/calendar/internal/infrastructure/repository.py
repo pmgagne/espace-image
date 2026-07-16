@@ -1,6 +1,7 @@
 """Calendar repository adapter for SQLModel persistence."""
 
 from datetime import datetime
+from typing import Any, cast
 
 from sqlmodel import Session, select
 
@@ -91,14 +92,7 @@ class CalendarRepository(ICalendarRepository):
 
         Returns tuple of deleted counts: (sync_status_count, calendar_elements_count, alarm_events_count).
         """
-        from sqlmodel import select
-
-        from app.db.models import (
-            AlarmEvent,
-            CalendarElement,
-            CalendarSource,
-            CalendarSyncStatusEntry,
-        )
+        from app.db.models import AlarmEvent
 
         active_sources = list(session.exec(select(CalendarSource.id)).all())
         # SQLModel may return a list of scalars or tuples depending on the query;
@@ -110,31 +104,36 @@ class CalendarRepository(ICalendarRepository):
             else:
                 active_ids.add(row)
 
+        # A row is orphaned when it has a (non-null) source id that does not
+        # belong to any surviving CalendarSource. NULL is never orphaned here:
+        # for AlarmEvent it marks a simulated alarm (intentionally source-less,
+        # see list_ready_simulated_alarms), and the other two tables never have
+        # a null source id at all. This must hold even when active_ids is
+        # empty (e.g. the last calendar source was just deleted) — otherwise
+        # every remaining row would be skipped as "not orphaned" instead of
+        # correctly being swept, or simulated alarms would be wrongly deleted.
+        def _is_orphan(col: Any) -> Any:
+            if active_ids:
+                return col.isnot(None) & ~col.in_(list(active_ids))
+            return col.isnot(None)
+
         statuses = list(
             session.exec(
                 select(CalendarSyncStatusEntry).where(
-                    (CalendarSyncStatusEntry.calendar_source_id.is_(None))
-                    if not active_ids
-                    else (~CalendarSyncStatusEntry.calendar_source_id.in_(list(active_ids)))
+                    _is_orphan(cast(Any, CalendarSyncStatusEntry.calendar_source_id))
                 )
             ).all()
         )
         elements = list(
             session.exec(
                 select(CalendarElement).where(
-                    (CalendarElement.calendar_source_id.is_(None))
-                    if not active_ids
-                    else (~CalendarElement.calendar_source_id.in_(list(active_ids)))
+                    _is_orphan(cast(Any, CalendarElement.calendar_source_id))
                 )
             ).all()
         )
         alarms = list(
             session.exec(
-                select(AlarmEvent).where(
-                    (AlarmEvent.calendar_source_id.is_(None))
-                    if not active_ids
-                    else (~AlarmEvent.calendar_source_id.in_(list(active_ids)))
-                )
+                select(AlarmEvent).where(_is_orphan(cast(Any, AlarmEvent.calendar_source_id)))
             ).all()
         )
 

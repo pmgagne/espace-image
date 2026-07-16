@@ -109,6 +109,9 @@ class DummyCalendarService:
 class DummyAlarmsService:
     """Minimal async service mock for espima alarms commands."""
 
+    def __init__(self) -> None:
+        self.purge_retention_days: int | None = None
+
     async def get_debug_alarm_state(self) -> dict[str, list[dict[str, str | int | None]]]:
         return {
             "alarm_events": [
@@ -121,6 +124,10 @@ class DummyAlarmsService:
                 }
             ]
         }
+
+    async def purge_old_alarms(self, retention_days: int) -> int:
+        self.purge_retention_days = retention_days
+        return 3
 
 
 def test_root_help_shows_command_groups() -> None:
@@ -291,6 +298,41 @@ def test_sync_runs_general_sync(monkeypatch) -> None:
     assert service.last_normalize_start_date == date(2026, 1, 15)
     assert service.last_normalize_days == 14
     assert "General sync completed" in result.stdout
+
+
+def test_alarms_purge_option_default_is_bound_to_alarm_retention_days() -> None:
+    """The --retention-days option must default to app.config.ALARM_RETENTION_DAYS,
+    not a hardcoded literal, so it stays consistent with the background purge
+    and the REST endpoint regardless of what an operator sets that env var to."""
+    import inspect
+
+    sig = inspect.signature(cli.alarms_purge)
+    option_info = sig.parameters["retention_days"].default
+
+    assert option_info.default == cli.ALARM_RETENTION_DAYS
+
+
+def test_alarms_purge_uses_configured_retention_when_no_flag_given(monkeypatch) -> None:
+    """Invoking with no flag should purge using ALARM_RETENTION_DAYS."""
+    service = DummyAlarmsService()
+    monkeypatch.setattr("espima.cli._build_alarms_service", lambda: service)
+
+    result = runner.invoke(cli.app, ["alarms", "purge"])
+
+    assert result.exit_code == 0
+    assert service.purge_retention_days == cli.ALARM_RETENTION_DAYS
+    assert "Purged old alarm rows" in result.stdout
+
+
+def test_alarms_purge_accepts_explicit_retention_days(monkeypatch) -> None:
+    """An explicit --retention-days flag should override the config default."""
+    service = DummyAlarmsService()
+    monkeypatch.setattr("espima.cli._build_alarms_service", lambda: service)
+
+    result = runner.invoke(cli.app, ["alarms", "purge", "--retention-days", "7"])
+
+    assert result.exit_code == 0
+    assert service.purge_retention_days == 7
 
 
 def test_alarms_list_shows_rows(monkeypatch) -> None:

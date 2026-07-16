@@ -1,6 +1,6 @@
 from sqlmodel import select
 
-from app.db.models import CalendarSource
+from app.db.models import CalendarSource, CalendarSyncStatusEntry
 
 
 def test_api_create_calendar_source_returns_json_and_persists(client, session):
@@ -36,6 +36,33 @@ def test_api_delete_calendar_source(client, session):
 
     session.expire_all()
     assert session.get(CalendarSource, source_id) is None
+
+
+def test_api_delete_calendar_source_sweeps_orphans(client, session):
+    """Deleting a source is the only production code path that reclaims rows
+    orphaned by a prior failed/partial cleanup — it must sweep them, not just
+    delete the target source's own rows."""
+    source = CalendarSource(
+        label="Delete Me Too", url="https://example.com/delete2.ics", color="#334455"
+    )
+    session.add(source)
+    session.commit()
+    session.refresh(source)
+    source_id = source.id
+
+    # A row left orphaned by an earlier failure/deletion (no matching source).
+    orphan_status = CalendarSyncStatusEntry(calendar_source_id=999999, sync_token="orphan")
+    session.add(orphan_status)
+    session.commit()
+
+    response = client.delete(f"/api/v1/calendar/sources/{source_id}")
+    assert response.status_code == 204
+
+    session.expire_all()
+    remaining_orphans = session.exec(
+        select(CalendarSyncStatusEntry).where(CalendarSyncStatusEntry.calendar_source_id == 999999)
+    ).all()
+    assert remaining_orphans == []
 
 
 def test_api_list_calendar_sources_and_sync_status_return_json(client, session):

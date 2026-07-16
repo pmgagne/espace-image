@@ -1,5 +1,7 @@
 """Tests for calendar repository cleanup behaviors."""
 
+from datetime import UTC, datetime, timedelta
+
 from sqlmodel import select
 
 from app.db.models import (
@@ -80,6 +82,49 @@ def test_cleanup_orphans_deletes_orphan_rows(session):
     assert len(remaining_statuses) == 1
     assert len(remaining_elements) == 1
     assert len(remaining_alarms) == 1
+
+
+def test_cleanup_orphans_sweeps_all_source_rows_when_no_sources_remain(session):
+    """When there are zero CalendarSource rows left (e.g. the last calendar
+    was just deleted), any row with a non-null calendar_source_id is
+    necessarily orphaned and must still be swept — not skipped because the
+    "active ids" set happens to be empty."""
+    repo = CalendarRepository()
+
+    orphan_status = CalendarSyncStatusEntry(calendar_source_id=999999, sync_token="orphan")
+    orphan_element = CalendarElement(
+        calendar_source_id=999999,
+        uid="evt-orphan",
+        raw_ics="BEGIN:VCALENDAR\nEND:VCALENDAR\n",
+    )
+    orphan_alarm = AlarmEvent(trigger_time=orphan_element.created_at, calendar_source_id=999999)
+    session.add_all([orphan_status, orphan_element, orphan_alarm])
+    session.commit()
+
+    deleted_statuses, deleted_elements, deleted_alarms = repo.cleanup_orphans(session)
+
+    assert deleted_statuses == 1
+    assert deleted_elements == 1
+    assert deleted_alarms == 1
+
+
+def test_cleanup_orphans_preserves_simulated_alarms_when_no_sources_remain(session):
+    """Simulated alarms (calendar_source_id is None) are never orphans,
+    regardless of how many CalendarSource rows exist — cleanup_orphans must
+    not delete them even when the active-sources set is empty."""
+    repo = CalendarRepository()
+
+    simulated_alarm = AlarmEvent(
+        trigger_time=datetime.now(UTC) + timedelta(minutes=5), calendar_source_id=None
+    )
+    session.add(simulated_alarm)
+    session.commit()
+    simulated_alarm_id = simulated_alarm.id
+
+    repo.cleanup_orphans(session)
+
+    session.expire_all()
+    assert session.get(AlarmEvent, simulated_alarm_id) is not None
 
 
 def test_cleanup_source_does_not_run_orphan_cleanup(session):

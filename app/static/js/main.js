@@ -87,8 +87,14 @@
             return '/components/alarm?tz_offset=' + encodeURIComponent(String(tzOffset));
         }
 
-        function refreshAlarmPoller(tzOffset) {
-            lastAlarmContent = '';
+        function refreshAlarmPoller(tzOffset, force) {
+            // Only force-clear the anti-flicker dedup cache when the caller
+            // knows content must change (e.g. right after a dismiss). Callers
+            // that just want to check for updates should not reset it, or
+            // every refresh would re-swap identical content.
+            if (force) {
+                lastAlarmContent = '';
+            }
             var target = '#alarm-poller';
             var path = buildAlarmRefreshPath(tzOffset);
             if (window.htmx && typeof window.htmx.ajax === 'function') {
@@ -229,7 +235,7 @@
             }, waitMs);
         }
 
-        function fetchDayPayload(_reason) {
+        function fetchDayPayload(reason) {
             var tzOffset = getBrowserTzOffset();
             var url = '/api/v1/alarms/today?tz_offset=' + encodeURIComponent(String(tzOffset));
             fetch(url)
@@ -247,7 +253,14 @@
                     } catch (e) {
                         console.error('formatAlarmTimes error', e);
                     }
-                    refreshAlarmPoller(tzOffset);
+                    // Only refresh here on init/cross-tab sync. Scheduled and
+                    // alarm-trigger cycles already get their alarm refresh
+                    // from scheduleNextAlarmCheck (and, for alarm-trigger,
+                    // from the timer callback itself) — refreshing
+                    // unconditionally here would race those calls.
+                    if (reason === 'init' || reason === 'sync-event') {
+                        refreshAlarmPoller(tzOffset);
+                    }
                     scheduleNextAlarmCheck();
                     scheduleNextDayPayloadFetch();
                 })
@@ -333,7 +346,7 @@
                 }
                 return response.json();
             }).then(function () {
-                refreshAlarmPoller(tzOffset);
+                refreshAlarmPoller(tzOffset, true);
             }).catch(function () {
                 // Keep behavior unobtrusive in slideshow mode.
             });

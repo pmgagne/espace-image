@@ -12,6 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 # Import configuration constants
 from app.config import BACKGROUND_SYNC_DEFAULT_MINUTES
 from app.db.session_factory import SessionFactory
+from app.modules.alarms.loader import build_alarms_service
 from app.modules.alarms.rest import router as alarms_rest_router
 from app.modules.calendar.loader import build_calendar_service
 from app.modules.calendar.rest import router as calendar_rest_router
@@ -89,12 +90,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 async def background_sync_calendars() -> None:
-    """Background task to sync calendar events on configured interval."""
+    """Background task to sync calendar events on configured interval.
+
+    Calendar sync and the alarm-retention purge are independent concerns:
+    the purge must run even when there are no calendar sources configured,
+    or when sync itself fails, so the AlarmEvent table stays bounded in
+    every runtime state.
+    """
+    from app.db.engine import engine
+
+    session_factory = SessionFactory(engine)
+
     try:
         # Build calendar service via module-owned composition helper
-        from app.db.engine import engine
-
-        session_factory = SessionFactory(engine)
         calendar_service = build_calendar_service(session_factory)
         # If the calendar service exposes `get_calendars_for_ui`, use it to
         # detect an empty configuration and skip sync when there are no sources.
@@ -112,32 +120,29 @@ async def background_sync_calendars() -> None:
 
         if should_skip:
             logger.info("Background calendar sync skipped: no calendar sources configured")
-            return
-
-        result = await calendar_service.general_sync()
-        if result.alarms_skipped:
-            logger.info(
-                "Background general sync skipped alarm normalization: %s",
-                result.alarms_skip_reason,
-            )
         else:
-            logger.info(
-                "Background general sync normalized %s alarm occurrences",
-                result.normalized_alarm_count,
-            )
-
-        # Purge stale past alarm/event rows so the AlarmEvent table stays bounded.
-        try:
-            from app.modules.alarms.internal.application.service import create_alarms_service
-            from app.modules.alarms.internal.infrastructure.repository import AlarmsRepository
-
-            alarms_service = create_alarms_service(session_factory, AlarmsRepository())
-            purged = await alarms_service.purge_old_alarms()
-            logger.info("Background sync purged %s old alarm rows", purged)
-        except Exception:
-            logger.exception("Error purging old alarms during background sync")
+            result = await calendar_service.general_sync()
+            if result.alarms_skipped:
+                logger.info(
+                    "Background general sync skipped alarm normalization: %s",
+                    result.alarms_skip_reason,
+                )
+            else:
+                logger.info(
+                    "Background general sync normalized %s alarm occurrences",
+                    result.normalized_alarm_count,
+                )
     except Exception as e:
         logger.exception("Error in background calendar sync: %s", e)
+
+    # Purge stale past alarm/event rows so the AlarmEvent table stays bounded,
+    # regardless of whether the sync above ran, was skipped, or failed.
+    try:
+        alarms_service = build_alarms_service(session_factory)
+        purged = await alarms_service.purge_old_alarms()
+        logger.info("Background sync purged %s old alarm rows", purged)
+    except Exception:
+        logger.exception("Error purging old alarms during background sync")
 
 
 def _sync_period_minutes() -> float:

@@ -485,30 +485,6 @@ class AlarmsService:
             except Exception as e:
                 logger.error("Error dismissing alarm %s: %s", alarm_uid, e)
 
-    async def purge_old_dismissed_alarms(self, session: Session | None = None) -> None:
-        """Purge dismissed alarms older than the retention window."""
-        with self._session_scope(session) as active_session:
-            try:
-                now = datetime.now(UTC)
-                purge_before = now - timedelta(days=ALARM_RETENTION_DAYS)
-                dismissed_alarms = self._repository.list_dismissed_before(
-                    active_session,
-                    purge_before,
-                )
-
-                count = len(dismissed_alarms)
-                if count > 0:
-                    logger.info(
-                        "Purging %d dismissed alarms older than %s",
-                        count,
-                        purge_before.isoformat(),
-                    )
-                    for alarm in dismissed_alarms:
-                        self._repository.delete_alarm(active_session, alarm)
-                    active_session.commit()
-            except Exception as e:
-                logger.error("Error purging old dismissed alarms: %s", e)
-
     async def purge_old_alarms(
         self,
         retention_days: int = ALARM_RETENTION_DAYS,
@@ -523,24 +499,23 @@ class AlarmsService:
             Number of alarm rows deleted.
         """
         with self._session_scope(session) as active_session:
+            cutoff = datetime.now(UTC) - timedelta(days=retention_days)
             try:
-                cutoff = datetime.now(UTC) - timedelta(days=retention_days)
-                old_alarms = self._repository.list_triggered_before(active_session, cutoff)
-
-                count = len(old_alarms)
+                count = self._repository.delete_triggered_before(active_session, cutoff)
+                active_session.commit()
                 if count > 0:
                     logger.info(
-                        "Purging %d alarm rows triggered before %s",
+                        "Purged %d alarm rows triggered before %s",
                         count,
                         cutoff.isoformat(),
                     )
-                    for alarm in old_alarms:
-                        self._repository.delete_alarm(active_session, alarm)
-                    active_session.commit()
                 return count
-            except Exception as e:
-                logger.error("Error purging old alarms: %s", e)
-                return 0
+            except Exception:
+                # Do not swallow the failure: callers (the REST endpoint, the
+                # background sync job) need to distinguish "nothing to purge"
+                # from "the purge failed".
+                logger.exception("Error purging old alarms")
+                raise
 
     async def get_debug_alarm_state(self, session: Session | None = None) -> dict[str, Any]:
         """Get cached calendar events and alarm events for debugging."""
@@ -639,7 +614,8 @@ class AlarmsService:
                 },
             ]
         else:
-            await self.purge_old_dismissed_alarms()
+            # Purging is handled by the background sync job (purge_old_alarms);
+            # rendering the alarm widget is a read-only operation.
             active_alarms = await self.get_active_alarms()
 
         return self._alarms_to_context(active_alarms, mock=mock, tz_offset=tz_offset)

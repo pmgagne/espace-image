@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlmodel import Session, select
+from sqlmodel import Session, delete, select
 
 from app.db.models import AlarmEvent, CalendarEvent, CalendarSource
 from app.modules.alarms.api.repositories import IAlarmsRepository
@@ -88,37 +88,20 @@ class AlarmsRepository(IAlarmsRepository):
             ).all()
         )
 
-    def list_dismissed_before(
-        self,
-        session: Session,
-        purge_before: datetime,
-    ) -> list[AlarmEvent]:
-        """Return dismissed alarms older than a threshold."""
-        dismissed_col = cast(Any, AlarmEvent.dismissed_at)
-        return list(
-            session.exec(
-                select(AlarmEvent).where(
-                    (dismissed_col.isnot(None)) & (dismissed_col < purge_before)
-                )
-            ).all()
-        )
-
-    def list_triggered_before(
+    def delete_triggered_before(
         self,
         session: Session,
         cutoff: datetime,
-    ) -> list[AlarmEvent]:
-        """Return alarms whose trigger_time is older than a threshold.
+    ) -> int:
+        """Delete alarms whose trigger_time is older than a threshold.
 
-        Includes both dismissed and active rows so stale past occurrences are
-        purged regardless of dismissal state.
+        Removes both dismissed and active rows in a single bulk statement so
+        stale past occurrences are purged regardless of dismissal state.
+        Returns the number of rows deleted.
         """
         trigger_col = cast(Any, AlarmEvent.trigger_time)
-        return list(session.exec(select(AlarmEvent).where(trigger_col < cutoff)).all())
-
-    def delete_alarm(self, session: Session, alarm: AlarmEvent) -> None:
-        """Delete one alarm row in current transaction."""
-        session.delete(alarm)
+        result = session.exec(delete(AlarmEvent).where(trigger_col < cutoff))
+        return cast(int, result.rowcount)
 
     def list_cached_events(self, session: Session) -> list[CalendarEvent]:
         """Return all cached events for debug view."""

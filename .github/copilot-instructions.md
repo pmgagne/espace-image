@@ -120,7 +120,9 @@ The composition root in `app/modules/loader.py` wires all modules into the FastA
 ### Alarms
 
 - Alarm dismissal state lives in `AlarmEvent`
-- Old dismissed alarms are purged after 30 days
+- `AlarmEvent` rows (dismissed or not) whose `trigger_time` is older than `ALARM_RETENTION_DAYS`
+  (default 30 days) are purged automatically on each background sync, via `POST
+  /api/v1/alarms/purge-old`, or via `espima alarms purge`
 - Simulated alarms are part of the current debug/test-support behavior
 
 ### Weather

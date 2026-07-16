@@ -115,20 +115,22 @@ def test_api_dismiss_alarm_mock_mode_is_noop(client):
     assert response.json()["status"] == "mock-noop"
 
 
-def test_api_purge_old_dismissed_alarms_returns_json_and_purges(client, session):
-    old_alarm = AlarmEvent(
+def test_api_purge_old_endpoint_purges_dismissed_and_active_rows(client, session):
+    """purge-old subsumes the retired purge-dismissed endpoint: it purges any
+    stale row by trigger_time, whether dismissed or not."""
+    old_dismissed = AlarmEvent(
         id=uuid4(),
         trigger_time=datetime.now(UTC) - timedelta(days=60),
         dismissed_at=datetime.now(UTC) - timedelta(days=31),
     )
-    session.add(old_alarm)
+    session.add(old_dismissed)
     session.commit()
-    old_alarm_id = old_alarm.id
+    old_dismissed_id = old_dismissed.id
 
-    response = client.post("/api/v1/alarms/purge-dismissed")
+    response = client.post("/api/v1/alarms/purge-old")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/json")
     assert response.json()["status"] == "purged"
 
     session.expire_all()
-    assert session.get(AlarmEvent, old_alarm_id) is None
+    assert session.get(AlarmEvent, old_dismissed_id) is None

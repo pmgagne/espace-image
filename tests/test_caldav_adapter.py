@@ -1,6 +1,66 @@
 import importlib
 
 
+def test_same_calendar_url_exact_url_matches():
+    client = importlib.import_module("app.modules.calendar.internal.infrastructure.caldav_client")
+    assert client._same_calendar_url(
+        "https://host/remote.php/dav/calendars/user/personal/",
+        "https://host/remote.php/dav/calendars/user/personal",
+    )
+
+
+def test_same_calendar_url_full_path_matches():
+    client = importlib.import_module("app.modules.calendar.internal.infrastructure.caldav_client")
+    assert client._same_calendar_url(
+        "/remote.php/dav/calendars/user/personal",
+        "https://host/remote.php/dav/calendars/user/personal/",
+    )
+
+
+def test_same_calendar_url_partial_path_suffix_matches():
+    """CALDAV_CALENDAR may be a partial path (config.py: 'exact calendar URL
+    or path'); it should still match a full server href on segment
+    boundaries."""
+    client = importlib.import_module("app.modules.calendar.internal.infrastructure.caldav_client")
+    assert client._same_calendar_url(
+        "user/personal",
+        "https://host/remote.php/dav/calendars/user/personal/",
+    )
+
+
+def test_same_calendar_url_bare_name_suffix_matches():
+    client = importlib.import_module("app.modules.calendar.internal.infrastructure.caldav_client")
+    assert client._same_calendar_url(
+        "personal",
+        "https://host/remote.php/dav/calendars/user/personal/",
+    )
+
+
+def test_same_calendar_url_does_not_match_on_partial_segment():
+    """Suffix matching must respect segment boundaries: 'home' must not
+    match 'home-work'."""
+    client = importlib.import_module("app.modules.calendar.internal.infrastructure.caldav_client")
+    assert not client._same_calendar_url(
+        "home",
+        "https://host/calendars/home-work/",
+    )
+
+
+def test_find_matching_calendar_prefers_suffix_match_and_rejects_similar_name():
+    client = importlib.import_module("app.modules.calendar.internal.infrastructure.caldav_client")
+
+    class _Cal:
+        def __init__(self, url):
+            self.url = url
+
+    home_work = _Cal("https://host/remote.php/dav/calendars/user/home-work/")
+    personal = _Cal("https://host/remote.php/dav/calendars/user/personal/")
+    calendars = [home_work, personal]
+
+    assert client._find_matching_calendar(calendars, "personal") is personal
+    assert client._find_matching_calendar(calendars, "home") is None
+
+
 def test_fetch_caldav_disabled(monkeypatch):
     """When CalDAV is disabled via config, the adapter returns None quickly."""
     cfg = importlib.import_module("app.config")

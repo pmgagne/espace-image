@@ -1252,6 +1252,11 @@ class CalendarService:
                 ):
                     is_caldav = True
                     caldav_result = prefetched_caldav_result
+                    # On a forced resync, skip the sync token so the server
+                    # returns full content in this one request instead of
+                    # correctly reporting "no changes" and requiring a second,
+                    # tokenless round trip.
+                    fetch_sync_token = None if force else sync_status.sync_token
                     # If a prefetched batch result exists but indicated the fetch
                     # did not succeed (for example network error), and the user
                     # requested a forced resync, attempt a per-source fetch with
@@ -1260,7 +1265,7 @@ class CalendarService:
                     if caldav_result is None:
                         caldav_result = await fetch_caldav_calendar_ics_with_metadata(
                             calendar_url=source.url,
-                            sync_token=sync_status.sync_token,
+                            sync_token=fetch_sync_token,
                             fail_on_error=True,
                         )
                     elif not getattr(caldav_result, "fetch_succeeded", True) and force:
@@ -1273,7 +1278,7 @@ class CalendarService:
                         # raise CalDAVFetchError on persistent failures.
                         caldav_result = await fetch_caldav_calendar_ics_with_metadata(
                             calendar_url=source.url,
-                            sync_token=sync_status.sync_token,
+                            sync_token=fetch_sync_token,
                             fail_on_error=True,
                         )
                     next_sync_token = caldav_result.sync_token or sync_status.sync_token
@@ -1316,31 +1321,6 @@ class CalendarService:
                         ]
                         if force and not changed:
                             changed = True
-                        # When force=True and CalDAV correctly reports no changes,
-                        # content is None (the server did not send a full payload).
-                        # Re-fetch without a sync token to obtain the full content.
-                        if force and ics_content is None:
-                            logger.info(
-                                "Force requested but CalDAV reported no changes for source %s (%s);"
-                                " re-fetching without sync token.",
-                                source.id,
-                                source.label,
-                            )
-                            fresh_result = await fetch_caldav_calendar_ics_with_metadata(
-                                calendar_url=source.url,
-                                sync_token=None,
-                                fail_on_error=False,
-                            )
-                            ics_content = fresh_result.content
-                            raw_elements = [
-                                {
-                                    "uid": el.uid,
-                                    "href": el.href,
-                                    "etag": el.etag,
-                                    "raw_ics": el.raw_ics,
-                                }
-                                for el in fresh_result.elements
-                            ]
                 else:
                     ics_content = await CalendarService.fetch_ics(source.url)
                     if ics_content is not None:
@@ -1499,8 +1479,15 @@ class CalendarService:
                     caldav_requests.append((source.id, source.url, sync_status.sync_token))
 
                 if caldav_requests:
+                    # On a forced resync, skip the sync token so the server
+                    # returns full content on this one request instead of
+                    # reporting "no changes" and requiring a second, tokenless
+                    # round trip (see the per-source fetch below).
                     batch_results = await fetch_caldav_calendars_with_metadata(
-                        [(source_url, sync_token) for _, source_url, sync_token in caldav_requests],
+                        [
+                            (source_url, None if force else sync_token)
+                            for _, source_url, sync_token in caldav_requests
+                        ],
                         fail_on_error=False,
                     )
                     prefetched_caldav_results = {
@@ -1566,18 +1553,16 @@ class CalendarService:
         # (see AlarmsService.purge_old_alarms, invoked after general_sync).
 
         logger.info("Background sync completed.")
-        # Log when the next background update is planned using configured delay
+        # Log when the next background update is planned. The scheduler's
+        # cycle period is always BACKGROUND_SYNC_DEFAULT_MINUTES;
+        # BACKGROUND_SYNC_DELAY_MINUTES is only the per-source throttle
+        # between individual calendar fetches within one sync run.
         try:
-            delay_minutes = (
-                BACKGROUND_SYNC_DELAY_MINUTES
-                if BACKGROUND_SYNC_DELAY_MINUTES and BACKGROUND_SYNC_DELAY_MINUTES > 0
-                else BACKGROUND_SYNC_DEFAULT_MINUTES
-            )
-            next_run = datetime.now(UTC) + timedelta(minutes=delay_minutes)
+            next_run = datetime.now(UTC) + timedelta(minutes=BACKGROUND_SYNC_DEFAULT_MINUTES)
             logger.info(
                 "Next background sync planned at %s (in %.1f minutes)",
                 next_run.isoformat(),
-                delay_minutes,
+                float(BACKGROUND_SYNC_DEFAULT_MINUTES),
             )
         except Exception:
             logger.debug("Unable to compute next background sync time")
