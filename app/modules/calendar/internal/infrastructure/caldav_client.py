@@ -77,12 +77,39 @@ def _normalize_calendar_url(url: str) -> str:
     return url.strip().rstrip("/")
 
 
+def _path_segments(path: str) -> list[str]:
+    """Split a URL path into non-empty segments."""
+    return [segment for segment in path.split("/") if segment]
+
+
+def _is_segment_suffix(left_segments: list[str], right_segments: list[str]) -> bool:
+    """Return True when one segment list is a trailing sublist of the other.
+
+    Restricted to whole path segments so a bare calendar name or partial
+    path (e.g. CALDAV_CALENDAR="home") matches a full server href
+    (".../calendars/home") without incorrectly matching
+    ".../calendars/home-work" — that would require an exact segment
+    "home-work" == "home", which fails.
+    """
+    if not left_segments or not right_segments:
+        return False
+    shorter, longer = (
+        (left_segments, right_segments)
+        if len(left_segments) <= len(right_segments)
+        else (right_segments, left_segments)
+    )
+    return longer[len(longer) - len(shorter) :] == shorter
+
+
 def _same_calendar_url(left: str, right: str) -> bool:
     """Return True when two URLs refer to the same CalDAV calendar.
 
-    Compares full normalized URLs first, then falls back to path-segment
-    equality. Substring containment is intentionally avoided — it would
-    incorrectly match /calendars/home against /calendars/home-work.
+    Compares full normalized URLs first, then path equality, then falls back
+    to a segment-boundary suffix match so a configured partial path or
+    calendar name (CALDAV_CALENDAR="personal" or "user/personal") still
+    matches a full server href. Substring containment is intentionally
+    avoided — it would incorrectly match /calendars/home against
+    /calendars/home-work; segment-boundary comparison does not.
     """
     normalized_left = _normalize_calendar_url(left)
     normalized_right = _normalize_calendar_url(right)
@@ -92,23 +119,21 @@ def _same_calendar_url(left: str, right: str) -> bool:
         return True
     left_path = urlparse(normalized_left).path.rstrip("/")
     right_path = urlparse(normalized_right).path.rstrip("/")
-    return bool(left_path and right_path and left_path == right_path)
+    if left_path and right_path and left_path == right_path:
+        return True
+    return _is_segment_suffix(_path_segments(left_path), _path_segments(right_path))
 
 
 def _find_matching_calendar(calendars: list[Any], target_calendar: str) -> Any | None:
     """Find one discovered calendar matching the requested URL/path."""
     normalized_target = _normalize_calendar_url(target_calendar)
-    target_path = urlparse(normalized_target).path.rstrip("/")
 
     for calendar in calendars:
         try:
             href = getattr(calendar, "url", None) or getattr(calendar, "href", None)
             href_str = str(href or calendar)
             normalized_href = _normalize_calendar_url(href_str)
-            href_path = urlparse(normalized_href).path.rstrip("/")
             if _same_calendar_url(normalized_target, normalized_href):
-                return calendar
-            if target_path and href_path and target_path == href_path:
                 return calendar
         except Exception:
             continue

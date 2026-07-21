@@ -276,6 +276,20 @@ class CalendarService:
                 logger.exception("Failed to cleanup related rows for source %s", source_id)
 
             self._repository.delete_source(active_session, source)
+
+            # Sweep any rows left orphaned by this deletion (e.g. if
+            # cleanup_source above failed, or a concurrent sync re-inserted
+            # rows for this source between the cleanup and the delete).
+            # This is the only place in the running app that reclaims
+            # orphaned CalendarElement/CalendarSyncStatusEntry rows.
+            try:
+                if hasattr(self._repository, "cleanup_orphans"):
+                    self._repository.cleanup_orphans(active_session)
+            except Exception:
+                logger.exception(
+                    "Failed to sweep orphaned rows after deleting source %s", source_id
+                )
+
             return True
 
     async def get_sync_status(self, session: Session | None = None) -> list[SyncStatusDTO]:

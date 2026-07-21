@@ -32,10 +32,6 @@ class IAlarmsService(Protocol):
         """
         ...
 
-    async def purge_old_dismissed_alarms(self) -> None:
-        """Purge dismissed alarms older than the retention window."""
-        ...
-
     async def purge_old_alarms(self, retention_days: int = ALARM_RETENTION_DAYS) -> int:
         """Purge past alarm/event rows older than the retention window.
 

@@ -58,24 +58,17 @@ class IAlarmsRepository(Protocol):
         """Return simulated alarms ready to fire and not dismissed."""
         ...
 
-    def list_dismissed_before(
-        self,
-        session: Session,
-        purge_before: datetime,
-    ) -> list[Any]:
-        """Return dismissed alarms older than a threshold."""
-        ...
-
-    def list_triggered_before(
+    def delete_triggered_before(
         self,
         session: Session,
         cutoff: datetime,
-    ) -> list[Any]:
-        """Return alarms whose trigger_time is older than a threshold."""
-        ...
+    ) -> int:
+        """Delete alarms whose trigger_time is older than a threshold.
 
-    def delete_alarm(self, session: Session, alarm: Any) -> None:
-        """Delete one alarm row in current transaction."""
+        Removes both dismissed and active rows in a single bulk statement so
+        stale past occurrences are purged regardless of dismissal state.
+        Returns the number of rows deleted.
+        """
         ...
 
     def list_cached_events(self, session: Session) -> list[Any]:

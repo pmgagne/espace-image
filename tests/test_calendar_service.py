@@ -116,6 +116,63 @@ def test_sync_calendar_events_success(session):
     assert status.sync_status == CalendarSyncStatus.SUCCESS
 
 
+def test_force_sync_makes_single_tokenless_fetch_when_caldav_reports_no_changes(
+    session, monkeypatch
+):
+    """A forced resync of an unchanged CalDAV source must fetch once, with no
+    sync token, so the server returns full content immediately — not fetch
+    with the stored token (getting "no changes") and then re-fetch a second
+    time without a token."""
+    from app.modules.calendar.internal.infrastructure import caldav_client
+
+    now = datetime.now(UTC)
+    start = now + timedelta(hours=1)
+    end = now + timedelta(hours=2)
+    ics_content = _build_ics(start, end)
+
+    source = CalendarSource(label="Test", url="https://caldav.example.com/cal/1")
+    session.add(source)
+    session.commit()
+    session.refresh(source)
+
+    element = caldav_client.CalDAVElement(
+        uid="evt-1",
+        href="https://caldav.example.com/cal/1/evt-1.ics",
+        etag="etag-1",
+        raw_ics=ics_content,
+    )
+    call_count = {"n": 0}
+
+    async def _fake_fetch(*, calendar_url: str, sync_token: str | None, fail_on_error: bool):
+        call_count["n"] += 1
+        assert sync_token is None
+        return caldav_client.CalDAVFetchResult(
+            content=ics_content,
+            sync_token="new-token",
+            changed=False,
+            fetch_succeeded=True,
+            elements=[element],
+        )
+
+    monkeypatch.setattr(caldav_client, "fetch_caldav_calendar_ics_with_metadata", _fake_fetch)
+
+    report = asyncio.run(
+        CalendarService._sync_single_source(
+            session,
+            source,
+            now,
+            now,
+            now,
+            prefetched_caldav_result=None,
+            use_caldav=True,
+            force=True,
+        )
+    )
+
+    assert call_count["n"] == 1
+    assert report.sync_succeeded is True
+
+
 def test_sync_calendar_events_failure(session):
     source = CalendarSource(label="Test", url="webcal://example.com/test.ics")
     session.add(source)

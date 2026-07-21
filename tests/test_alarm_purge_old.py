@@ -1,12 +1,15 @@
 """Tests for time-based purging of stale AlarmEvent rows."""
 
+import importlib
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from app.db.models import AlarmEntryType, AlarmEvent
+from app.main import app as fastapi_app
+from app.modules.alarms.api.interfaces import get_alarms_service
 from app.modules.alarms.internal.application.service import create_alarms_service
 from app.modules.alarms.internal.infrastructure.repository import AlarmsRepository
 
@@ -22,7 +25,7 @@ def _make_alarm(*, days_offset: int, dismissed: bool = False) -> AlarmEvent:
     )
 
 
-def test_list_triggered_before_returns_only_old_rows(session):
+def test_delete_triggered_before_removes_only_old_rows(session):
     cutoff = datetime.now(UTC) - timedelta(days=30)
     old = _make_alarm(days_offset=-60)
     recent = _make_alarm(days_offset=-5)
@@ -30,10 +33,13 @@ def test_list_triggered_before_returns_only_old_rows(session):
     session.add_all([old, recent, future])
     session.commit()
 
-    result = AlarmsRepository().list_triggered_before(session, cutoff)
+    deleted = AlarmsRepository().delete_triggered_before(session, cutoff)
+    session.commit()
 
-    ids = {alarm.id for alarm in result}
-    assert ids == {old.id}
+    assert deleted == 1
+    session.expire_all()
+    remaining = {alarm.id for alarm in session.exec(select(AlarmEvent)).all()}
+    assert remaining == {recent.id, future.id}
 
 
 @pytest.mark.anyio
@@ -91,3 +97,45 @@ def test_api_purge_old_endpoint_purges_and_reports(client, session):
     session.expire_all()
     assert session.get(AlarmEvent, old_id) is None
     assert session.get(AlarmEvent, future_id) is not None
+
+
+def test_alarm_retention_days_clamped_to_minimum_one(monkeypatch):
+    """0 or a negative ALARM_RETENTION_DAYS would put the purge cutoff at or
+    after "now", deleting currently-displayed or not-yet-fired alarms."""
+    cfg = importlib.import_module("app.config")
+    try:
+        for raw_value in ("0", "-7"):
+            monkeypatch.setenv("ALARM_RETENTION_DAYS", raw_value)
+            importlib.reload(cfg)
+            assert cfg.ALARM_RETENTION_DAYS == 1
+    finally:
+        monkeypatch.delenv("ALARM_RETENTION_DAYS", raising=False)
+        importlib.reload(cfg)
+
+
+class _FailingAlarmsRepository(AlarmsRepository):
+    """Repository double that always fails, to exercise purge error paths."""
+
+    def delete_triggered_before(self, session: Session, cutoff: datetime) -> int:
+        raise RuntimeError("simulated database failure")
+
+
+@pytest.mark.anyio
+async def test_purge_old_alarms_propagates_failure(session_factory):
+    """A DB failure during purge must not be reported as "0 rows purged" —
+    callers need to distinguish "nothing to purge" from "the purge failed"."""
+    service = create_alarms_service(session_factory, _FailingAlarmsRepository())
+
+    with pytest.raises(RuntimeError):
+        await service.purge_old_alarms()
+
+
+def test_api_purge_old_endpoint_returns_500_on_failure(client, session_factory):
+    fastapi_app.dependency_overrides[get_alarms_service] = lambda: create_alarms_service(
+        session_factory, _FailingAlarmsRepository()
+    )
+
+    response = client.post("/api/v1/alarms/purge-old")
+
+    assert response.status_code == 500
+    assert response.json()["status"] == "error"

@@ -21,9 +21,11 @@ METEO_SYNC_INTERVAL_MINUTES = int(os.getenv("METEO_SYNC_INTERVAL_MINUTES", 15))
 INDEX_UPDATE_INTERVAL_SECONDS = int(os.getenv("INDEX_UPDATE_INTERVAL_SECONDS", 300))
 
 # Retention window (in days) for AlarmEvent rows. Past alarm/event rows whose
-# trigger_time is older than this are purged on each background sync. Also used
-# for the dismissed-alarm purge so both retention rules stay aligned.
-ALARM_RETENTION_DAYS = int(os.getenv("ALARM_RETENTION_DAYS", 30))
+# trigger_time is older than this are purged on each background sync (and by
+# `espima alarms purge`). Clamped to at least 1 day: 0 or a negative value
+# would put the purge cutoff at or after "now", deleting alarms that are
+# currently displayed or have not yet fired.
+ALARM_RETENTION_DAYS = max(1, int(os.getenv("ALARM_RETENTION_DAYS", 30)))
 
 # CalDAV / WebDAV configuration (optional)
 # Use these env vars to configure a single CalDAV account and calendar to ingest

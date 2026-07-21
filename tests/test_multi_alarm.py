@@ -97,8 +97,10 @@ END:VCALENDAR"""
     assert "2:shared-uid" in uids
 
 
-def test_purge_old_dismissed_alarms(client, session):
-    """Verify dismissed alarms older than 30 days are purged."""
+def test_rendering_alarm_widget_does_not_purge(client, session):
+    """The alarm widget render path is read-only: purging stale rows is the
+    background sync job's responsibility (AlarmsService.purge_old_alarms),
+    not a side effect of GET /components/alarm."""
     old_alarm = AlarmEvent(
         calendar_event_uid="old-dismissed",
         trigger_time=datetime.now() - timedelta(days=60),
@@ -110,7 +112,8 @@ def test_purge_old_dismissed_alarms(client, session):
     response = client.get("/components/alarm?tz_offset=0")
     assert response.status_code == 200
 
+    session.expire_all()
     remaining = session.exec(
         select(AlarmEvent).where(AlarmEvent.calendar_event_uid == "old-dismissed")
     ).all()
-    assert remaining == []
+    assert len(remaining) == 1

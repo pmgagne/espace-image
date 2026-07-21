@@ -170,9 +170,15 @@ Schema migrations are managed by **Alembic** (`alembic/`).
 ### Alarm Display
 
 1. Dashboard refresh route injects `IAlarmsService`.
-2. Alarms module purges old dismissed alarms.
-3. Active alarms are assembled from cached calendar data and simulated alarm rows.
-4. Router converts them into template context.
+2. Active alarms are assembled from cached calendar data and simulated alarm rows (this render
+   path is read-only; it does not purge).
+3. Router converts them into template context.
+
+### Alarm Retention
+
+1. On each background sync (and via `POST /api/v1/alarms/purge-old` or `espima alarms purge`),
+   the alarms module purges `AlarmEvent` rows — dismissed or not — whose `trigger_time` is older
+   than `ALARM_RETENTION_DAYS`.
 
 ### Media Upload
 
