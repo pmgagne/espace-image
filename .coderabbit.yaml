@@ -1,0 +1,66 @@
+# CodeRabbit configuration — https://docs.coderabbit.ai/reference/configuration
+language: "en-US"
+early_access: false
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "main"
+      - "develop"
+  path_filters:
+    - "!.venv/**"
+    - "!node_modules/**"
+    - "!alembic/versions/**"
+    - "!**/*.lock"
+    - "!uv.lock"
+  path_instructions:
+    - path: "app/modules/**/internal/application/**.py"
+      instructions: >
+        Application services must return DTOs only. Flag any HTML rendering,
+        Jinja2 template calls, or direct response construction in this layer.
+    - path: "app/modules/**/internal/infrastructure/presenter.py"
+      instructions: >
+        Presenters render HTML from DTOs. Flag business logic here, and flag
+        any caller of a presenter that is not a router.
+    - path: "app/routers/**.py"
+      instructions: >
+        Routers must stay thin: request parsing -> Depends(get_<module>_service)
+        -> DTO -> presenter -> response. Flag business logic, direct DB access,
+        or direct HTML construction embedded in a router.
+    - path: "app/templates/legacy/**"
+      instructions: >
+        This is the iPad 2 (iOS 9.3.5) legacy UI. Flag any CSS Grid usage or
+        modern CSS/HTML features unsupported on that platform.
+    - path: "app/static/js/**"
+      instructions: >
+        This JS must stay ES5-compatible for iPad 2 (iOS 9.3.5) support. Flag
+        arrow functions, let/const, template literals, classes, async/await,
+        or other ES6+ syntax.
+    - path: "app/db/**.py"
+      instructions: >
+        Storage must use UTC. Flag any datetime.now() without UTC, local
+        timezone writes, or timezone conversion happening before persistence
+        instead of at render time.
+    - path: "app/services/**"
+      instructions: >
+        This directory was intentionally deleted and must not be recreated.
+        Flag its existence and suggest moving logic into the appropriate
+        module's internal/application layer instead.
+
+tools:
+  ruff:
+    enabled: true
+  eslint:
+    enabled: true
+  markdownlint:
+    enabled: true
+
+chat:
+  auto_reply: true
