@@ -13,7 +13,6 @@ reviews:
     drafts: false
     base_branches:
       - "main"
-      - "develop"
   path_filters:
     - "!.venv/**"
     - "!node_modules/**"
@@ -53,14 +52,13 @@ reviews:
         This directory was intentionally deleted and must not be recreated.
         Flag its existence and suggest moving logic into the appropriate
         module's internal/application layer instead.
-
-tools:
-  ruff:
-    enabled: true
-  eslint:
-    enabled: true
-  markdownlint:
-    enabled: true
+  tools:
+    ruff:
+      enabled: true
+    eslint:
+      enabled: true
+    markdownlint:
+      enabled: true
 
 chat:
   auto_reply: true
